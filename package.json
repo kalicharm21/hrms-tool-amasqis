@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "@types/chart.js": "^2.9.41"
+  },
+  "dependencies": {
+    "@clerk/clerk-sdk-node": "^5.1.6",
+    "@react-latest-ui/react-sticky-notes": "^0.2.6",
+    "chart.js": "^4.4.3",
+    "immer": "^10.1.1",
+    "mongodb": "^6.13.0",
+    "mongoose": "^8.9.5"
+  }
+}
