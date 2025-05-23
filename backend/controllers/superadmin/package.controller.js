@@ -1,6 +1,6 @@
 import { Plan } from "../../models/superadmin/package.schema.js";
 import * as packageService from "../../services/superadmin/packages.services.js";
-const superadminHandlers = (socket, io) => {
+const packageController = (socket, io) => {
   // Add Plan Event
   // Read Function
 
@@ -109,4 +109,4 @@ const superadminHandlers = (socket, io) => {
   });
 };
 
-export default superadminHandlers;
+export default packageController;
