@@ -14,7 +14,6 @@ const allowedOrigins = [
   "http://dummy.localhost:3000",
 ];
 
-// CORS AUTH Party - Clerk
 const authorizedParties = [
   "https://devhrms-pm.amasqis.ai/",
   "http://localhost:3000",
@@ -32,33 +31,51 @@ export const socketHandler = (httpServer) => {
       credentials: true,
     },
   });
+
   io.use(async (socket, next) => {
     console.log("🔄 Socket connection attempt...");
     const token = socket.handshake.auth.token;
-    console.log(token);
     if (!token) {
       console.error("No token provided");
       return next(new Error("Authentication error: No token provided"));
     }
+
     try {
-      console.log("process.env.CLERK_JWT_KEY", process.env.CLERK_JWT_KEY);
-      console.log("Verifying token...");
       const verifiedToken = await verifyToken(token, {
         jwtKey: process.env.CLERK_JWT_KEY,
-        authorizedParties: authorizedParties,
+        authorizedParties,
       });
 
       if (verifiedToken) {
         console.log(`✅ Token verified! User ID: ${verifiedToken.sub}`);
         socket.user = verifiedToken;
+
         const user = await clerkClient.users.getUser(verifiedToken.sub);
-        const role = user.publicMetadata.role;
+
+        // Check if role exists, else assign "superadmin"
+        let role = user.publicMetadata?.role;
+        if (!role) {
+          role = "superadmin"; // Default fallback
+          await clerkClient.users.updateUserMetadata(user.id, {
+            publicMetadata: { role },
+          });
+          console.log(
+            `🆕 Default role 'superadmin' assigned to user ${user.id}`
+          );
+        } else {
+          console.log(`👤 Existing role: ${role}`);
+        }
+
         socket.role = role;
+
+        // Example: join role-based room
         switch (role) {
           case "superadmin":
             socket.join("superadmin_room");
-          // Add logics for multiple tenancy
+            break;
+          // Add more role handling here
         }
+
         return next();
       } else {
         console.error("Invalid token");
@@ -69,10 +86,12 @@ export const socketHandler = (httpServer) => {
       return next(new Error("Authentication error: Token verification failed"));
     }
   });
+
   io.on("connection", (socket) => {
-    console.log(`New client connected: ${socket.id}`);
+    console.log(`🟢 Client connected: ${socket.id}`);
     const role = socket.role || "guest";
     router(socket, io, role);
+
     socket.on("disconnect", () => {
       console.log(`🔴 Client disconnected: ${socket.id}`);
     });
