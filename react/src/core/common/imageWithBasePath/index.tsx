@@ -1,5 +1,5 @@
-import React from 'react';
-import { img_path} from '../../../environment';
+import React from "react";
+import { img_path } from "../../../environment";
 
 interface Image {
   className?: string;
@@ -7,12 +7,14 @@ interface Image {
   alt?: string;
   height?: number;
   width?: number;
-  id?:string;
+  id?: string;
+  isLink?: boolean; // New optional prop
 }
 
 const ImageWithBasePath = (props: Image) => {
-  // Combine the base path and the provided src to create the full image source URL
-  const fullSrc = `${img_path}${props.src}`;
+  // Use full path only if isLink is false or undefined
+  const fullSrc = props.isLink ? props.src : `${img_path}${props.src}`;
+
   return (
     <img
       className={props.className}

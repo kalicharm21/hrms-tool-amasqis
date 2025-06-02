@@ -21,6 +21,8 @@ export const withRoleCheck = (Component, allowedRoles) => {
       switch (userRole) {
         case "superadmin":
           return <Navigate to={routes.superAdminDashboard} />;
+        case "admin":
+          return <Navigate to={routes.adminDashboard} />;
         default:
           return <Navigate to={routes.validate} />;
       }

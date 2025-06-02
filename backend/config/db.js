@@ -42,7 +42,7 @@ export const getsuperadminCollections = () => {
   const db = client.db("AmasQIS");
   return {
     stats: db.collection("stats"),
-    companies: db.collection("companies"),
+    companiesCollection: db.collection("companies"),
     packagesCollection: db.collection("packages"),
   };
 };

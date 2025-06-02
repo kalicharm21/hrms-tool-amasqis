@@ -6,7 +6,7 @@ const Datatable: React.FC<DatatableProps> = ({
   columns,
   dataSource,
   Selection = true,
-  rowId = "planid",
+  rowId = "id",
   onChange,
 }) => {
   console.log("Data Source is ", dataSource);

@@ -981,7 +981,7 @@ const Packages = () => {
                   <Table
                     dataSource={tempfiltereddata ?? Data} // Use filtered data if available, otherwise fallback to original
                     columns={columns}
-                    rowKey="planid"
+                    rowId="planid"
                     Selection={true}
                     onChange={(selectedid) => {
                       console.log("Selected IF", selectedid);

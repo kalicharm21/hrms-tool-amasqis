@@ -9,6 +9,9 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://amasqis.ai",
   "https://devhrms-pm.amasqis.ai",
+  "http://byte.localhost:3000",
+  "http://test.localhost:3000",
+  "http://dummy.localhost:3000",
 ];
 
 // CORS AUTH Party - Clerk
@@ -16,6 +19,9 @@ const authorizedParties = [
   "https://devhrms-pm.amasqis.ai/",
   "http://localhost:3000",
   "http://185.199.53.177:5000/",
+  "http://byte.localhost:3000",
+  "http://test.localhost:3000",
+  "http://dummy.localhost:3000",
 ];
 
 export const socketHandler = (httpServer) => {

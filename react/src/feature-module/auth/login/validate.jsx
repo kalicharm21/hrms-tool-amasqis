@@ -1,71 +1,55 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useUser, useAuth } from "@clerk/clerk-react";
-import { io } from "socket.io-client";
+import { useEffect } from "react";
+import { useUser } from "@clerk/clerk-react";
 
 const Validate = () => {
-  const navigate = useNavigate();
   const { isSignedIn, user } = useUser();
-  const { getToken } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  // const backendUrl = "http://127.0.0.1:5000";
 
   useEffect(() => {
-    if (!isSignedIn || !user) {
-      setIsLoading(false);
-      return;
-    }
+    if (!isSignedIn || !user) return;
 
-    const isNewUser = user.createdAt
-      ? new Date(user.createdAt).getTime() > Date.now() - 60000
-      : false;
+    const publicMetadata = user.publicMetadata || {};
+    const subdomain = publicMetadata.subdomain;
 
-    // const initializeSocket = async () => {
-    //   try {
-    //     const token = await getToken();
-    //     if (!token) {
-    //       throw new Error("No token found");
-    //     }
-
-    //     const socket = io(backendUrl, {
-    //       auth: { token },
-    //     });
-
-    //     socket.on("connect", () => {
-    //       console.log("Connected to Socket.IO server");
-    //     });
-
-    //     socket.on("connect_error", (err) => {
-    //       console.error("Socket.IO connection error:", err.message);
-    //     });
-
-    //     // Clean up socket connection on unmount
-    //     return () => {
-    //       socket.disconnect();
-    //     };
-    //   } catch (err) {
-    //     console.error("Error connecting to Socket.IO:", err.message);
-    //   } finally {
-    //     setIsLoading(false);
-    //   }
-    // };
-
-    // initializeSocket();
-
-    if (isNewUser) {
-      // alert("Welcome, new user!");s
-      navigate("/employee-dashboard"); // Redirect new users
+    if (subdomain) {
+      window.location.href = `http://${subdomain}.localhost:3000/employee-dashboard`;
     } else {
-      // alert("Welcome back!");
-      navigate("/employee-dashboard"); // Redirect returning users
+      window.location.href = `http://localhost:3000/employee-dashboard`;
     }
-  }, [isSignedIn, user, navigate, getToken]);
+  }, [isSignedIn, user]);
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "white",
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div className="loader" />
+      <style>{`
+        .loader {
+          border: 6px solid #f3f3f3;
+          border-top: 6px solid #3498db;
+          border-radius: 50%;
+          width: 50px;
+          height: 50px;
+          animation: spin 1s linear infinite;
+        }
 
-  return <div>Validating...</div>;
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
 };
 
 export default Validate;
