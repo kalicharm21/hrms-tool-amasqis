@@ -12,6 +12,7 @@ export interface SelectProps {
   className?: string;
   onChange?: (selectedOption: Option | null) => void;
   isSearchable?: boolean;
+  disabled?: boolean; // <-- Add disabled here
 }
 
 const CommonSelect: React.FC<SelectProps> = ({
@@ -20,13 +21,12 @@ const CommonSelect: React.FC<SelectProps> = ({
   className,
   onChange,
   isSearchable = true,
+  disabled = false, // <-- Default false
 }) => {
-  // Convert string labels to matching Option objects
   const findOptionByLabel = (label: string): Option | null => {
     return options.find((opt) => opt.label === label) || null;
   };
 
-  // Initialize selected option
   const getInitialValue = (): Option | null => {
     if (!defaultValue) return null;
     if (typeof defaultValue === "string") {
@@ -44,7 +44,6 @@ const CommonSelect: React.FC<SelectProps> = ({
     onChange?.(option);
   };
 
-  // Update when defaultValue or options change
   useEffect(() => {
     setSelectedOption(getInitialValue());
   }, [defaultValue, options]);
@@ -58,6 +57,7 @@ const CommonSelect: React.FC<SelectProps> = ({
       onChange={handleChange}
       placeholder="Select"
       isSearchable={isSearchable}
+      isDisabled={disabled} // <-- pass it here to react-select
     />
   );
 };
