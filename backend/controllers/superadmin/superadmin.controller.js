@@ -23,11 +23,11 @@ const superAdminController = (route, role, socket, io, attachedModules) => {
       console.log("Attaching superadmin handlers for companies...");
       companiesController(socket, io);
       attachedModules.add(module);
-    } else if (module == "dashboard") {
+    } else if (module === "dashboard") {
       console.log("Attaching superadmin handlers for dashboard...");
       dashboardController(socket, io);
       attachedModules.add(module);
-    } else if (module == "subscriptions") {
+    } else if (module === "subscriptions") {
       console.log("Attaching superadmin handlers for Subscription...");
       subscriptionsController(socket, io);
       attachedModules.add(module);
