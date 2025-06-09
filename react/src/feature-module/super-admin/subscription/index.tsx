@@ -1,15 +1,87 @@
-import React from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { all_routes } from "../../router/all_routes";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import ReactApexChart from "react-apexcharts";
-import { subscription_details } from "../../../core/data/json/subscriptiondetails";
+//import { subscription_details } from "../../../core/data/json/subscriptiondetails";
 import PredefinedDateRanges from "../../../core/common/datePicker";
 import Table from "../../../core/common/dataTable/index";
+import { useSocket } from "../../../SocketContext"; 
+import { Socket } from "socket.io-client";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+
+
+// Helper to format date as dd-mm-yyyy
+const formatDate = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB"); // dd/mm/yyyy
+};
 
 const Subscription = () => {
-  const data = subscription_details;
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [planFilter, setPlanFilter] = useState<string>("All");
+  const socket = useSocket() as Socket | null;
+  const [stats, setStats] = useState({
+    totalTransaction: 0,
+    totalSubscribers: 0,
+    activeSubscribers: 0,
+    expiredSubscribers: 0,
+  });
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  // Fetch stats
+  useEffect(() => {
+    if (!socket) return;
+    socket.emit("superadmin/subscriptions/fetch-stats");
+    socket.on("superadmin/subscriptions/fetch-stats-response", (res) => {
+      if (res.done) setStats(res.data);
+    });
+    return () => {
+      socket.off("superadmin/subscriptions/fetch-stats-response");
+    };
+  }, [socket]);
+
+  // Fetch subscription list
+  useEffect(() => {
+    if (!socket) return;
+    setLoading(true);
+    socket.emit("superadmin/subscriptions/fetch-list");
+    socket.on("superadmin/subscriptions/fetch-list-response", (res) => {
+      if (res.done) setData(res.data);
+      setLoading(false);
+    });
+    return () => {
+      socket.off("superadmin/subscriptions/fetch-list-response");
+    };
+  }, [socket]);
+
+  const handleInvoiceClick = (record: any) => {
+    setSelectedInvoice(record);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!invoiceRef.current) return;
+    const canvas = await html2canvas(invoiceRef.current);
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF();
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    pdf.save(
+      `Invoice_${
+        selectedInvoice?.CompanyName || "Company"
+      }_${selectedInvoice?.invoiceNumber || "0000"}.pdf`
+    );
+  };
+
+//  const data = subscription_details;
   const columns = [
     {
       title: "Company Name",
@@ -40,39 +112,40 @@ const Subscription = () => {
     {
       title: "Billing Cycle",
       dataIndex: "BillCycle",
-      render: (text: String, record: any) => (
-        <span>{record.BillCycle} Days</span>
-      ),
-      sorter: (a: any, b: any) => a.BillCycle.length - b.BillCycle.length,
+      render: (text: number) => <span>{text} Days</span>,
+      sorter: (a: any, b: any) =>  a.BillCycle - b.BillCycle,
     },
-    {
-      title: "Payment Method",
-      dataIndex: "PaymentMethod",
-      sorter: (a: any, b: any) =>
-        a.PaymentMethod.length - b.PaymentMethod.length,
-    },
+    // {
+    //   title: "Payment Method",
+    //   dataIndex: "PaymentMethod",
+    //   sorter: (a: any, b: any) =>
+    //     a.PaymentMethod.length - b.PaymentMethod.length,
+    // },
     {
       title: "Amount",
       dataIndex: "Amount",
-      sorter: (a: any, b: any) => a.Amount.length - b.Amount.length,
+      sorter: (a: any, b: any) => a.Amount - b.Amount,
     },
     {
       title: "Created Date",
       dataIndex: "CreatedDate",
-      sorter: (a: any, b: any) => a.CreatedDate.length - b.CreatedDate.length,
+      render: (iso: string) => <span>{formatDate(iso)}</span>,
+      sorter: (a: any, b: any) => new Date(a.CreatedDate).getTime() - new Date(b.CreatedDate).getTime(),
     },
     {
       title: "Expired On",
       dataIndex: "ExpiringDate",
-      sorter: (a: any, b: any) => a.ExpiringDate.length - b.ExpiringDate.length,
+      render: (iso: string) => <span>{formatDate(iso)}</span>,
+      sorter: (a: any, b: any) => new Date(a.ExpiringDate).getTime() - new Date(b.ExpiringDate).getTime(),
     },
     {
       title: "Status",
       dataIndex: "Status",
-      render: (text: string, record: any) => (
+      render: (text: string) => (
         <span
           className={`badge ${
-            text === "Paid" ? "badge-success" : "badge-danger"
+            text === "Paid" ? "badge-success" 
+            : text === "Expired" ? "badge-danger" : "badge-secondary"
           } d-inline-flex align-items-center badge-xs`}
         >
           <i className="ti ti-point-filled me-1" />
@@ -84,19 +157,22 @@ const Subscription = () => {
     {
       title: "",
       dataIndex: "actions",
-      render: () => (
+      render: (_: any, record: any) => (
         <div className="action-icon d-inline-flex">
           <Link
             to="#"
             className="me-2"
             data-bs-toggle="modal"
             data-bs-target="#view_invoice"
+            onClick={() => handleInvoiceClick(record)}
           >
             <i className="ti ti-file-invoice" />
           </Link>
-          <Link to="#" className="me-2">
+          {/*}
+          <Link to="#" className="me-2" onClick={handleDownloadPDF}>
             <i className="ti ti-download" />
           </Link>
+          */}
           <Link to="#" data-bs-toggle="modal" data-bs-target="#delete_modal">
             <i className="ti ti-trash" />
           </Link>
@@ -105,6 +181,11 @@ const Subscription = () => {
     },
   ];
 
+  // Helper to get invoice number from company id
+  const getInvoiceNumber = (companyId: string) =>
+    companyId?.slice(-4).toUpperCase() || "0000";
+
+  
   const [totalTransaction] = React.useState<any>({
     series: [
       {
@@ -459,8 +540,14 @@ const Subscription = () => {
       marker: {
         show: !1,
       },
-    },
+    },  
   });
+  const filteredData = data.filter((item) => {
+  const statusMatch = statusFilter === "All" || item.Status === statusFilter;
+  const planMatch = planFilter === "All" || item.Plan === planFilter;
+  return statusMatch && planMatch;
+});
+  const planOptions = Array.from(new Set(data.map(item => item.Plan)));
 
   return (
     <>
@@ -529,7 +616,7 @@ const Subscription = () => {
                           <span className="fs-14 fw-normal text-truncate mb-1">
                             Total Transaction
                           </span>
-                          <h5>$5,340</h5>
+                          <h5>${stats.totalTransaction}</h5>
                         </div>
                       </div>
                       <div className="col-5">
@@ -543,6 +630,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -552,6 +640,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -565,7 +654,7 @@ const Subscription = () => {
                           <span className="fs-14 fw-normal text-truncate mb-1">
                             Total Subscribers
                           </span>
-                          <h5>600</h5>
+                          <h5>{stats.totalSubscribers}</h5>
                         </div>
                       </div>
                       <div className="col-5">
@@ -579,6 +668,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -588,6 +678,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -601,7 +692,7 @@ const Subscription = () => {
                           <span className="fs-14 fw-normal text-truncate mb-1">
                             Active Subscribers
                           </span>
-                          <h5>560</h5>
+                          <h5>{stats.activeSubscribers}</h5>
                         </div>
                       </div>
                       <div className="col-5">
@@ -615,6 +706,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -624,6 +716,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -637,7 +730,7 @@ const Subscription = () => {
                           <span className="fs-14 fw-normal text-truncate mb-1">
                             Expired Subscribers
                           </span>
-                          <h5>40</h5>
+                          <h5>{stats.expiredSubscribers}</h5>
                         </div>
                       </div>
                       <div className="col-5">
@@ -651,6 +744,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -660,6 +754,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -668,6 +763,7 @@ const Subscription = () => {
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
               <h5>Subscription List</h5>
               <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                {/*
                 <div className="me-3">
                   <div className="input-icon-end position-relative">
                     <PredefinedDateRanges />
@@ -676,53 +772,86 @@ const Subscription = () => {
                     </span>
                   </div>
                 </div>
+                */}
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
+                  <button
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    type="button"
                   >
                     Select Plan
-                  </Link>
+                  </button>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("All")}
+                      >
+                        All
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("Advanced (Monthly)")}
+                      >
                         Advanced (Monthly)
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("Basic (Yearly)")}
+                      >
                         Basic (Yearly)
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("Enterprise (Monthly)")}
+                      >
                         Enterprise (Monthly)
-                      </Link>
+                      </button>
                     </li>
                   </ul>
                 </div>
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
+                  <button
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    type="button"
                   >
                     Select Status
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                  </button>
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                   <li>
+                    <button
+                      className="dropdown-item rounded-1"
+                      onClick={() => setStatusFilter("All")}
+                    >
+                      All
+                    </button>
+                  </li>
+                  <li>
+                   <button
+                     className="dropdown-item rounded-1"
+                     onClick={() => setStatusFilter("Paid")}
+                   >
                         Paid
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
-                        Unpaid
-                      </Link>
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter("Expired")}
+                      >
+                        Expired
+                      </button>
                     </li>
                   </ul>
                 </div>
+                {/*
                 <div className="dropdown">
                   <Link
                     to="#"
@@ -731,6 +860,7 @@ const Subscription = () => {
                   >
                     Sort By : Last 7 Days
                   </Link>
+                  {/*
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
                       <Link to="#" className="dropdown-item rounded-1">
@@ -757,12 +887,13 @@ const Subscription = () => {
                         Last 7 Days
                       </Link>
                     </li>
-                  </ul>
+                  </ul>  
                 </div>
+                */} 
               </div>
             </div>
             <div className="card-body p-0">
-              <Table dataSource={data} columns={columns} Selection={true} />
+              <Table dataSource={filteredData} columns={columns} Selection={false} />
             </div>
           </div>
         </div>
@@ -782,83 +913,92 @@ const Subscription = () => {
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
             <div className="modal-body p-5">
-              <div className="row justify-content-between align-items-center mb-3">
-                <div className="col-md-6">
-                  <div className="mb-4">
-                    <ImageWithBasePath
-                      src="assets/img/logo.svg"
-                      className="img-fluid"
-                      alt="logo"
-                    />
+              {selectedInvoice && (
+                <div ref ={invoiceRef}>
+                  <div className="row justify-content-between align-items-center mb-3">
+                    <div className="col-md-6">
+                      <div className="mb-4">
+                        <ImageWithBasePath
+                          src="assets/img/logo.svg"
+                          className="img-fluid"
+                          alt="logo"
+                        />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className=" text-end mb-3">
+                        <h5 className="text-dark mb-1">Invoice</h5>
+                        <p className="mb-1 fw-normal">
+                          <i className="ti ti-file-invoice me-1" />
+                          INV{getInvoiceNumber(selectedInvoice.companyId || selectedInvoice.id)}
+                        </p>
+                        <p className="mb-1 fw-normal">
+                          <i className="ti ti-calendar me-1" />
+                          Issue date : {formatDate(selectedInvoice.CreatedDate)}
+                        </p>
+                        <p className="fw-normal">
+                          <i className="ti ti-calendar me-1" />
+                          Due date : {formatDate(selectedInvoice.ExpiringDate)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="row mb-3 d-flex justify-content-between">
+                   <div className="col-md-7">
+                    <p className="text-dark mb-2 fw-medium fs-16">
+                      Invoice From :
+                    </p>
+                    <div>
+                      <p className="mb-1">SmartHR</p>
+                      <p className="mb-1">
+                        367 Hillcrest Lane, Irvine, California, United States
+                      </p>
+                      <p className="mb-1">smarthr@example.com</p>
+                    </div>
+                  </div>
+                  <div className="col-md-5">
+                    <p className="text-dark mb-2 fw-medium fs-16">
+                      Invoice To :
+                    </p>
+                    <div>
+                      <p className="mb-1">{selectedInvoice.CompanyName}</p>
+                      <p className="mb-1">{selectedInvoice.CompanyAddress}</p>
+                      <p className="mb-1">{selectedInvoice.CompanyEmail}</p>
+                      {/* 
+                      <p className="mb-1">BrightWave Innovations</p>
+                      <p className="mb-1">
+                        367 Hillcrest Lane, Irvine, California, United States
+                      </p>
+                      <p className="mb-1">michael@example.com</p>
+                      */}
+                   </div>
                   </div>
                 </div>
-                <div className="col-md-6">
-                  <div className=" text-end mb-3">
-                    <h5 className="text-dark mb-1">Invoice</h5>
-                    <p className="mb-1 fw-normal">
-                      <i className="ti ti-file-invoice me-1" />
-                      INV0287
-                    </p>
-                    <p className="mb-1 fw-normal">
-                      <i className="ti ti-calendar me-1" />
-                      Issue date : 12 Sep 2024{" "}
-                    </p>
-                    <p className="fw-normal">
-                      <i className="ti ti-calendar me-1" />
-                      Due date : 12 Oct 2024{" "}
-                    </p>
+                <div className="mb-4">
+                  <div className="table-responsive mb-3">
+                    <table className="table">
+                      <thead className="thead-light">
+                        <tr>
+                          <th>Plan</th>
+                          <th>Billing Cycle</th>
+                          <th>Created Date</th>
+                          <th>Expiring On</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>{selectedInvoice.Plan}</td>
+                          <td>{selectedInvoice.BillCycle} Days</td>
+                          <td>{formatDate(selectedInvoice.CreatedDate)}</td>
+                          <td>{formatDate(selectedInvoice.ExpiringDate)}</td>
+                          <td>${selectedInvoice.Amount}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </div>
-              <div className="row mb-3 d-flex justify-content-between">
-                <div className="col-md-7">
-                  <p className="text-dark mb-2 fw-medium fs-16">
-                    Invoice From :
-                  </p>
-                  <div>
-                    <p className="mb-1">SmartHR</p>
-                    <p className="mb-1">
-                      367 Hillcrest Lane, Irvine, California, United States
-                    </p>
-                    <p className="mb-1">smarthr@example.com</p>
-                  </div>
-                </div>
-                <div className="col-md-5">
-                  <p className="text-dark mb-2 fw-medium fs-16">Invoice To :</p>
-                  <div>
-                    <p className="mb-1">BrightWave Innovations</p>
-                    <p className="mb-1">
-                      367 Hillcrest Lane, Irvine, California, United States
-                    </p>
-                    <p className="mb-1">michael@example.com</p>
-                  </div>
-                </div>
-              </div>
-              <div className="mb-4">
-                <div className="table-responsive mb-3">
-                  <table className="table">
-                    <thead className="thead-light">
-                      <tr>
-                        <th>Plan</th>
-                        <th>Billing Cycle</th>
-                        <th>Created Date</th>
-                        <th>Expiring On</th>
-                        <th>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Advanced (Monthly)</td>
-                        <td>30 Days</td>
-                        <td>12 Sep 2024</td>
-                        <td>12 Oct 2024</td>
-                        <td>$200</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="row mb-3 d-flex justify-content-between">
+                <div className="row mb-3 d-flex justify-content-between">
                 {/* <div className="col-md-4">
                   <div>
                     <h6 className="mb-4">Payment info:</h6>
@@ -869,44 +1009,55 @@ const Subscription = () => {
                     </div>
                   </div>
                 </div> */}
-                <div className="col-md-4">
-                  <div className="d-flex justify-content-between align-items-center pe-3">
-                    <p className="text-dark fw-medium mb-0">Sub Total</p>
-                    <p className="mb-2">$200.00</p>
-                  </div>
-                  <div className="d-flex justify-content-between align-items-center pe-3">
-                    <p className="text-dark fw-medium mb-0">Tax </p>
-                    <p className="mb-2">$0.00</p>
-                  </div>
-                  <div className="d-flex justify-content-between align-items-center pe-3">
-                    <p className="text-dark fw-medium mb-0">Total</p>
-                    <p className="text-dark fw-medium mb-2">$200.00</p>
+                  <div className="col-md-4">
+                    <div className="d-flex justify-content-between align-items-center pe-3">
+                      <p className="text-dark fw-medium mb-0">Sub Total</p>
+                      <p className="mb-2">${selectedInvoice.Amount}</p>
+                    </div>
+                    <div className="d-flex justify-content-between align-items-center pe-3">
+                      <p className="text-dark fw-medium mb-0">Tax </p>
+                      <p className="mb-2">$0.00</p>
+                    </div>
+                    <div className="d-flex justify-content-between align-items-center pe-3">
+                      <p className="text-dark fw-medium mb-0">Total</p>
+                      <p className="text-dark fw-medium mb-2">${selectedInvoice.Amount}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="card border mb-0">
-                <div className="card-body">
-                  <p className="text-dark fw-medium mb-2">
-                    Terms &amp; Conditions:
-                  </p>
-                  <p className="fs-12 fw-normal d-flex align-items-baseline mb-2">
-                    <i className="ti ti-point-filled text-primary me-1" />
-                    All payments must be made according to the agreed schedule.
-                    Late payments may incur additional fees.
-                  </p>
-                  <p className="fs-12 fw-normal d-flex align-items-baseline">
-                    <i className="ti ti-point-filled text-primary me-1" />
-                    We are not liable for any indirect, incidental, or
-                    consequential damages, including loss of profits, revenue,
-                    or data.
-                  </p>
+                <div className="card border mb-0">
+                  <div className="card-body">
+                    <p className="text-dark fw-medium mb-2">
+                      Terms &amp; Conditions:
+                    </p>
+                    <p className="fs-12 fw-normal d-flex align-items-baseline mb-2">
+                      <i className="ti ti-point-filled text-primary me-1" />
+                      All payments must be made according to the agreed schedule.
+                      Late payments may incur additional fees.
+                    </p>
+                    <p className="fs-12 fw-normal d-flex align-items-baseline">
+                      <i className="ti ti-point-filled text-primary me-1" />
+                      We are not liable for any indirect, incidental, or
+                      consequential damages, including loss of profits, revenue,
+                      or data.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              <div className="mt-3 text-end">
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleDownloadPDF}
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </div>
+              )} 
             </div>
           </div>
-        </div>
-      </div>
-      {/* /View Invoice */}
+       </div>
+     </div> 
+    {/* /View Invoice */}
     </>
   );
 };
