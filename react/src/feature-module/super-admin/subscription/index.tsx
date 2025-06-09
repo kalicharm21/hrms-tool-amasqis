@@ -20,6 +20,8 @@ const formatDate = (iso: string) => {
 };
 
 const Subscription = () => {
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [planFilter, setPlanFilter] = useState<string>("All");
   const socket = useSocket() as Socket | null;
   const [stats, setStats] = useState({
     totalTransaction: 0,
@@ -166,9 +168,11 @@ const Subscription = () => {
           >
             <i className="ti ti-file-invoice" />
           </Link>
+          {/*}
           <Link to="#" className="me-2" onClick={handleDownloadPDF}>
             <i className="ti ti-download" />
           </Link>
+          */}
           <Link to="#" data-bs-toggle="modal" data-bs-target="#delete_modal">
             <i className="ti ti-trash" />
           </Link>
@@ -536,8 +540,14 @@ const Subscription = () => {
       marker: {
         show: !1,
       },
-    },
+    },  
   });
+  const filteredData = data.filter((item) => {
+  const statusMatch = statusFilter === "All" || item.Status === statusFilter;
+  const planMatch = planFilter === "All" || item.Plan === planFilter;
+  return statusMatch && planMatch;
+});
+  const planOptions = Array.from(new Set(data.map(item => item.Plan)));
 
   return (
     <>
@@ -620,6 +630,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -629,6 +640,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -656,6 +668,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -665,6 +678,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -692,6 +706,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -701,6 +716,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -728,6 +744,7 @@ const Subscription = () => {
                       </div>
                     </div>
                   </div>
+                  {/* 
                   <div className="d-flex">
                     <p className="fs-12 fw-normal d-flex align-items-center text-truncate">
                       <span className="text-primary fs-12 d-flex align-items-center me-1">
@@ -737,6 +754,7 @@ const Subscription = () => {
                       from last week
                     </p>
                   </div>
+                  */}
                 </div>
               </div>
             </div>
@@ -745,6 +763,7 @@ const Subscription = () => {
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
               <h5>Subscription List</h5>
               <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                {/*
                 <div className="me-3">
                   <div className="input-icon-end position-relative">
                     <PredefinedDateRanges />
@@ -753,53 +772,86 @@ const Subscription = () => {
                     </span>
                   </div>
                 </div>
+                */}
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
+                  <button
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    type="button"
                   >
                     Select Plan
-                  </Link>
+                  </button>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("All")}
+                      >
+                        All
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("Advanced (Monthly)")}
+                      >
                         Advanced (Monthly)
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("Basic (Yearly)")}
+                      >
                         Basic (Yearly)
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setPlanFilter("Enterprise (Monthly)")}
+                      >
                         Enterprise (Monthly)
-                      </Link>
+                      </button>
                     </li>
                   </ul>
                 </div>
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
+                  <button
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
                     data-bs-toggle="dropdown"
+                    type="button"
                   >
                     Select Status
-                  </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                  </button>
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                   <li>
+                    <button
+                      className="dropdown-item rounded-1"
+                      onClick={() => setStatusFilter("All")}
+                    >
+                      All
+                    </button>
+                  </li>
+                  <li>
+                   <button
+                     className="dropdown-item rounded-1"
+                     onClick={() => setStatusFilter("Paid")}
+                   >
                         Paid
-                      </Link>
+                      </button>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter("Expired")}
+                      >
                         Expired
-                      </Link>
+                      </button>
                     </li>
                   </ul>
                 </div>
+                {/*
                 <div className="dropdown">
                   <Link
                     to="#"
@@ -808,6 +860,7 @@ const Subscription = () => {
                   >
                     Sort By : Last 7 Days
                   </Link>
+                  {/*
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
                       <Link to="#" className="dropdown-item rounded-1">
@@ -834,12 +887,13 @@ const Subscription = () => {
                         Last 7 Days
                       </Link>
                     </li>
-                  </ul>
+                  </ul>  
                 </div>
+                */} 
               </div>
             </div>
             <div className="card-body p-0">
-              <Table dataSource={data} columns={columns} Selection={true} />
+              <Table dataSource={filteredData} columns={columns} Selection={false} />
             </div>
           </div>
         </div>
@@ -860,7 +914,7 @@ const Subscription = () => {
           <div className="modal-content">
             <div className="modal-body p-5">
               {selectedInvoice && (
-                <>
+                <div ref ={invoiceRef}>
                   <div className="row justify-content-between align-items-center mb-3">
                     <div className="col-md-6">
                       <div className="mb-4">
@@ -907,11 +961,16 @@ const Subscription = () => {
                       Invoice To :
                     </p>
                     <div>
+                      <p className="mb-1">{selectedInvoice.CompanyName}</p>
+                      <p className="mb-1">{selectedInvoice.CompanyAddress}</p>
+                      <p className="mb-1">{selectedInvoice.CompanyEmail}</p>
+                      {/* 
                       <p className="mb-1">BrightWave Innovations</p>
                       <p className="mb-1">
                         367 Hillcrest Lane, Irvine, California, United States
                       </p>
                       <p className="mb-1">michael@example.com</p>
+                      */}
                    </div>
                   </div>
                 </div>
@@ -992,11 +1051,11 @@ const Subscription = () => {
                       Download PDF
                     </button>
                   </div>
-                </>
+                </div>
               )} 
+            </div>
           </div>
-        </div>
-      </div>
+       </div>
      </div> 
     {/* /View Invoice */}
     </>

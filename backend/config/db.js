@@ -44,5 +44,6 @@ export const getsuperadminCollections = () => {
     stats: db.collection("stats"),
     companiesCollection: db.collection("companies"),
     packagesCollection: db.collection("packages"),
+    subscriptionsCollection: db.collection("subscriptions"), 
   };
 };

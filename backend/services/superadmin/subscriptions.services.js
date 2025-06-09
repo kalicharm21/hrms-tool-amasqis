@@ -30,38 +30,17 @@ export const fetchSubscriptionStats = async () => {
   }
 };
 
-// Fetch subscription list with company and plan details
 export const fetchSubscriptions = async () => {
   try {
     const { subscriptionsCollection } = getsuperadminCollections();
 
-    // Join with companies and plans collections
-    const subscriptions = await subscriptionsCollection.aggregate([
-      {
-        $lookup: {
-          from: "companies",
-          localField: "companyId",
-          foreignField: "_id",
-          as: "company"
-        }
-      },
-      { $unwind: "$company" },
-      {
-        $lookup: {
-          from: "plans",
-          localField: "planId",
-          foreignField: "_id",
-          as: "plan"
-        }
-      },
-      { $unwind: "$plan" }
-    ]).toArray();
+    // Fetch all subscriptions directly
+    const subscriptions = await subscriptionsCollection.find({}).toArray();
 
     // Format subscription data for frontend
     const data = subscriptions.map((sub) => {
-      // Plan name with type
-      const planType = sub.plan.billingCycle === 12 ? "Yearly" : "Monthly";
-      const planName = `${sub.plan.name} (${planType})`;
+      const planType = sub.billingCycle === 12 ? "Yearly" : "Monthly";
+      const planName = `${sub.planName} (${planType})`;
 
       // Created date
       const createdDate = sub.createdAt ? new Date(sub.createdAt) : new Date();
@@ -72,7 +51,7 @@ export const fetchSubscriptions = async () => {
       } else {
         expDate.setMonth(expDate.getMonth() + 1);
       }
-      // Stayus logic
+      // Status logic
       const now = new Date();
       let status = sub.status;
       if (now > expDate) status = "Expired";
@@ -80,14 +59,17 @@ export const fetchSubscriptions = async () => {
 
       return {
         id: sub._id?.toString(),
-        CompanyName: sub.company.name,
-        Image: sub.company.image || "company-default.svg",
+        companyId: sub.companyId?.toString(),
+        CompanyName: sub.companyName,
+        Image: sub.companyLogo || "company-default.svg",
         Plan: planName,
-        BillCycle: sub.plan.billingCycle,
+        BillCycle: sub.billingCycle,
         Amount: sub.amount,
-        CreatedDate: createdDate.toISOString(), // send as ISO, format on frontend
+        CreatedDate: createdDate.toISOString(),
         ExpiringDate: expDate.toISOString(),
         Status: status,
+        CompanyEmail: sub.companyEmail,
+        CompanyAddress: sub.companyAddress,
       };
     });
 
