@@ -16,6 +16,7 @@
     "mongodb": "^6.13.0",
     "mongoose": "^8.9.5",
     "nodemailer": "^7.0.3",
+    "pdfkit": "^0.17.1",
     "socket.io": "^4.8.1"
   },
   "name": "backend",
