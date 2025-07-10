@@ -55,18 +55,18 @@ export const socketHandler = (httpServer) => {
         // Check if role exists, else assign "superadmin"
         let role = user.publicMetadata?.role;
         if (!role) {
-          role = "superadmin"; // Default fallback
+          role = "public";
           await clerkClient.users.updateUserMetadata(user.id, {
             publicMetadata: { role },
           });
-          console.log(
-            `🆕 Default role 'superadmin' assigned to user ${user.id}`
-          );
+          console.log(`🆕 Default role 'public' assigned to user ${user.id}`);
         } else {
           console.log(`👤 Existing role: ${role}`);
+          var company = user.publicMetadata?.companyId || null;
         }
 
         socket.role = role;
+        socket.companyId = company;
 
         // Example: join role-based room
         switch (role) {

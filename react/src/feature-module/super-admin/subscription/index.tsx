@@ -5,7 +5,7 @@ import CollapseHeader from "../../../core/common/collapse-header/collapse-header
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import ReactApexChart from "react-apexcharts";
 import Table from "../../../core/common/dataTable/index";
-import { useSocket } from "../../../SocketContext"; 
+import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import { ApexOptions } from "apexcharts";
 import { message } from "antd";
@@ -40,7 +40,7 @@ const Subscription = () => {
   // Fetch stats
   useEffect(() => {
     if (!socket) return;
-    
+
     socket.emit("superadmin/subscriptions/fetch-stats");
     socket.on("superadmin/subscriptions/fetch-stats-response", (res) => {
       if (res.done) {
@@ -48,7 +48,7 @@ const Subscription = () => {
           totalTransaction: res.data.totalTransaction || 0,
           totalSubscribers: res.data.totalSubscribers || 0,
           activeSubscribers: res.data.activeSubscribers || 0,
-          expiredSubscribers: res.data.expiredSubscribers || 0
+          expiredSubscribers: res.data.expiredSubscribers || 0,
         });
       }
     });
@@ -60,7 +60,7 @@ const Subscription = () => {
   // Fetch subscription list
   useEffect(() => {
     if (!socket) return;
-    
+
     setLoading(true);
     socket.emit("superadmin/subscriptions/fetch-list");
     socket.on("superadmin/subscriptions/fetch-list-response", (res) => {
@@ -80,28 +80,30 @@ const Subscription = () => {
 
   const handleDownloadPDF = async () => {
     if (!selectedInvoice) {
-      message.error('Please select an invoice first');
+      message.error("Please select an invoice first");
       return;
     }
 
     if (!socket) {
-      message.error('Socket connection not available');
+      message.error("Socket connection not available");
       return;
     }
 
     try {
-      console.log('Starting PDF download process...');
-      console.log('Selected invoice data:', selectedInvoice);
+      console.log("Starting PDF download process...");
+      console.log("Selected invoice data:", selectedInvoice);
 
       // Ensure we have the required IDs
       if (!selectedInvoice.companyId) {
-        throw new Error('Company ID is missing');
+        throw new Error("Company ID is missing");
       }
       if (!selectedInvoice.planId) {
         // Try to extract planId from the Plan field if it's in the format "Plan Name (Plan Type)"
         const planMatch = selectedInvoice.Plan?.match(/\(([^)]+)\)/);
         if (!planMatch) {
-          throw new Error('Plan ID is missing and could not be determined from plan name');
+          throw new Error(
+            "Plan ID is missing and could not be determined from plan name"
+          );
         }
         // Use the plan type as a fallback
         selectedInvoice.planId = planMatch[1];
@@ -110,42 +112,46 @@ const Subscription = () => {
       const invoiceData = {
         invoiceId: selectedInvoice._id,
         companyId: selectedInvoice.companyId,
-        planId: selectedInvoice.planId
+        planId: selectedInvoice.planId,
       };
 
-      console.log('Emitting download-invoice event with data:', invoiceData);
+      console.log("Emitting download-invoice event with data:", invoiceData);
 
       // Emit socket event to generate PDF
-      socket.emit('superadmin/subscriptions/download-invoice', invoiceData);
+      socket.emit("superadmin/subscriptions/download-invoice", invoiceData);
 
       // Listen for the response
-      socket.once('superadmin/subscriptions/download-invoice-response', (response) => {
-        console.log('Received PDF generation response:', response);
-        
-        if (response.done && response.data?.pdfUrl) {
-          // Create a temporary link and trigger download
-          const link = document.createElement('a');
-          link.href = response.data.pdfUrl;
-          link.download = `invoice_${selectedInvoice.companyId}_${Date.now()}.pdf`;
-          link.id = 'pdf-download-link';
-          link.setAttribute('type', 'application/pdf');
-          link.setAttribute('target', '_blank');
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          message.success('Invoice downloaded successfully');
-        } else {
-          message.error(response.error || 'Failed to generate PDF');
-        }
-      });
+      socket.once(
+        "superadmin/subscriptions/download-invoice-response",
+        (response) => {
+          console.log("Received PDF generation response:", response);
 
+          if (response.done && response.data?.pdfUrl) {
+            // Create a temporary link and trigger download
+            const link = document.createElement("a");
+            link.href = response.data.pdfUrl;
+            link.download = `invoice_${
+              selectedInvoice.companyId
+            }_${Date.now()}.pdf`;
+            link.id = "pdf-download-link";
+            link.setAttribute("type", "application/pdf");
+            link.setAttribute("target", "_blank");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            message.success("Invoice downloaded successfully");
+          } else {
+            message.error(response.error || "Failed to generate PDF");
+          }
+        }
+      );
     } catch (error: any) {
-      console.error('Error downloading PDF:', error);
-      message.error(error.message || 'Failed to download PDF');
+      console.error("Error downloading PDF:", error);
+      message.error(error.message || "Failed to download PDF");
     }
   };
 
-//  const data = subscription_details;
+  //  const data = subscription_details;
   const columns = [
     {
       title: "Company Name",
@@ -157,9 +163,9 @@ const Subscription = () => {
               src={record.Image}
               className="img-fluid rounded-circle"
               alt={record.CompanyName}
-              style={{ width: '40px', height: '40px', objectFit: 'cover' }}
+              style={{ width: "40px", height: "40px", objectFit: "cover" }}
               onError={(e) => {
-                e.currentTarget.src = '/assets/img/company/company-default.svg';
+                e.currentTarget.src = "/assets/img/company/company-default.svg";
               }}
             />
           </Link>
@@ -187,20 +193,22 @@ const Subscription = () => {
     {
       title: "Amount",
       dataIndex: "Amount",
-      render: (text: number) => <span>${text ? text.toFixed(2) : '0.00'}</span>,
+      render: (text: number) => <span>${text ? text.toFixed(2) : "0.00"}</span>,
       sorter: (a: any, b: any) => (a.Amount || 0) - (b.Amount || 0),
     },
     {
       title: "Created Date",
       dataIndex: "CreatedDate",
       render: (iso: string) => <span>{formatDate(iso)}</span>,
-      sorter: (a: any, b: any) => new Date(a.CreatedDate).getTime() - new Date(b.CreatedDate).getTime(),
+      sorter: (a: any, b: any) =>
+        new Date(a.CreatedDate).getTime() - new Date(b.CreatedDate).getTime(),
     },
     {
       title: "Expired On",
       dataIndex: "ExpiringDate",
       render: (iso: string) => <span>{formatDate(iso)}</span>,
-      sorter: (a: any, b: any) => new Date(a.ExpiringDate).getTime() - new Date(b.ExpiringDate).getTime(),
+      sorter: (a: any, b: any) =>
+        new Date(a.ExpiringDate).getTime() - new Date(b.ExpiringDate).getTime(),
     },
     {
       title: "Status",
@@ -208,8 +216,11 @@ const Subscription = () => {
       render: (text: string) => (
         <span
           className={`badge ${
-            text === "Paid" ? "badge-success" 
-            : text === "Expired" ? "badge-danger" : "badge-secondary"
+            text === "Paid"
+              ? "badge-success"
+              : text === "Expired"
+              ? "badge-danger"
+              : "badge-secondary"
           } d-inline-flex align-items-center badge-xs`}
         >
           <i className="ti ti-point-filled me-1" />
@@ -248,7 +259,7 @@ const Subscription = () => {
   });
 
   // Get unique plans for filter dropdown
-  const planOptions = Array.from(new Set(data.map(item => item.Plan)));
+  const planOptions = Array.from(new Set(data.map((item) => item.Plan)));
 
   // Chart options for stats with different colors
   const getChartOptions = (color: string): ApexOptions => ({
@@ -314,8 +325,18 @@ const Subscription = () => {
     colors: [color],
     xaxis: {
       categories: [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
       ],
     },
     tooltip: {
@@ -569,9 +590,14 @@ const Subscription = () => {
               </div>
             </div>
             <div className="card-body p-0">
-              <Table 
-                dataSource={filteredData} 
-                columns={columns} 
+              <Table
+                dataSource={filteredData}
+                columns={columns}
+                Selection={false}
+              />
+              <Table
+                dataSource={filteredData}
+                columns={columns}
                 Selection={false}
               />
             </div>
@@ -611,7 +637,10 @@ const Subscription = () => {
                         <h5 className="text-dark mb-1">Invoice</h5>
                         <p className="mb-1 fw-normal">
                           <i className="ti ti-file-invoice me-1" />
-                          INV{getInvoiceNumber(selectedInvoice.companyId || selectedInvoice.id)}
+                          INV
+                          {getInvoiceNumber(
+                            selectedInvoice.companyId || selectedInvoice.id
+                          )}
                         </p>
                         <p className="mb-1 fw-normal">
                           <i className="ti ti-calendar me-1" />
@@ -684,7 +713,9 @@ const Subscription = () => {
                       </div>
                       <div className="d-flex justify-content-between align-items-center pe-3">
                         <p className="text-dark fw-medium mb-0">Total</p>
-                        <p className="text-dark fw-medium mb-2">${selectedInvoice.Amount}</p>
+                        <p className="text-dark fw-medium mb-2">
+                          ${selectedInvoice.Amount}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -695,14 +726,14 @@ const Subscription = () => {
                       </p>
                       <p className="fs-12 fw-normal d-flex align-items-baseline mb-2">
                         <i className="ti ti-point-filled text-primary me-1" />
-                        All payments must be made according to the agreed schedule.
-                        Late payments may incur additional fees.
+                        All payments must be made according to the agreed
+                        schedule. Late payments may incur additional fees.
                       </p>
                       <p className="fs-12 fw-normal d-flex align-items-baseline">
                         <i className="ti ti-point-filled text-primary me-1" />
                         We are not liable for any indirect, incidental, or
-                        consequential damages, including loss of profits, revenue,
-                        or data.
+                        consequential damages, including loss of profits,
+                        revenue, or data.
                       </p>
                     </div>
                   </div>
