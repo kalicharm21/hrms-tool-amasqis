@@ -308,7 +308,7 @@ export const publicRoutes = [
     path: routes.adminDashboard,
     element: <AdminDashboard />,
     route: Route,
-    roles: ["admin"],
+    roles: ["public"],
   },
   {
     path: routes.employeeDashboard,
@@ -336,37 +336,37 @@ export const publicRoutes = [
   {
     path: routes.estimate,
     element: <Extimates />,
-    roles: ["public"],
+    roles: ["hr"],
   },
   {
     path: routes.termination,
     element: <Termination />,
-    roles: ["public"],
+    roles: ["hr"],
   },
   {
     path: routes.resignation,
     element: <Resignation />,
-    roles: ["public"],
+    roles: ["hr"],
   },
   {
     path: routes.promotion,
     element: <Promotion />,
-    roles: ["public"],
+    roles: ["hr"],
   },
   {
     path: routes.trainingType,
     element: <TrainingType />,
-    roles: ["public"],
+    roles: ["hr"],
   },
   {
     path: routes.trainers,
     element: <Trainers />,
-    roles: ["public"],
+    roles: ["hr"],
   },
   {
     path: routes.trainingList,
     element: <TrainingList />,
-    roles: ["public"],
+    roles: ["hr"],
   },
 
   //Application

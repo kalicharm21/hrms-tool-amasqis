@@ -7,11 +7,10 @@ import ReactApexChart from "react-apexcharts";
 //import { subscription_details } from "../../../core/data/json/subscriptiondetails";
 import PredefinedDateRanges from "../../../core/common/datePicker";
 import Table from "../../../core/common/dataTable/index";
-import { useSocket } from "../../../SocketContext"; 
+import { useSocket } from "../../../SocketContext";
 import { Socket } from "socket.io-client";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-
 
 // Helper to format date as dd-mm-yyyy
 const formatDate = (iso: string) => {
@@ -75,13 +74,13 @@ const Subscription = () => {
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
     pdf.save(
-      `Invoice_${
-        selectedInvoice?.CompanyName || "Company"
-      }_${selectedInvoice?.invoiceNumber || "0000"}.pdf`
+      `Invoice_${selectedInvoice?.CompanyName || "Company"}_${
+        selectedInvoice?.invoiceNumber || "0000"
+      }.pdf`
     );
   };
 
-//  const data = subscription_details;
+  //  const data = subscription_details;
   const columns = [
     {
       title: "Company Name",
@@ -90,7 +89,8 @@ const Subscription = () => {
         <div className="d-flex align-items-center file-name-icon">
           <Link to="#" className="avatar avatar-md border rounded-circle">
             <ImageWithBasePath
-              src={`assets/img/company/${record.Image}`}
+              src={`${record.Image}`}
+              isLink={true}
               className="img-fluid"
               alt="img"
             />
@@ -113,7 +113,7 @@ const Subscription = () => {
       title: "Billing Cycle",
       dataIndex: "BillCycle",
       render: (text: number) => <span>{text} Days</span>,
-      sorter: (a: any, b: any) =>  a.BillCycle - b.BillCycle,
+      sorter: (a: any, b: any) => a.BillCycle - b.BillCycle,
     },
     // {
     //   title: "Payment Method",
@@ -130,13 +130,15 @@ const Subscription = () => {
       title: "Created Date",
       dataIndex: "CreatedDate",
       render: (iso: string) => <span>{formatDate(iso)}</span>,
-      sorter: (a: any, b: any) => new Date(a.CreatedDate).getTime() - new Date(b.CreatedDate).getTime(),
+      sorter: (a: any, b: any) =>
+        new Date(a.CreatedDate).getTime() - new Date(b.CreatedDate).getTime(),
     },
     {
       title: "Expired On",
       dataIndex: "ExpiringDate",
       render: (iso: string) => <span>{formatDate(iso)}</span>,
-      sorter: (a: any, b: any) => new Date(a.ExpiringDate).getTime() - new Date(b.ExpiringDate).getTime(),
+      sorter: (a: any, b: any) =>
+        new Date(a.ExpiringDate).getTime() - new Date(b.ExpiringDate).getTime(),
     },
     {
       title: "Status",
@@ -144,8 +146,11 @@ const Subscription = () => {
       render: (text: string) => (
         <span
           className={`badge ${
-            text === "Paid" ? "badge-success" 
-            : text === "Expired" ? "badge-danger" : "badge-secondary"
+            text === "Paid"
+              ? "badge-success"
+              : text === "Expired"
+              ? "badge-danger"
+              : "badge-secondary"
           } d-inline-flex align-items-center badge-xs`}
         >
           <i className="ti ti-point-filled me-1" />
@@ -185,7 +190,6 @@ const Subscription = () => {
   const getInvoiceNumber = (companyId: string) =>
     companyId?.slice(-4).toUpperCase() || "0000";
 
-  
   const [totalTransaction] = React.useState<any>({
     series: [
       {
@@ -540,14 +544,14 @@ const Subscription = () => {
       marker: {
         show: !1,
       },
-    },  
+    },
   });
   const filteredData = data.filter((item) => {
-  const statusMatch = statusFilter === "All" || item.Status === statusFilter;
-  const planMatch = planFilter === "All" || item.Plan === planFilter;
-  return statusMatch && planMatch;
-});
-  const planOptions = Array.from(new Set(data.map(item => item.Plan)));
+    const statusMatch = statusFilter === "All" || item.Status === statusFilter;
+    const planMatch = planFilter === "All" || item.Plan === planFilter;
+    return statusMatch && planMatch;
+  });
+  const planOptions = Array.from(new Set(data.map((item) => item.Plan)));
 
   return (
     <>
@@ -825,19 +829,19 @@ const Subscription = () => {
                     Select Status
                   </button>
                   <ul className="dropdown-menu dropdown-menu-end p-3">
-                   <li>
-                    <button
-                      className="dropdown-item rounded-1"
-                      onClick={() => setStatusFilter("All")}
-                    >
-                      All
-                    </button>
-                  </li>
-                  <li>
-                   <button
-                     className="dropdown-item rounded-1"
-                     onClick={() => setStatusFilter("Paid")}
-                   >
+                    <li>
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter("All")}
+                      >
+                        All
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        className="dropdown-item rounded-1"
+                        onClick={() => setStatusFilter("Paid")}
+                      >
                         Paid
                       </button>
                     </li>
@@ -889,11 +893,15 @@ const Subscription = () => {
                     </li>
                   </ul>  
                 </div>
-                */} 
+                */}
               </div>
             </div>
             <div className="card-body p-0">
-              <Table dataSource={filteredData} columns={columns} Selection={false} />
+              <Table
+                dataSource={filteredData}
+                columns={columns}
+                Selection={false}
+              />
             </div>
           </div>
         </div>
@@ -914,7 +922,7 @@ const Subscription = () => {
           <div className="modal-content">
             <div className="modal-body p-5">
               {selectedInvoice && (
-                <div ref ={invoiceRef}>
+                <div ref={invoiceRef}>
                   <div className="row justify-content-between align-items-center mb-3">
                     <div className="col-md-6">
                       <div className="mb-4">
@@ -930,7 +938,10 @@ const Subscription = () => {
                         <h5 className="text-dark mb-1">Invoice</h5>
                         <p className="mb-1 fw-normal">
                           <i className="ti ti-file-invoice me-1" />
-                          INV{getInvoiceNumber(selectedInvoice.companyId || selectedInvoice.id)}
+                          INV
+                          {getInvoiceNumber(
+                            selectedInvoice.companyId || selectedInvoice.id
+                          )}
                         </p>
                         <p className="mb-1 fw-normal">
                           <i className="ti ti-calendar me-1" />
@@ -944,62 +955,62 @@ const Subscription = () => {
                     </div>
                   </div>
                   <div className="row mb-3 d-flex justify-content-between">
-                   <div className="col-md-7">
-                    <p className="text-dark mb-2 fw-medium fs-16">
-                      Invoice From :
-                    </p>
-                    <div>
-                      <p className="mb-1">SmartHR</p>
-                      <p className="mb-1">
-                        367 Hillcrest Lane, Irvine, California, United States
+                    <div className="col-md-7">
+                      <p className="text-dark mb-2 fw-medium fs-16">
+                        Invoice From :
                       </p>
-                      <p className="mb-1">smarthr@example.com</p>
+                      <div>
+                        <p className="mb-1">SmartHR</p>
+                        <p className="mb-1">
+                          367 Hillcrest Lane, Irvine, California, United States
+                        </p>
+                        <p className="mb-1">smarthr@example.com</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-5">
-                    <p className="text-dark mb-2 fw-medium fs-16">
-                      Invoice To :
-                    </p>
-                    <div>
-                      <p className="mb-1">{selectedInvoice.CompanyName}</p>
-                      <p className="mb-1">{selectedInvoice.CompanyAddress}</p>
-                      <p className="mb-1">{selectedInvoice.CompanyEmail}</p>
-                      {/* 
+                    <div className="col-md-5">
+                      <p className="text-dark mb-2 fw-medium fs-16">
+                        Invoice To :
+                      </p>
+                      <div>
+                        <p className="mb-1">{selectedInvoice.CompanyName}</p>
+                        <p className="mb-1">{selectedInvoice.CompanyAddress}</p>
+                        <p className="mb-1">{selectedInvoice.CompanyEmail}</p>
+                        {/* 
                       <p className="mb-1">BrightWave Innovations</p>
                       <p className="mb-1">
                         367 Hillcrest Lane, Irvine, California, United States
                       </p>
                       <p className="mb-1">michael@example.com</p>
                       */}
-                   </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="mb-4">
-                  <div className="table-responsive mb-3">
-                    <table className="table">
-                      <thead className="thead-light">
-                        <tr>
-                          <th>Plan</th>
-                          <th>Billing Cycle</th>
-                          <th>Created Date</th>
-                          <th>Expiring On</th>
-                          <th>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>{selectedInvoice.Plan}</td>
-                          <td>{selectedInvoice.BillCycle} Days</td>
-                          <td>{formatDate(selectedInvoice.CreatedDate)}</td>
-                          <td>{formatDate(selectedInvoice.ExpiringDate)}</td>
-                          <td>${selectedInvoice.Amount}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="mb-4">
+                    <div className="table-responsive mb-3">
+                      <table className="table">
+                        <thead className="thead-light">
+                          <tr>
+                            <th>Plan</th>
+                            <th>Billing Cycle</th>
+                            <th>Created Date</th>
+                            <th>Expiring On</th>
+                            <th>Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>{selectedInvoice.Plan}</td>
+                            <td>{selectedInvoice.BillCycle} Days</td>
+                            <td>{formatDate(selectedInvoice.CreatedDate)}</td>
+                            <td>{formatDate(selectedInvoice.ExpiringDate)}</td>
+                            <td>${selectedInvoice.Amount}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-                <div className="row mb-3 d-flex justify-content-between">
-                {/* <div className="col-md-4">
+                  <div className="row mb-3 d-flex justify-content-between">
+                    {/* <div className="col-md-4">
                   <div>
                     <h6 className="mb-4">Payment info:</h6>
                     <p className="mb-0">Credit Card - 123***********789</p>
@@ -1009,41 +1020,42 @@ const Subscription = () => {
                     </div>
                   </div>
                 </div> */}
-                  <div className="col-md-4">
-                    <div className="d-flex justify-content-between align-items-center pe-3">
-                      <p className="text-dark fw-medium mb-0">Sub Total</p>
-                      <p className="mb-2">${selectedInvoice.Amount}</p>
+                    <div className="col-md-4">
+                      <div className="d-flex justify-content-between align-items-center pe-3">
+                        <p className="text-dark fw-medium mb-0">Sub Total</p>
+                        <p className="mb-2">${selectedInvoice.Amount}</p>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center pe-3">
+                        <p className="text-dark fw-medium mb-0">Tax </p>
+                        <p className="mb-2">$0.00</p>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center pe-3">
+                        <p className="text-dark fw-medium mb-0">Total</p>
+                        <p className="text-dark fw-medium mb-2">
+                          ${selectedInvoice.Amount}
+                        </p>
+                      </div>
                     </div>
-                    <div className="d-flex justify-content-between align-items-center pe-3">
-                      <p className="text-dark fw-medium mb-0">Tax </p>
-                      <p className="mb-2">$0.00</p>
-                    </div>
-                    <div className="d-flex justify-content-between align-items-center pe-3">
-                      <p className="text-dark fw-medium mb-0">Total</p>
-                      <p className="text-dark fw-medium mb-2">${selectedInvoice.Amount}
+                  </div>
+                  <div className="card border mb-0">
+                    <div className="card-body">
+                      <p className="text-dark fw-medium mb-2">
+                        Terms &amp; Conditions:
+                      </p>
+                      <p className="fs-12 fw-normal d-flex align-items-baseline mb-2">
+                        <i className="ti ti-point-filled text-primary me-1" />
+                        All payments must be made according to the agreed
+                        schedule. Late payments may incur additional fees.
+                      </p>
+                      <p className="fs-12 fw-normal d-flex align-items-baseline">
+                        <i className="ti ti-point-filled text-primary me-1" />
+                        We are not liable for any indirect, incidental, or
+                        consequential damages, including loss of profits,
+                        revenue, or data.
                       </p>
                     </div>
                   </div>
-                </div>
-                <div className="card border mb-0">
-                  <div className="card-body">
-                    <p className="text-dark fw-medium mb-2">
-                      Terms &amp; Conditions:
-                    </p>
-                    <p className="fs-12 fw-normal d-flex align-items-baseline mb-2">
-                      <i className="ti ti-point-filled text-primary me-1" />
-                      All payments must be made according to the agreed schedule.
-                      Late payments may incur additional fees.
-                    </p>
-                    <p className="fs-12 fw-normal d-flex align-items-baseline">
-                      <i className="ti ti-point-filled text-primary me-1" />
-                      We are not liable for any indirect, incidental, or
-                      consequential damages, including loss of profits, revenue,
-                      or data.
-                    </p>
-                  </div>
-                </div>
-              <div className="mt-3 text-end">
+                  <div className="mt-3 text-end">
                     <button
                       className="btn btn-primary"
                       onClick={handleDownloadPDF}
@@ -1052,12 +1064,12 @@ const Subscription = () => {
                     </button>
                   </div>
                 </div>
-              )} 
+              )}
             </div>
           </div>
-       </div>
-     </div> 
-    {/* /View Invoice */}
+        </div>
+      </div>
+      {/* /View Invoice */}
     </>
   );
 };

@@ -12,9 +12,10 @@ export const withRoleCheck = (Component, allowedRoles) => {
       return <p>Loading...</p>;
     }
 
-    const userRole = user?.publicMetadata?.role || "superadmin"; // Default to "public" if no role is found // changge it in production
+    const userRole = user?.publicMetadata?.role || "public"; // Default to "public" if no role is found // changge it in production
     console.log("User Role:", userRole);
-
+    return <Component {...props} />;
+    // Change in prodution
     if (allowedRoles.includes(userRole) || allowedRoles.includes("public")) {
       return <Component {...props} />;
     } else {
