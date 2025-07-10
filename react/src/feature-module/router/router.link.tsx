@@ -314,7 +314,7 @@ export const publicRoutes = [
     path: routes.employeeDashboard,
     element: <EmployeeDashboard />,
     route: Route,
-    roles: ["employee"],
+    roles: ["public"],
   },
   {
     path: routes.leadsDashboard,

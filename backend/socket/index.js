@@ -66,7 +66,7 @@ export const socketHandler = (httpServer) => {
         }
 
         socket.role = role;
-        socket.company = company;
+        socket.companyId = company;
 
         // Example: join role-based room
         switch (role) {
