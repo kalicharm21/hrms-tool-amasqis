@@ -37,6 +37,11 @@ const Header = (): JSX.Element => {
     return user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || "No email";
   };
 
+	const getCompanyId = () => {
+		if (!user) return "Guest Company";
+		return user.publicMetadata?.companyId as string || "Company";
+	};
+
   const getUserImage = () => {
     if (!user) return "assets/img/profiles/avatar-12.jpg";
     return user.imageUrl || "assets/img/profiles/avatar-12.jpg";
@@ -503,7 +508,10 @@ const Header = (): JSX.Element => {
 													<h5 className="mb-0">{getUserName()}</h5>
 													<p className="fs-12 fw-medium mb-0">{getUserEmail()}</p>
 													{isSignedIn && user ? (
-														<p className="fs-10 text-muted mb-0">Role: {getUserRole()}</p>
+														<>
+															<p className="fs-10 text-muted mb-0">Role: {getUserRole()}</p>
+															<p className="fs-10 text-muted mt-0 mb-0">CId: {getCompanyId()}</p>
+														</>
 													) : null}
 												</div>
 											</div>
