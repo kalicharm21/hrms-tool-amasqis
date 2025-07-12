@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Eye, Star, Trash2 } from "react-feather/dist";
 import { Link } from "react-router-dom";
 import Select from "react-select";
@@ -47,9 +47,10 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
     { value: "Low", label: "Low" },
   ];
 
-    useEffect(() => {
+
+
+  useEffect(() => {
     if (socket) {
-      // Fetch todo tags
       socket.emit("admin/dashboard/get-todo-tags");
 
       socket.on("admin/dashboard/get-todo-tags-response", (response: any) => {
@@ -58,7 +59,6 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
         }
       });
 
-      // Fetch assignees
       socket.emit("admin/dashboard/get-todo-assignees");
 
       socket.on("admin/dashboard/get-todo-assignees-response", (response: any) => {
@@ -128,19 +128,27 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
               if (bootstrapModal) {
                 bootstrapModal.hide();
               } else {
-                const backdrop = document.querySelector('.modal-backdrop');
-                if (backdrop) {
-                  backdrop.remove();
-                }
                 modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+                modal.classList.remove('show');
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
                 document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
               }
             }
 
-            // Notify parent component for immediate update
-            if (onTodoAdded) {
-              onTodoAdded();
-            }
+            setTimeout(() => {
+              const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
+              remainingBackdrops.forEach(backdrop => backdrop.remove());
+              document.body.classList.remove('modal-open');
+              document.body.style.overflow = '';
+              document.body.style.paddingRight = '';
+              if (onTodoAdded) {
+                onTodoAdded();
+              }
+            }, 200);
           } else {
             alert('Failed to add todo: ' + response.error);
           }
@@ -151,7 +159,6 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
         socket.on("admin/dashboard/add-todo-response", handleResponse);
         socket.emit("admin/dashboard/add-todo", todoData);
       } else {
-        // Fallback if no socket connection
         alert('No connection available. Please refresh the page.');
         setIsLoading(false);
       }
@@ -173,6 +180,41 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
     });
   };
 
+  const cleanupModal = useCallback(() => {
+    const modal = document.getElementById('add_todo');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+      modal.classList.remove('show');
+    }
+
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => backdrop.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+    document.body.style.marginRight = '';
+    resetForm();
+  }, []);
+
+  // Handle modal cleanup when closed by Bootstrap
+  useEffect(() => {
+    const modal = document.getElementById('add_todo');
+    if (modal) {
+      const handleModalHidden = () => {
+        setTimeout(() => {
+          cleanupModal();
+        }, 100);
+      };
+
+      modal.addEventListener('hidden.bs.modal', handleModalHidden);
+
+      return () => {
+        modal.removeEventListener('hidden.bs.modal', handleModalHidden);
+      };
+    }
+  }, [cleanupModal]);
+
   return (
     <div>
       {/* Add Todo */}
@@ -186,7 +228,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
                 className="btn-close custom-btn-close"
                 data-bs-dismiss="modal"
                 aria-label="Close"
-                onClick={resetForm}
+                onClick={cleanupModal}
               >
                 <i className="ti ti-x" />
               </button>
@@ -268,7 +310,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
                   type="button"
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
-                  onClick={resetForm}
+                  onClick={cleanupModal}
                   disabled={isLoading}
                 >
                   Cancel

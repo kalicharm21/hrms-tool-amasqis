@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import ReactApexChart from "react-apexcharts";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
@@ -174,65 +174,81 @@ const AdminDashboard = () => {
     return user.imageUrl || "assets/img/profiles/avatar-31.jpg";
   };
 
-  const filterTodosByCurrentFilter = (todos: any[]) => {
+  const filterTodosByCurrentFilter = useCallback((todos: any[]) => {
+    if (!todos || todos.length === 0) return todos;
     if (todoFilter === 'all') return todos;
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    return todos.filter(todo => {
-      const todoDate = new Date(todo.createdAt);
+    try {
+      return todos.filter(todo => {
+        if (!todo.createdAt) return false;
 
-      switch (todoFilter) {
-        case 'today':
-          return todoDate >= startOfToday && todoDate < endOfToday;
-        case 'week':
-          const weekStart = new Date(now);
-          weekStart.setDate(now.getDate() - now.getDay());
-          weekStart.setHours(0, 0, 0, 0);
-          const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekStart.getDate() + 7);
-          return todoDate >= weekStart && todoDate < weekEnd;
-        case 'month':
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-          return todoDate >= monthStart && todoDate < monthEnd;
-        default:
-          return true;
-      }
-    });
-  };
+        const todoDate = new Date(todo.createdAt);
+        if (isNaN(todoDate.getTime())) return false;
+
+        switch (todoFilter) {
+          case 'today':
+            return todoDate >= startOfToday && todoDate < endOfToday;
+          case 'week':
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 7);
+            return todoDate >= weekStart && todoDate < weekEnd;
+          case 'month':
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            return todoDate >= monthStart && todoDate < monthEnd;
+          default:
+            return true;
+        }
+      });
+    } catch (error) {
+      console.error('Error filtering todos:', error);
+      return todos;
+    }
+  }, [todoFilter]);
 
   useEffect(() => {
+    let isMounted = true;
+    let currentSocket: any = null;
+
     const initSocket = async () => {
       try {
         console.log("Initializing socket connection...");
         const token = await getToken();
         console.log("Token obtained, creating socket...");
 
-        const newSocket = io("http://localhost:5000", {
+        if (!isMounted) return;
+
+        currentSocket = io("http://localhost:5000", {
           auth: { token },
           timeout: 20000, // 20 second timeout
         });
 
         const timeoutId = setTimeout(() => {
-          if (loading) {
+          if (loading && isMounted) {
             console.warn("Dashboard loading timeout - showing fallback");
             setError("Dashboard loading timed out. Please refresh the page.");
             setLoading(false);
           }
         }, 30000); // 30 second timeout
 
-        newSocket.on("connect", () => {
+        currentSocket.on("connect", () => {
           console.log("Connected to admin dashboard");
           console.log("Requesting dashboard data...");
-          newSocket.emit("admin/dashboard/get-all-data");
+          currentSocket.emit("admin/dashboard/get-all-data");
         });
 
-        newSocket.on("admin/dashboard/get-all-data-response", (response) => {
+        currentSocket.on("admin/dashboard/get-all-data-response", (response: any) => {
           console.log("Received dashboard data response:", response);
           clearTimeout(timeoutId);
+          if (!isMounted) return;
+
           if (response.done) {
             console.log("Dashboard data loaded successfully");
             setDashboardData(response.data);
@@ -244,20 +260,23 @@ const AdminDashboard = () => {
           }
         });
 
-        newSocket.on("admin/dashboard/get-todos-response", (response) => {
+        currentSocket.on("admin/dashboard/get-todos-response", (response: any) => {
           console.log(`[TODO BROADCAST] Received todos broadcast:`, response);
+          if (!isMounted) return;
+
           if (response.done) {
-            // If this is a broadcast (all todos), we need to filter them according to current filter
-            const filteredTodos = filterTodosByCurrentFilter(response.data);
-            console.log(`[TODO BROADCAST] Filtered todos:`, filteredTodos);
+            // Don't filter here - just update the todos directly from server
+            console.log(`[TODO BROADCAST] Setting todos:`, response.data);
             setDashboardData(prev => ({
               ...prev,
-              todos: filteredTodos
+              todos: response.data
             }));
           }
         });
 
-        newSocket.on("admin/dashboard/update-todo-response", (response) => {
+        currentSocket.on("admin/dashboard/update-todo-response", (response: any) => {
+          if (!isMounted) return;
+
           if (response.done) {
             setDashboardData(prev => ({
               ...prev,
@@ -268,39 +287,46 @@ const AdminDashboard = () => {
           }
         });
 
-        newSocket.on("connect_error", (err) => {
+        currentSocket.on("connect_error", (err: any) => {
           console.error("Socket connection error:", err);
           clearTimeout(timeoutId);
+          if (!isMounted) return;
+
           setError("Failed to connect to server");
           setLoading(false);
         });
 
-        newSocket.on("disconnect", (reason) => {
+        currentSocket.on("disconnect", (reason: any) => {
           console.log("Socket disconnected:", reason);
           clearTimeout(timeoutId);
         });
 
-        setSocket(newSocket);
+        if (isMounted) {
+          setSocket(currentSocket);
+        }
       } catch (err) {
         console.error("Failed to initialize socket:", err);
-        setError("Failed to authenticate");
-        setLoading(false);
+        if (isMounted) {
+          setError("Failed to authenticate");
+          setLoading(false);
+        }
       }
     };
 
-    // Only initialize if we don't have a socket yet
     if (!socket) {
       initSocket();
     }
 
     return () => {
-      if (socket) {
+      isMounted = false;
+      if (currentSocket) {
         console.log("Cleaning up socket connection...");
-        socket.disconnect();
+        currentSocket.removeAllListeners();
+        currentSocket.disconnect();
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken]);
+  }, []);
 
   // Chart configurations
   const empDepartmentOptions = {
@@ -571,9 +597,7 @@ const AdminDashboard = () => {
   const handleTodoFilterChange = (filter: string) => {
     console.log(`[TODO FILTER] Changing filter from ${todoFilter} to ${filter}`);
     setTodoFilter(filter);
-    if (socket) {
-      socket.emit("admin/dashboard/get-todos", { filter });
-    }
+    // Don't emit socket request here - let client-side filtering handle it
   };
 
   const formatTime = (dateString: string) => {
@@ -608,6 +632,12 @@ const AdminDashboard = () => {
   };
 
   const statusPercentages = calculateEmployeeStatusPercentages();
+
+  // Memoize filtered todos to prevent unnecessary recalculations
+  const filteredTodos = useMemo(() => {
+    return filterTodosByCurrentFilter(dashboardData.todos || []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardData.todos, todoFilter, filterTodosByCurrentFilter]);
 
   // Format growth percentage display
   const formatGrowthPercentage = (value: number | undefined) => {
@@ -1693,7 +1723,7 @@ const AdminDashboard = () => {
                   </div>
                 </div>
                 <div className="card-body">
-                  {dashboardData.todos?.map((todo, index) => (
+                  {filteredTodos.map((todo, index) => (
                     <div key={todo._id} className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${todo.completed ? 'todo-strike' : ''}`}>
                       <i className="ti ti-grid-dots me-2" />
                       <div className="form-check flex-grow-1">
@@ -1724,7 +1754,7 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   ))}
-                  {(!dashboardData.todos || dashboardData.todos.length === 0) && (
+                  {(!dashboardData.todos || filteredTodos.length === 0) && (
                     <div className="text-center py-4">
                       <p className="text-muted">No todos found for the selected period.</p>
                     </div>
@@ -2369,9 +2399,9 @@ const AdminDashboard = () => {
         }
       }} />
       <TodoModal socket={socket} onTodoAdded={() => {
-        // Refresh todo data when a new todo is added
+        // Refresh all dashboard data when a new todo is added
         if (socket) {
-          socket.emit("admin/dashboard/get-todos", { filter: todoFilter });
+          socket.emit("admin/dashboard/get-all-data");
         }
       }} />
     </>
