@@ -1093,3 +1093,204 @@ export const getTodoAssignees = async (companyId) => {
     return { done: false, error: error.message };
   }
 };
+
+// Get clients for project modal
+export const getProjectClients = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const clients = await collections.clients
+      .find({ status: "Active" })
+      .sort({ name: 1 })
+      .toArray();
+
+    const clientOptions = clients.map((client) => ({
+      value: client._id.toString(),
+      label: client.name,
+      email: client.email,
+      company: client.company,
+    }));
+
+    return {
+      done: true,
+      data: clientOptions,
+    };
+  } catch (error) {
+    console.error("Error fetching project clients:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get employees for project modal
+export const getProjectEmployees = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const employees = await collections.employees
+      .find({ status: "Active" })
+      .sort({ firstName: 1 })
+      .toArray();
+
+    const employeeOptions = employees.map((emp) => ({
+      value: emp._id.toString(),
+      label: `${emp.firstName} ${emp.lastName}`,
+      position: emp.position,
+      department: emp.department,
+      avatar: emp.avatar,
+    }));
+
+    return {
+      done: true,
+      data: employeeOptions,
+    };
+  } catch (error) {
+    console.error("Error fetching project employees:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get project tags
+export const getProjectTags = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const existingTags = await collections.projects.distinct("tags", {
+      status: { $ne: "Deleted" },
+      tags: { $exists: true, $ne: [] },
+    });
+
+    const flatTags = existingTags.flat();
+    const uniqueTags = [...new Set(flatTags)];
+
+    const defaultTags = [
+      "High Priority",
+      "Medium Priority",
+      "Low Priority",
+      "Web Development",
+      "Mobile App",
+      "Design",
+      "Backend",
+      "Frontend",
+      "API",
+      "Database",
+    ];
+
+    const allTags = [...new Set([...defaultTags, ...uniqueTags])];
+
+    return {
+      done: true,
+      data: allTags.map((tag) => ({ value: tag, label: tag })),
+    };
+  } catch (error) {
+    console.error("Error fetching project tags:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Generate next project ID
+export const generateNextProjectId = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const lastProject = await collections.projects.findOne(
+      {},
+      { sort: { createdAt: -1 } }
+    );
+
+    let nextId = 1;
+    if (lastProject && lastProject.projectId) {
+      const lastIdNumber = parseInt(lastProject.projectId.replace("PRO-", ""));
+      nextId = lastIdNumber + 1;
+    }
+
+    const projectId = `PRO-${String(nextId).padStart(4, "0")}`;
+
+    return {
+      done: true,
+      data: { projectId },
+    };
+  } catch (error) {
+    console.error("Error generating project ID:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Add new project
+export const addProject = async (companyId, userId, projectData) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    // Generate project ID
+    const projectIdResult = await generateNextProjectId(companyId);
+    const projectId = projectIdResult.data.projectId;
+
+    const newProject = {
+      ...projectData,
+      projectId,
+      createdBy: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: projectData.status || "Active",
+      progress: 0,
+      hours: 0,
+      isDeleted: false,
+    };
+
+    const result = await collections.projects.insertOne(newProject);
+
+    // Add activity log
+    await collections.activities.insertOne({
+      employeeId: userId,
+      action: "Project Created",
+      description: `Created new project: ${projectData.name}`,
+      createdAt: new Date(),
+    });
+
+    return {
+      done: true,
+      data: { ...newProject, _id: result.insertedId },
+    };
+  } catch (error) {
+    console.error("Error adding project:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get project priorities
+export const getProjectPriorities = async () => {
+  try {
+    const priorities = [
+      { value: "High", label: "High", color: "danger" },
+      { value: "Medium", label: "Medium", color: "warning" },
+      { value: "Low", label: "Low", color: "success" },
+    ];
+
+    return {
+      done: true,
+      data: priorities,
+    };
+  } catch (error) {
+    console.error("Error fetching project priorities:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get project statuses
+export const getProjectStatuses = async () => {
+  try {
+    const statuses = [
+      { value: "Active", label: "Active", color: "success" },
+      { value: "On Hold", label: "On Hold", color: "warning" },
+      { value: "Completed", label: "Completed", color: "info" },
+      { value: "Cancelled", label: "Cancelled", color: "danger" },
+    ];
+
+    return {
+      done: true,
+      data: statuses,
+    };
+  } catch (error) {
+    console.error("Error fetching project statuses:", error);
+    return { done: false, error: error.message };
+  }
+};

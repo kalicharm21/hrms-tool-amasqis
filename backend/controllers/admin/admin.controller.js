@@ -491,6 +491,147 @@ const adminController = (socket, io) => {
       });
     }
   });
+
+  // Get project clients
+  socket.on("admin/project/get-clients", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getProjectClients(companyId);
+      socket.emit("admin/project/get-clients-response", result);
+    } catch (error) {
+      socket.emit("admin/project/get-clients-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get project employees
+  socket.on("admin/project/get-employees", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getProjectEmployees(companyId);
+      socket.emit("admin/project/get-employees-response", result);
+    } catch (error) {
+      socket.emit("admin/project/get-employees-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get project tags
+  socket.on("admin/project/get-tags", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getProjectTags(companyId);
+      socket.emit("admin/project/get-tags-response", result);
+    } catch (error) {
+      socket.emit("admin/project/get-tags-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get project priorities
+  socket.on("admin/project/get-priorities", async () => {
+    try {
+      const result = await adminService.getProjectPriorities();
+      socket.emit("admin/project/get-priorities-response", result);
+    } catch (error) {
+      socket.emit("admin/project/get-priorities-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get project statuses
+  socket.on("admin/project/get-statuses", async () => {
+    try {
+      const result = await adminService.getProjectStatuses();
+      socket.emit("admin/project/get-statuses-response", result);
+    } catch (error) {
+      socket.emit("admin/project/get-statuses-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Generate next project ID
+  socket.on("admin/project/generate-id", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.generateNextProjectId(companyId);
+      socket.emit("admin/project/generate-id-response", result);
+    } catch (error) {
+      socket.emit("admin/project/generate-id-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Add new project
+  socket.on("admin/project/add", async (projectData) => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const userId = socket.user.sub;
+      const result = await adminService.addProject(
+        companyId,
+        userId,
+        projectData
+      );
+      socket.emit("admin/project/add-response", result);
+
+      // Broadcast to admin room to update project lists
+      io.to(`admin_room_${companyId}`).emit(
+        "admin/project/project-added",
+        result
+      );
+    } catch (error) {
+      socket.emit("admin/project/add-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get project modal data (all data in one call)
+  socket.on("admin/project/get-modal-data", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+
+      const [clients, employees, tags, priorities, statuses, projectId] =
+        await Promise.all([
+          adminService.getProjectClients(companyId),
+          adminService.getProjectEmployees(companyId),
+          adminService.getProjectTags(companyId),
+          adminService.getProjectPriorities(),
+          adminService.getProjectStatuses(),
+          adminService.generateNextProjectId(companyId),
+        ]);
+
+      socket.emit("admin/project/get-modal-data-response", {
+        done: true,
+        data: {
+          clients: clients.data,
+          employees: employees.data,
+          tags: tags.data,
+          priorities: priorities.data,
+          statuses: statuses.data,
+          projectId: projectId.data.projectId,
+        },
+      });
+    } catch (error) {
+      socket.emit("admin/project/get-modal-data-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
 };
 
 export default adminController;
