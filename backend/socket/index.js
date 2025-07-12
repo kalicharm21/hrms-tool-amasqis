@@ -33,7 +33,7 @@ export const socketHandler = (httpServer) => {
   });
 
   io.use(async (socket, next) => {
-    console.log("🔄 Socket connection attempt...");
+    console.log("Socket connection attempt...");
     const token = socket.handshake.auth.token;
     if (!token) {
       console.error("No token provided");
@@ -47,33 +47,66 @@ export const socketHandler = (httpServer) => {
       });
 
       if (verifiedToken) {
-        console.log(`✅ Token verified! User ID: ${verifiedToken.sub}`);
+        console.log(`Token verified! User ID: ${verifiedToken.sub}`);
         socket.user = verifiedToken;
 
         const user = await clerkClient.users.getUser(verifiedToken.sub);
 
-        // Check if role exists, else assign "superadmin"
+        // Check if role exists, else assign default role based on metadata
         let role = user.publicMetadata?.role;
+        let companyId = user.publicMetadata?.companyId || null;
+
         if (!role) {
-          role = "public";
+          // If no role is set, assign based on whether they have a companyId
+          if (companyId) {
+            role = "admin"; // If they have a companyId, they're an admin
+          } else {
+            role = "public"; // Otherwise, they're public
+          }
+
           await clerkClient.users.updateUserMetadata(user.id, {
-            publicMetadata: { role },
+            publicMetadata: { ...user.publicMetadata, role },
           });
-          console.log(`🆕 Default role 'public' assigned to user ${user.id}`);
+          console.log(`Default role '${role}' assigned to user ${user.id}`);
         } else {
-          console.log(`👤 Existing role: ${role}`);
-          var company = user.publicMetadata?.companyId || null;
+          console.log(`Existing role: ${role}`);
         }
 
         socket.role = role;
-        socket.companyId = company;
+        socket.companyId = companyId;
 
-        // Example: join role-based room
+        console.log(`Company ID: ${companyId || "None"}`);
+
+        // Join role-based rooms
         switch (role) {
           case "superadmin":
             socket.join("superadmin_room");
+            console.log(`User joined superadmin_room`);
             break;
-          // Add more role handling here
+          case "admin":
+            if (companyId) {
+              socket.join(`admin_room_${companyId}`);
+              console.log(`User joined admin_room_${companyId}`);
+            } else {
+              console.warn(`Admin user ${user.id} has no companyId`);
+              return next(new Error("Admin user must have a companyId"));
+            }
+            break;
+          case "hr":
+            if (companyId) {
+              socket.join(`hr_room_${companyId}`);
+              console.log(`User joined hr_room_${companyId}`);
+            }
+            break;
+          case "employee":
+            if (companyId) {
+              socket.join(`employee_room_${companyId}`);
+              console.log(`User joined employee_room_${companyId}`);
+            }
+            break;
+          default:
+            console.log(`User with role '${role}' connected`);
+            break;
         }
 
         return next();
@@ -88,12 +121,16 @@ export const socketHandler = (httpServer) => {
   });
 
   io.on("connection", (socket) => {
-    console.log(`🟢 Client connected: ${socket.id}`);
+    console.log(
+      `Client connected: ${socket.id}, Role: ${socket.role}, Company: ${
+        socket.companyId || "None"
+      }`
+    );
     const role = socket.role || "guest";
     router(socket, io, role);
 
     socket.on("disconnect", () => {
-      console.log(`🔴 Client disconnected: ${socket.id}`);
+      console.log(`Client disconnected: ${socket.id}`);
     });
   });
 };
