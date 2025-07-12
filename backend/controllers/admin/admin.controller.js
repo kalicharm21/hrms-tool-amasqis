@@ -168,11 +168,12 @@ const adminController = (socket, io) => {
   });
 
   // Get todos
-  socket.on("admin/dashboard/get-todos", async () => {
+  socket.on("admin/dashboard/get-todos", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
-      const result = await adminService.getTodos(companyId, userId);
+      const filter = data?.filter || "all";
+      const result = await adminService.getTodos(companyId, userId, filter);
       socket.emit("admin/dashboard/get-todos-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-todos-response", {
@@ -262,7 +263,7 @@ const adminController = (socket, io) => {
         adminService.getJobApplicants(companyId),
         adminService.getRecentActivities(companyId),
         adminService.getBirthdays(companyId),
-        adminService.getTodos(companyId, userId),
+        adminService.getTodos(companyId, userId, "today"),
         adminService.getProjectsData(companyId),
         adminService.getTaskStatistics(companyId),
         adminService.getSchedules(companyId),
@@ -320,8 +321,12 @@ const adminController = (socket, io) => {
         data: { ...newTodo, _id: result.insertedId },
       });
 
-      // Broadcast updated todos to admin room
-      const updatedTodos = await adminService.getTodos(companyId, userId);
+      // Broadcast updated todos to admin room (get all todos for real-time sync)
+      const updatedTodos = await adminService.getTodos(
+        companyId,
+        userId,
+        "all"
+      );
       io.to(`admin_room_${companyId}`).emit(
         "admin/dashboard/get-todos-response",
         updatedTodos
@@ -352,8 +357,12 @@ const adminController = (socket, io) => {
         data: result,
       });
 
-      // Broadcast updated todos to admin room
-      const updatedTodos = await adminService.getTodos(companyId, userId);
+      // Broadcast updated todos to admin room (get all todos for real-time sync)
+      const updatedTodos = await adminService.getTodos(
+        companyId,
+        userId,
+        "all"
+      );
       io.to(`admin_room_${companyId}`).emit(
         "admin/dashboard/get-todos-response",
         updatedTodos
@@ -366,7 +375,7 @@ const adminController = (socket, io) => {
     }
   });
 
-  // Delete todo
+  // Delete todo (soft delete)
   socket.on("admin/dashboard/delete-todo", async (todoId) => {
     try {
       const companyId = validateCompanyAccess(socket);
@@ -384,14 +393,99 @@ const adminController = (socket, io) => {
         data: result,
       });
 
-      // Broadcast updated todos to admin room
-      const updatedTodos = await adminService.getTodos(companyId, userId);
+      // Broadcast updated todos to admin room (get all todos for real-time sync)
+      const updatedTodos = await adminService.getTodos(
+        companyId,
+        userId,
+        "all"
+      );
       io.to(`admin_room_${companyId}`).emit(
         "admin/dashboard/get-todos-response",
         updatedTodos
       );
     } catch (error) {
       socket.emit("admin/dashboard/delete-todo-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Delete todo permanently
+  socket.on("admin/dashboard/delete-todo-permanently", async (todoId) => {
+    try {
+      console.log(`[DELETE TODO] Attempting to delete todo: ${todoId}`);
+      const companyId = validateCompanyAccess(socket);
+      const userId = socket.user.sub;
+      console.log(`[DELETE TODO] CompanyId: ${companyId}, UserId: ${userId}`);
+
+      const collections = getTenantCollections(companyId);
+
+      // Check if the todo exists before deleting
+      const todoExists = await collections.todos.findOne({
+        _id: new ObjectId(todoId),
+        userId,
+      });
+      console.log(`[DELETE TODO] Todo exists:`, todoExists);
+
+      const result = await collections.todos.deleteOne({
+        _id: new ObjectId(todoId),
+        userId,
+      });
+
+      console.log(`[DELETE TODO] Delete result:`, result);
+
+      socket.emit("admin/dashboard/delete-todo-permanently-response", {
+        done: true,
+        data: result,
+      });
+
+      // Broadcast updated todos to admin room (get all todos for real-time sync)
+      const updatedTodos = await adminService.getTodos(
+        companyId,
+        userId,
+        "all"
+      );
+      console.log(
+        `[DELETE TODO] Broadcasting ${
+          updatedTodos.data?.length || 0
+        } todos to admin room`
+      );
+      io.to(`admin_room_${companyId}`).emit(
+        "admin/dashboard/get-todos-response",
+        updatedTodos
+      );
+    } catch (error) {
+      console.error(`[DELETE TODO] Error deleting todo:`, error);
+      socket.emit("admin/dashboard/delete-todo-permanently-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get todo tags
+  socket.on("admin/dashboard/get-todo-tags", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getTodoTags(companyId);
+      socket.emit("admin/dashboard/get-todo-tags-response", result);
+    } catch (error) {
+      socket.emit("admin/dashboard/get-todo-tags-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get todo assignees
+  socket.on("admin/dashboard/get-todo-assignees", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getTodoAssignees(companyId);
+      socket.emit("admin/dashboard/get-todo-assignees-response", result);
+    } catch (error) {
+      socket.emit("admin/dashboard/get-todo-assignees-response", {
         done: false,
         error: error.message,
       });

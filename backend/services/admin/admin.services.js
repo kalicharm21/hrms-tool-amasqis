@@ -670,14 +670,54 @@ export const getBirthdays = async (companyId) => {
 };
 
 // Get todos
-export const getTodos = async (companyId, userId) => {
+export const getTodos = async (companyId, userId, filter = "all") => {
   try {
     const collections = getTenantCollections(companyId);
+
+    // Calculate date ranges for filtering
+    const now = new Date();
+    let dateFilter = {};
+
+    switch (filter) {
+      case "today":
+        const startOfToday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+        const endOfToday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + 1
+        );
+        dateFilter = {
+          createdAt: { $gte: startOfToday, $lt: endOfToday },
+        };
+        break;
+      case "week":
+        const weekStart = startOfWeek(now);
+        const weekEnd = endOfWeek(now);
+        dateFilter = {
+          createdAt: { $gte: weekStart, $lte: weekEnd },
+        };
+        break;
+      case "month":
+        const monthStart = startOfMonth(now);
+        const monthEnd = endOfMonth(now);
+        dateFilter = {
+          createdAt: { $gte: monthStart, $lte: monthEnd },
+        };
+        break;
+      default:
+        // No date filter for 'all'
+        break;
+    }
 
     const todos = await collections.todos
       .find({
         userId,
         isDeleted: { $ne: true },
+        ...dateFilter,
       })
       .sort({ createdAt: -1 })
       .toArray();
@@ -969,6 +1009,87 @@ export const getEmployeeGrowth = async (companyId) => {
     };
   } catch (error) {
     console.error("Error fetching employee growth:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get todo tags
+export const getTodoTags = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const existingTags = await collections.todos.distinct("tag", {
+      isDeleted: { $ne: true },
+      tag: { $exists: true, $ne: "" },
+    });
+
+    const defaultTags = [
+      "Internal",
+      "Projects",
+      "Meetings",
+      "Reminder",
+      "Personal",
+    ];
+
+    // Combine and remove duplicates
+    const allTags = [...new Set([...defaultTags, ...existingTags])];
+
+    return {
+      done: true,
+      data: allTags.map((tag) => ({ value: tag, label: tag })),
+    };
+  } catch (error) {
+    console.error("Error fetching todo tags:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get employees for assignee dropdown
+export const getTodoAssignees = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const employees = await collections.employees
+      .find(
+        {
+          status: "Active",
+        },
+        {
+          projection: {
+            _id: 1,
+            firstName: 1,
+            lastName: 1,
+            position: 1,
+            email: 1,
+            avatar: 1,
+          },
+        }
+      )
+      .sort({ firstName: 1 })
+      .toArray();
+
+    // Add default options
+    const defaultOptions = [
+      { value: "Self", label: "Self" },
+      { value: "Team", label: "Team" },
+      { value: "Manager", label: "Manager" },
+    ];
+
+    // Format employees for dropdown
+    const employeeOptions = employees.map((emp) => ({
+      value: emp._id.toString(),
+      label: `${emp.firstName} ${emp.lastName}`,
+      position: emp.position,
+      email: emp.email,
+      avatar: emp.avatar,
+    }));
+
+    return {
+      done: true,
+      data: [...defaultOptions, ...employeeOptions],
+    };
+  } catch (error) {
+    console.error("Error fetching todo assignees:", error);
     return { done: false, error: error.message };
   }
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import ReactApexChart from "react-apexcharts";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
@@ -162,8 +162,8 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState(new Date());
+  const [todoFilter, setTodoFilter] = useState('today');
 
-  // Helper functions to get user data from Clerk
   const getUserName = () => {
     if (!user) return "Admin";
     return user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || "Admin";
@@ -174,7 +174,36 @@ const AdminDashboard = () => {
     return user.imageUrl || "assets/img/profiles/avatar-31.jpg";
   };
 
-    // Initialize socket connection
+  const filterTodosByCurrentFilter = (todos: any[]) => {
+    if (todoFilter === 'all') return todos;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    return todos.filter(todo => {
+      const todoDate = new Date(todo.createdAt);
+
+      switch (todoFilter) {
+        case 'today':
+          return todoDate >= startOfToday && todoDate < endOfToday;
+        case 'week':
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - now.getDay());
+          weekStart.setHours(0, 0, 0, 0);
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 7);
+          return todoDate >= weekStart && todoDate < weekEnd;
+        case 'month':
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          return todoDate >= monthStart && todoDate < monthEnd;
+        default:
+          return true;
+      }
+    });
+  };
+
   useEffect(() => {
     const initSocket = async () => {
       try {
@@ -187,7 +216,6 @@ const AdminDashboard = () => {
           timeout: 20000, // 20 second timeout
         });
 
-        // Add timeout failsafe
         const timeoutId = setTimeout(() => {
           if (loading) {
             console.warn("Dashboard loading timeout - showing fallback");
@@ -204,7 +232,7 @@ const AdminDashboard = () => {
 
         newSocket.on("admin/dashboard/get-all-data-response", (response) => {
           console.log("Received dashboard data response:", response);
-          clearTimeout(timeoutId); // Clear timeout on successful response
+          clearTimeout(timeoutId);
           if (response.done) {
             console.log("Dashboard data loaded successfully");
             setDashboardData(response.data);
@@ -213,6 +241,19 @@ const AdminDashboard = () => {
             console.error("Dashboard data error:", response.error);
             setError(response.error || "Failed to fetch dashboard data");
             setLoading(false);
+          }
+        });
+
+        newSocket.on("admin/dashboard/get-todos-response", (response) => {
+          console.log(`[TODO BROADCAST] Received todos broadcast:`, response);
+          if (response.done) {
+            // If this is a broadcast (all todos), we need to filter them according to current filter
+            const filteredTodos = filterTodosByCurrentFilter(response.data);
+            console.log(`[TODO BROADCAST] Filtered todos:`, filteredTodos);
+            setDashboardData(prev => ({
+              ...prev,
+              todos: filteredTodos
+            }));
           }
         });
 
@@ -473,12 +514,66 @@ const AdminDashboard = () => {
   // Helper functions
   const updateTodo = (todoId: string, updates: any) => {
     if (socket) {
+      // Optimistic update - update UI immediately
+      setDashboardData(prev => ({
+        ...prev,
+        todos: prev.todos?.map(todo =>
+          todo._id === todoId ? { ...todo, ...updates } : todo
+        )
+      }));
+
+      // Send update to server
       socket.emit("admin/dashboard/update-todo", { id: todoId, ...updates });
     }
   };
 
   const toggleTodo = (todoId: string, completed: boolean) => {
     updateTodo(todoId, { completed });
+  };
+
+  const deleteTodo = (todoId: string) => {
+    if (socket) {
+      console.log(`[DELETE TODO] Attempting to delete todo: ${todoId}`);
+      const todoToDelete = dashboardData.todos?.find(todo => todo._id === todoId);
+      console.log(`[DELETE TODO] Todo to delete:`, todoToDelete);
+
+      // Optimistic update - remove from UI immediately
+      setDashboardData(prev => ({
+        ...prev,
+        todos: prev.todos?.filter(todo => todo._id !== todoId)
+      }));
+
+      // Listen for delete response
+      const handleDeleteResponse = (response: any) => {
+        console.log(`[DELETE TODO] Server response:`, response);
+        if (!response.done) {
+          // Rollback optimistic update if delete failed
+          if (todoToDelete) {
+            console.log(`[DELETE TODO] Rolling back optimistic update`);
+            setDashboardData(prev => ({
+              ...prev,
+              todos: prev.todos ? [...prev.todos, todoToDelete] : [todoToDelete]
+            }));
+          }
+          alert('Failed to delete todo: ' + response.error);
+        } else {
+          console.log(`[DELETE TODO] Successfully deleted todo`);
+        }
+        // Clean up listener
+        socket.off("admin/dashboard/delete-todo-permanently-response", handleDeleteResponse);
+      };
+
+      socket.on("admin/dashboard/delete-todo-permanently-response", handleDeleteResponse);
+      socket.emit("admin/dashboard/delete-todo-permanently", todoId);
+    }
+  };
+
+  const handleTodoFilterChange = (filter: string) => {
+    console.log(`[TODO FILTER] Changing filter from ${todoFilter} to ${filter}`);
+    setTodoFilter(filter);
+    if (socket) {
+      socket.emit("admin/dashboard/get-todos", { filter });
+    }
   };
 
   const formatTime = (dateString: string) => {
@@ -1537,28 +1632,53 @@ const AdminDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        Today
+                        {todoFilter === 'today' ? 'Today' :
+                          todoFilter === 'week' ? 'This Week' :
+                          todoFilter === 'month' ? 'This Month' : 'All'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${todoFilter === 'month' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleTodoFilterChange('month');
+                            }}
                           >
                             This Month
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${todoFilter === 'week' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleTodoFilterChange('week');
+                            }}
                           >
                             This Week
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${todoFilter === 'today' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleTodoFilterChange('today');
+                            }}
                           >
                             Today
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${todoFilter === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleTodoFilterChange('all');
+                            }}
+                          >
+                            All
                           </Link>
                         </li>
                       </ul>
@@ -1576,7 +1696,7 @@ const AdminDashboard = () => {
                   {dashboardData.todos?.map((todo, index) => (
                     <div key={todo._id} className={`d-flex align-items-center todo-item border p-2 br-5 mb-2 ${todo.completed ? 'todo-strike' : ''}`}>
                       <i className="ti ti-grid-dots me-2" />
-                      <div className="form-check">
+                      <div className="form-check flex-grow-1">
                         <input
                           className="form-check-input"
                           type="checkbox"
@@ -1588,8 +1708,27 @@ const AdminDashboard = () => {
                           {todo.title}
                         </label>
                       </div>
+                      <div className="todo-actions ms-2">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-danger btn-icon"
+                          onClick={() => {
+                            if (window.confirm('Are you sure you want to delete this todo? This action cannot be undone.')) {
+                              deleteTodo(todo._id);
+                            }
+                          }}
+                          title="Delete todo"
+                        >
+                          <i className="ti ti-trash fs-12" />
+                        </button>
+                      </div>
                     </div>
                   ))}
+                  {(!dashboardData.todos || dashboardData.todos.length === 0) && (
+                    <div className="text-center py-4">
+                      <p className="text-muted">No todos found for the selected period.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2224,7 +2363,12 @@ const AdminDashboard = () => {
 
       <ProjectModals />
       <RequestModals />
-      <TodoModal />
+      <TodoModal socket={socket} onTodoAdded={() => {
+        // Refresh todo data when a new todo is added
+        if (socket) {
+          socket.emit("admin/dashboard/get-todos", { filter: todoFilter });
+        }
+      }} />
     </>
   );
 };
