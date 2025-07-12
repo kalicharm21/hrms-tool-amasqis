@@ -438,7 +438,8 @@ export const getAttendanceOverview = async (
 export const getClockInOutData = async (
   companyId,
   filter = "today",
-  year = null
+  year = null,
+  department = null
 ) => {
   try {
     const collections = getTenantCollections(companyId);
@@ -461,34 +462,51 @@ export const getClockInOutData = async (
       };
     }
 
+    // Build the aggregation pipeline
+    const pipeline = [
+      { $match: clockMatchFilter },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "employeeId",
+          foreignField: "_id",
+          as: "employee",
+        },
+      },
+      { $unwind: "$employee" },
+    ];
+
+    // Add department filter if specified
+    if (department && department !== "All Departments") {
+      pipeline.push({
+        $match: {
+          "employee.department": department,
+        },
+      });
+    }
+
+    // Add remaining pipeline stages
+    pipeline.push(
+      { $sort: { clockIn: -1 } },
+      { $limit: 10 },
+      {
+        $project: {
+          name: {
+            $concat: ["$employee.firstName", " ", "$employee.lastName"],
+          },
+          position: "$employee.position",
+          avatar: "$employee.avatar",
+          department: "$employee.department",
+          clockIn: 1,
+          clockOut: 1,
+          status: 1,
+          hoursWorked: 1,
+        },
+      }
+    );
+
     const clockData = await collections.attendance
-      .aggregate([
-        { $match: clockMatchFilter },
-        {
-          $lookup: {
-            from: "employees",
-            localField: "employeeId",
-            foreignField: "_id",
-            as: "employee",
-          },
-        },
-        { $unwind: "$employee" },
-        { $sort: { clockIn: -1 } },
-        { $limit: 10 },
-        {
-          $project: {
-            name: {
-              $concat: ["$employee.firstName", " ", "$employee.lastName"],
-            },
-            position: "$employee.position",
-            avatar: "$employee.avatar",
-            clockIn: 1,
-            clockOut: 1,
-            status: 1,
-            hoursWorked: 1,
-          },
-        },
-      ])
+      .aggregate(pipeline)
       .toArray();
 
     return {
@@ -502,13 +520,26 @@ export const getClockInOutData = async (
 };
 
 // Get sales overview data
-export const getSalesOverview = async (companyId, year = null) => {
+export const getSalesOverview = async (
+  companyId,
+  filter = "week",
+  year = null,
+  department = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    // Build date range for the specific year or default to last 12 months
+    // Get date filter for sales data
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+
+    // Build date range for the specific filter/year or default to last 12 months
     let dateRange;
-    if (year) {
+    if (dateFilter) {
+      dateRange = dateFilter;
+    } else if (yearFilter) {
+      dateRange = yearFilter;
+    } else if (year) {
       dateRange = {
         $gte: new Date(year, 0, 1),
         $lte: new Date(year, 11, 31),
@@ -520,26 +551,53 @@ export const getSalesOverview = async (companyId, year = null) => {
       };
     }
 
-    const monthlyData = await collections.earnings
-      .aggregate([
+    // Build the aggregation pipeline
+    const pipeline = [
+      {
+        $match: {
+          date: dateRange,
+        },
+      },
+    ];
+
+    // Add department filter if specified
+    if (department && department !== "All Departments") {
+      // Lookup employee data to filter by department
+      pipeline.push(
+        {
+          $lookup: {
+            from: "employees",
+            localField: "employeeId",
+            foreignField: "_id",
+            as: "employee",
+          },
+        },
         {
           $match: {
-            date: dateRange,
+            "employee.department": department,
           },
-        },
-        {
-          $group: {
-            _id: {
-              month: { $month: "$date" },
-              year: { $year: "$date" },
-            },
-            income: { $sum: "$income" },
-            expenses: { $sum: "$expenses" },
+        }
+      );
+    }
+
+    // Add grouping and sorting
+    pipeline.push(
+      {
+        $group: {
+          _id: {
+            month: { $month: "$date" },
+            year: { $year: "$date" },
           },
+          income: { $sum: "$income" },
+          expenses: { $sum: "$expenses" },
         },
-        { $sort: { "_id.year": 1, "_id.month": 1 } },
-        { $limit: 12 },
-      ])
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+      { $limit: 12 }
+    );
+
+    const monthlyData = await collections.earnings
+      .aggregate(pipeline)
       .toArray();
 
     // Fill missing months with 0
@@ -566,7 +624,8 @@ export const getSalesOverview = async (companyId, year = null) => {
 export const getRecentInvoices = async (
   companyId,
   filter = "week",
-  year = null
+  year = null,
+  invoiceType = "all"
 ) => {
   try {
     const collections = getTenantCollections(companyId);
@@ -580,6 +639,15 @@ export const getRecentInvoices = async (
       invoiceMatchFilter.createdAt = dateFilter;
     } else if (yearFilter) {
       invoiceMatchFilter.createdAt = yearFilter;
+    }
+
+    // Add invoice type filter
+    if (invoiceType && invoiceType !== "all") {
+      if (invoiceType === "paid") {
+        invoiceMatchFilter.status = { $regex: /^paid$/i };
+      } else if (invoiceType === "unpaid") {
+        invoiceMatchFilter.status = { $regex: /^unpaid$/i };
+      }
     }
 
     const invoices = await collections.invoices

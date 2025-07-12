@@ -131,10 +131,12 @@ const adminController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const filter = data?.filter || "today";
       const year = data?.year || new Date().getFullYear();
+      const department = data?.department || null;
       const result = await adminService.getClockInOutData(
         companyId,
         filter,
-        year
+        year,
+        department
       );
       socket.emit("admin/dashboard/get-clock-inout-data-response", result);
     } catch (error) {
@@ -146,10 +148,18 @@ const adminController = (socket, io) => {
   });
 
   // Get sales overview
-  socket.on("admin/dashboard/get-sales-overview", async () => {
+  socket.on("admin/dashboard/get-sales-overview", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getSalesOverview(companyId);
+      const filter = data?.filter || "week";
+      const year = data?.year || new Date().getFullYear();
+      const department = data?.department || null;
+      const result = await adminService.getSalesOverview(
+        companyId,
+        filter,
+        year,
+        department
+      );
       socket.emit("admin/dashboard/get-sales-overview-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-sales-overview-response", {
@@ -165,10 +175,12 @@ const adminController = (socket, io) => {
       const companyId = validateCompanyAccess(socket);
       const filter = data?.filter || "week";
       const year = data?.year || new Date().getFullYear();
+      const invoiceType = data?.invoiceType || "all";
       const result = await adminService.getRecentInvoices(
         companyId,
         filter,
-        year
+        year,
+        invoiceType
       );
       socket.emit("admin/dashboard/get-recent-invoices-response", result);
     } catch (error) {
@@ -340,9 +352,9 @@ const adminController = (socket, io) => {
         adminService.getEmployeesByDepartment(companyId, year),
         adminService.getEmployeeStatus(companyId, "week", year),
         adminService.getAttendanceOverview(companyId, "today", year),
-        adminService.getClockInOutData(companyId, "today", year),
-        adminService.getSalesOverview(companyId, year),
-        adminService.getRecentInvoices(companyId, "week", year),
+        adminService.getClockInOutData(companyId, "today", year, null),
+        adminService.getSalesOverview(companyId, "week", year, null),
+        adminService.getRecentInvoices(companyId, "week", year, "all"),
         adminService.getEmployeesList(companyId, year),
         adminService.getJobApplicants(companyId, year),
         adminService.getRecentActivities(companyId, year),

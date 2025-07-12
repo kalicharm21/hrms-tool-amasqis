@@ -171,8 +171,17 @@ const AdminDashboard = () => {
     clockInOut: 'today',
     invoices: 'week',
     projects: 'week',
-    taskStatistics: 'week'
+    taskStatistics: 'week',
+    salesOverview: 'week'
   });
+
+  // Additional filter states for departments and invoice types
+  const [departmentFilters, setDepartmentFilters] = useState({
+    clockInOut: 'All Departments',
+    salesOverview: 'All Departments'
+  });
+
+  const [invoiceFilter, setInvoiceFilter] = useState('all');
 
   const handleYearChange = (newDate: Date) => {
     console.log(`[YEAR FILTER] Year changed to: ${newDate.getFullYear()}`);
@@ -363,6 +372,16 @@ const AdminDashboard = () => {
             setDashboardData(prev => ({
               ...prev,
               taskStatistics: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-sales-overview-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              salesOverview: response.data
             }));
           }
         });
@@ -712,7 +731,55 @@ const AdminDashboard = () => {
         case 'taskStatistics':
           socket.emit("admin/dashboard/get-task-statistics", eventData);
           break;
+        case 'salesOverview':
+          socket.emit("admin/dashboard/get-sales-overview", eventData);
+          break;
       }
+    }
+  };
+
+  // Handle department filter changes
+  const handleDepartmentFilterChange = (cardType: string, department: string) => {
+    console.log(`[DEPARTMENT FILTER] ${cardType}: ${department}`);
+    setDepartmentFilters(prev => ({
+      ...prev,
+      [cardType]: department
+    }));
+
+    // Emit socket event for the specific card with current filters
+    if (socket) {
+      const year = date.getFullYear();
+      const eventData = { 
+        filter: cardType === 'clockInOut' ? filters.clockInOut : filters.salesOverview,
+        department: department === 'All Departments' ? null : department,
+        year 
+      };
+
+      switch(cardType) {
+        case 'clockInOut':
+          socket.emit("admin/dashboard/get-clock-inout-data", eventData);
+          break;
+        case 'salesOverview':
+          socket.emit("admin/dashboard/get-sales-overview", eventData);
+          break;
+      }
+    }
+  };
+
+  // Handle invoice filter changes
+  const handleInvoiceFilterChange = (filter: string) => {
+    console.log(`[INVOICE FILTER] ${filter}`);
+    setInvoiceFilter(filter);
+
+    // Emit socket event for invoices with current time filter
+    if (socket) {
+      const year = date.getFullYear();
+      const eventData = { 
+        filter: filters.invoices,
+        invoiceType: filter,
+        year 
+      };
+      socket.emit("admin/dashboard/get-recent-invoices", eventData);
     }
   };
 
@@ -754,6 +821,22 @@ const AdminDashboard = () => {
     return filterTodosByCurrentFilter(dashboardData.todos || []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardData.todos, todoFilter, filterTodosByCurrentFilter]);
+
+  // Filter invoices based on the selected filter
+  const filteredInvoices = useMemo(() => {
+    if (!dashboardData.recentInvoices || invoiceFilter === 'all') {
+      return dashboardData.recentInvoices || [];
+    }
+    
+    return dashboardData.recentInvoices.filter(invoice => {
+      if (invoiceFilter === 'paid') {
+        return invoice.status?.toLowerCase() === 'paid';
+      } else if (invoiceFilter === 'unpaid') {
+        return invoice.status?.toLowerCase() === 'unpaid';
+      }
+      return true;
+    });
+  }, [dashboardData.recentInvoices, invoiceFilter]);
 
   // Format growth percentage display
   const formatGrowthPercentage = (value: number | undefined) => {
@@ -1527,30 +1610,33 @@ const AdminDashboard = () => {
                         className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center border-0 fs-13 me-2"
                         data-bs-toggle="dropdown"
                       >
-                        All Departments
+                        {departmentFilters.clockInOut}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${departmentFilters.clockInOut === 'All Departments' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDepartmentFilterChange('clockInOut', 'All Departments');
+                            }}
                           >
-                            Finance
+                            All Departments
                           </Link>
                         </li>
-                        <li>
-                          <Link to="#"
-                            className="dropdown-item rounded-1"
-                          >
-                            Development
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#"
-                            className="dropdown-item rounded-1"
-                          >
-                            Marketing
-                          </Link>
-                        </li>
+                        {dashboardData.employeesByDepartment?.map((dept) => (
+                          <li key={dept.department}>
+                            <Link to="#"
+                              className={`dropdown-item rounded-1 ${departmentFilters.clockInOut === dept.department ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleDepartmentFilterChange('clockInOut', dept.department);
+                              }}
+                            >
+                              {dept.department}
+                            </Link>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                     <div className="dropdown mb-2">
@@ -1969,28 +2055,89 @@ const AdminDashboard = () => {
                         className="dropdown-toggle btn btn-white border-0 btn-sm d-inline-flex align-items-center fs-13 me-2"
                         data-bs-toggle="dropdown"
                       >
-                        All Departments
+                        {departmentFilters.salesOverview}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${departmentFilters.salesOverview === 'All Departments' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDepartmentFilterChange('salesOverview', 'All Departments');
+                            }}
                           >
-                            UI/UX Designer
+                            All Departments
+                          </Link>
+                        </li>
+                        {dashboardData.employeesByDepartment?.map((dept) => (
+                          <li key={dept.department}>
+                            <Link to="#"
+                              className={`dropdown-item rounded-1 ${departmentFilters.salesOverview === dept.department ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleDepartmentFilterChange('salesOverview', dept.department);
+                              }}
+                            >
+                              {dept.department}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="dropdown mb-2">
+                      <Link
+                        to="#"
+                        className="btn btn-white border btn-sm d-inline-flex align-items-center"
+                        data-bs-toggle="dropdown"
+                      >
+                        <i className="ti ti-calendar me-1" />
+                        {filters.salesOverview === 'today' ? 'Today' :
+                         filters.salesOverview === 'week' ? 'This Week' :
+                         filters.salesOverview === 'month' ? 'This Month' : 'All'}
+                      </Link>
+                      <ul className="dropdown-menu  dropdown-menu-end p-3">
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${filters.salesOverview === 'month' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('salesOverview', 'month');
+                            }}
+                          >
+                            This Month
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.salesOverview === 'week' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('salesOverview', 'week');
+                            }}
                           >
-                            HR Manager
+                            This Week
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.salesOverview === 'today' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('salesOverview', 'today');
+                            }}
                           >
-                            Junior Tester
+                            Today
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${filters.salesOverview === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('salesOverview', 'all');
+                            }}
+                          >
+                            All
                           </Link>
                         </li>
                       </ul>
@@ -2035,26 +2182,40 @@ const AdminDashboard = () => {
                         className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center fs-13 me-2 border-0"
                         data-bs-toggle="dropdown"
                       >
-                        Invoices
+                        {invoiceFilter === 'all' ? 'All Invoices' : 
+                         invoiceFilter === 'paid' ? 'Paid' : 
+                         invoiceFilter === 'unpaid' ? 'Unpaid' : 'All Invoices'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${invoiceFilter === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleInvoiceFilterChange('all');
+                            }}
                           >
-                            Invoices
+                            All Invoices
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${invoiceFilter === 'paid' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleInvoiceFilterChange('paid');
+                            }}
                           >
                             Paid
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${invoiceFilter === 'unpaid' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleInvoiceFilterChange('unpaid');
+                            }}
                           >
                             Unpaid
                           </Link>
@@ -2125,43 +2286,51 @@ const AdminDashboard = () => {
                   <div className="table-responsive pt-1">
                     <table className="table table-nowrap table-borderless mb-0">
                       <tbody>
-                        {dashboardData.recentInvoices?.slice(0, 5).map((invoice, index) => (
-                          <tr key={invoice._id}>
-                            <td className="px-0">
-                              <div className="d-flex align-items-center">
-                                <Link to="/invoice-details" className="avatar">
-                                  <ImageWithBasePath
-                                    src={invoice.clientLogo}
-                                    className="img-fluid rounded-circle"
-                                    alt="img"
-                                  />
-                                </Link>
-                                <div className="ms-2">
-                                  <h6 className="fw-medium">
-                                    <Link to="/invoice-details">
-                                      {invoice.title}
-                                    </Link>
-                                  </h6>
-                                  <span className="fs-13 d-inline-flex align-items-center">
-                                    {invoice.invoiceNumber}
-                                    <i className="ti ti-circle-filled fs-4 mx-1 text-primary" />
-                                    {invoice.clientName}
-                                  </span>
+                        {filteredInvoices.length > 0 ? (
+                          filteredInvoices.slice(0, 5).map((invoice, index) => (
+                            <tr key={invoice._id}>
+                              <td className="px-0">
+                                <div className="d-flex align-items-center">
+                                  <Link to="/invoice-details" className="avatar">
+                                    <ImageWithBasePath
+                                      src={invoice.clientLogo}
+                                      className="img-fluid rounded-circle"
+                                      alt="img"
+                                    />
+                                  </Link>
+                                  <div className="ms-2">
+                                    <h6 className="fw-medium">
+                                      <Link to="/invoice-details">
+                                        {invoice.title}
+                                      </Link>
+                                    </h6>
+                                    <span className="fs-13 d-inline-flex align-items-center">
+                                      {invoice.invoiceNumber}
+                                      <i className="ti ti-circle-filled fs-4 mx-1 text-primary" />
+                                      {invoice.clientName}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td>
-                              <p className="fs-13 mb-1">Payment</p>
-                              <h6 className="fw-medium">${invoice.amount}</h6>
-                            </td>
-                            <td className="px-0 text-end">
-                              <span className={`badge ${invoice.status === 'Paid' ? 'badge-success-transparent' : 'badge-danger-transparent'} badge-xs d-inline-flex align-items-center`}>
-                                <i className="ti ti-circle-filled fs-5 me-1" />
-                                {invoice.status}
-                              </span>
+                              </td>
+                              <td>
+                                <p className="fs-13 mb-1">Payment</p>
+                                <h6 className="fw-medium">${invoice.amount}</h6>
+                              </td>
+                              <td className="px-0 text-end">
+                                <span className={`badge ${invoice.status === 'Paid' ? 'badge-success-transparent' : 'badge-danger-transparent'} badge-xs d-inline-flex align-items-center`}>
+                                  <i className="ti ti-circle-filled fs-5 me-1" />
+                                  {invoice.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="text-center py-4">
+                              <p className="text-muted">No invoices found for the selected filter.</p>
                             </td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
