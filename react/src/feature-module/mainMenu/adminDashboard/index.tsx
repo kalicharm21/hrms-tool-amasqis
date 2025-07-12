@@ -78,6 +78,7 @@ interface DashboardData {
   salesOverview?: {
     income: number[];
     expenses: number[];
+    lastUpdated: string;
   };
   recentInvoices?: Array<{
     _id: string;
@@ -749,10 +750,10 @@ const AdminDashboard = () => {
     // Emit socket event for the specific card with current filters
     if (socket) {
       const year = date.getFullYear();
-      const eventData = { 
+      const eventData = {
         filter: cardType === 'clockInOut' ? filters.clockInOut : filters.salesOverview,
         department: department === 'All Departments' ? null : department,
-        year 
+        year
       };
 
       switch(cardType) {
@@ -774,10 +775,10 @@ const AdminDashboard = () => {
     // Emit socket event for invoices with current time filter
     if (socket) {
       const year = date.getFullYear();
-      const eventData = { 
+      const eventData = {
         filter: filters.invoices,
         invoiceType: filter,
-        year 
+        year
       };
       socket.emit("admin/dashboard/get-recent-invoices", eventData);
     }
@@ -798,6 +799,32 @@ const AdminDashboard = () => {
       month: '2-digit',
       year: 'numeric'
     });
+  };
+
+  const formatLastUpdated = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) {
+      return 'Just now';
+    } else if (diffMins < 60) {
+      return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    } else if (diffMins < 1440) {
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } else {
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
   };
 
   // Calculate employee status percentages
@@ -827,7 +854,7 @@ const AdminDashboard = () => {
     if (!dashboardData.recentInvoices || invoiceFilter === 'all') {
       return dashboardData.recentInvoices || [];
     }
-    
+
     return dashboardData.recentInvoices.filter(invoice => {
       if (invoiceFilter === 'paid') {
         return invoice.status?.toLowerCase() === 'paid';
@@ -2156,7 +2183,9 @@ const AdminDashboard = () => {
                         Expenses
                       </p>
                     </div>
-                    <p className="fs-13 mb-1">Last Updated at 11:30PM</p>
+                    <p className="fs-13 mb-1">
+                      Last Updated {formatLastUpdated(dashboardData.salesOverview?.lastUpdated || '')}
+                    </p>
                   </div>
                   <ReactApexChart
                     id="sales-income"
@@ -2182,8 +2211,8 @@ const AdminDashboard = () => {
                         className="dropdown-toggle btn btn-white btn-sm d-inline-flex align-items-center fs-13 me-2 border-0"
                         data-bs-toggle="dropdown"
                       >
-                        {invoiceFilter === 'all' ? 'All Invoices' : 
-                         invoiceFilter === 'paid' ? 'Paid' : 
+                        {invoiceFilter === 'all' ? 'All Invoices' :
+                         invoiceFilter === 'paid' ? 'Paid' :
                          invoiceFilter === 'unpaid' ? 'Unpaid' : 'All Invoices'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">

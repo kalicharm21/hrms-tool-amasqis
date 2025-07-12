@@ -612,7 +612,11 @@ export const getSalesOverview = async (
 
     return {
       done: true,
-      data: { income, expenses },
+      data: {
+        income,
+        expenses,
+        lastUpdated: new Date(),
+      },
     };
   } catch (error) {
     console.error("Error fetching sales overview:", error);
