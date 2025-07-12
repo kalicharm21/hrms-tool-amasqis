@@ -6,6 +6,7 @@ import CommonTextEditor from "../common/textEditor";
 import CommonTagsInput from "../common/Taginput";
 import { useAuth } from "@clerk/clerk-react";
 import io from "socket.io-client";
+import { toast, ToastContainer } from "react-toastify";
 
 interface ProjectModalData {
   clients: Array<{ value: string; label: string; email: string; company: string }>;
@@ -48,6 +49,9 @@ const ProjectModals = () => {
     statuses: [],
     projectId: "PRO-0001",
   });
+  const [logo, setLogo] = useState<string | null>(null);
+  const [imageUpload, setImageUpload] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<ProjectFormData>({
     name: "",
     clientId: "",
@@ -66,6 +70,91 @@ const ProjectModals = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Cloudinary image upload function
+  const uploadImage = async (file: File) => {
+    setLogo(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "amasqis");
+
+    const res = await fetch(
+      "https://api.cloudinary.com/v1_1/dwc3b5zfe/image/upload",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await res.json();
+    console.log(data);
+    return data.secure_url;
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const maxSize = 4 * 1024 * 1024; // 4MB
+    if (file.size > maxSize) {
+      toast.error("File size must be less than 4MB.", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      event.target.value = "";
+      return;
+    }
+
+    if (
+      file &&
+      ["image/jpeg", "image/png", "image/jpg", "image/ico"].includes(file.type)
+    ) {
+      setImageUpload(true);
+      try {
+        const uploadedUrl = await uploadImage(file);
+        setLogo(uploadedUrl);
+        console.log(uploadedUrl);
+        setImageUpload(false);
+      } catch (error) {
+        setImageUpload(false);
+        toast.error("Failed to upload image. Please try again.", {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: true,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        event.target.value = "";
+      }
+    } else {
+      toast.error("Please upload image file only.", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      event.target.value = "";
+    }
+  };
+
+  // Remove uploaded logo
+  const removeLogo = () => {
+    setLogo(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   // Initialize socket connection
   useEffect(() => {
@@ -112,6 +201,8 @@ const ProjectModals = () => {
               tags: [],
             });
             setCurrentStep(1);
+            setLogo(null);
+            removeLogo();
             // Close modal
             const modal = document.getElementById('add_project') as any;
             if (modal) {
@@ -121,7 +212,14 @@ const ProjectModals = () => {
                 modalInstance.hide();
               }
             }
-            alert("Project created successfully!");
+            toast.success("Project created successfully!", {
+              position: "top-right",
+              autoClose: 3000,
+              hideProgressBar: true,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+            });
           } else {
             setError(response.error || "Failed to create project");
           }
@@ -169,13 +267,8 @@ const ProjectModals = () => {
   // Handle next step
   const handleNext = () => {
     if (currentStep === 1) {
-      // Validate basic information
       if (!formData.name.trim()) {
         setError("Project name is required");
-        return;
-      }
-      if (!formData.clientId) {
-        setError("Client selection is required");
         return;
       }
       if (!formData.startDate) {
@@ -235,6 +328,7 @@ const ProjectModals = () => {
         return emp ? emp.value : manager;
       }),
       projectValue: parseFloat(formData.projectValue.replace('$', '')) || 0,
+      logo: logo,
     };
 
     socket.emit("admin/project/add", projectData);
@@ -262,6 +356,8 @@ const ProjectModals = () => {
       const handleModalHide = () => {
         setCurrentStep(1);
         setError(null);
+        setLogo(null);
+        removeLogo();
         setFormData({
           name: "",
           clientId: "",
@@ -349,7 +445,29 @@ const ProjectModals = () => {
                         <div className="col-md-12">
                           <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
                             <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                              <i className="ti ti-photo text-gray-2 fs-16" />
+                              {logo ? (
+                                <img
+                                  src={logo}
+                                  alt="Uploaded Logo"
+                                  className="rounded-circle"
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : imageUpload ? (
+                                <div
+                                  className="spinner-border text-primary"
+                                  role="status"
+                                >
+                                  <span className="visually-hidden">
+                                    Uploading...
+                                  </span>
+                                </div>
+                              ) : (
+                                <i className="ti ti-photo text-gray-2 fs-16" />
+                              )}
                             </div>
                             <div className="profile-upload">
                               <div className="mb-2">
@@ -358,23 +476,28 @@ const ProjectModals = () => {
                               </div>
                               <div className="profile-uploader d-flex align-items-center">
                                 <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                                  Upload
+                                  {logo ? "Change" : "Upload"}
                                   <input
                                     type="file"
                                     className="form-control image-sign"
-                                    accept="image/*"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        // Handle file upload logic here
-                                        console.log("File selected:", file);
-                                      }
-                                    }}
+                                    accept=".png,.jpeg,.jpg,.ico"
+                                    ref={fileInputRef}
+                                    onChange={handleImageUpload}
                                   />
                                 </div>
-                                <Link to="#" className="btn btn-light btn-sm">
-                                  Cancel
-                                </Link>
+                                {logo ? (
+                                  <Link
+                                    to="#"
+                                    onClick={removeLogo}
+                                    className="btn btn-light btn-sm"
+                                  >
+                                    Remove
+                                  </Link>
+                                ) : (
+                                  <Link to="#" className="btn btn-light btn-sm">
+                                    Cancel
+                                  </Link>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -393,7 +516,7 @@ const ProjectModals = () => {
                         </div>
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label">Client <span className="text-danger">*</span></label>
+                            <label className="form-label">Client</label>
                             <CommonSelect
                               className="select"
                               options={getSelectOptions(modalData.clients)}
@@ -632,6 +755,7 @@ const ProjectModals = () => {
         </div>
       </div>
       {/* /Add Project */}
+      <ToastContainer />
     </>
   );
 };
