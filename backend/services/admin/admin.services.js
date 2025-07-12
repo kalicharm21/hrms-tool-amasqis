@@ -8,10 +8,69 @@ import {
 } from "date-fns";
 import { ObjectId } from "mongodb";
 
+// Helper function to get date filter based on filter type
+const getDateFilter = (filter) => {
+  const now = new Date();
+  let dateFilter = {};
+
+  switch (filter) {
+    case "today":
+      const startOfToday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
+      const endOfToday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1
+      );
+      dateFilter = { $gte: startOfToday, $lt: endOfToday };
+      break;
+    case "week":
+      const weekStart = startOfWeek(now);
+      const weekEnd = endOfWeek(now);
+      dateFilter = { $gte: weekStart, $lte: weekEnd };
+      break;
+    case "month":
+      const monthStart = startOfMonth(now);
+      const monthEnd = endOfMonth(now);
+      dateFilter = { $gte: monthStart, $lte: monthEnd };
+      break;
+    default:
+      // No date filter for 'all'
+      return null;
+  }
+
+  return dateFilter;
+};
+
+// Helper function to get year filter
+const getYearFilter = (year) => {
+  if (!year) return null;
+
+  const startOfYear = new Date(year, 0, 1);
+  const endOfYear = new Date(year + 1, 0, 1);
+
+  return { $gte: startOfYear, $lt: endOfYear };
+};
+
 // Get dashboard statistics
-export const getDashboardStats = async (companyId) => {
+export const getDashboardStats = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
+    const yearFilter = getYearFilter(year);
+
+    const buildMatchCondition = (baseCondition = {}) => {
+      if (yearFilter) {
+        const dateFieldName = baseCondition.createdAt ? "createdAt" : "date";
+        return {
+          ...baseCondition,
+          [dateFieldName]: yearFilter,
+        };
+      }
+      return baseCondition;
+    };
 
     const [
       attendanceStats,
@@ -26,13 +85,13 @@ export const getDashboardStats = async (companyId) => {
         .aggregate([
           {
             $facet: {
-              total: [{ $count: "count" }],
+              total: [{ $match: buildMatchCondition() }, { $count: "count" }],
               present: [
                 {
-                  $match: {
+                  $match: buildMatchCondition({
                     status: "Present",
                     date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-                  },
+                  }),
                 },
                 { $count: "count" },
               ],
@@ -46,9 +105,9 @@ export const getDashboardStats = async (companyId) => {
         .aggregate([
           {
             $facet: {
-              total: [{ $count: "count" }],
+              total: [{ $match: buildMatchCondition() }, { $count: "count" }],
               completed: [
-                { $match: { status: "Completed" } },
+                { $match: buildMatchCondition({ status: "Completed" }) },
                 { $count: "count" },
               ],
             },
@@ -57,16 +116,18 @@ export const getDashboardStats = async (companyId) => {
         .toArray(),
 
       // Client stats
-      collections.clients.countDocuments({ status: "Active" }),
+      collections.clients.countDocuments(
+        buildMatchCondition({ status: "Active" })
+      ),
 
       // Task stats
       collections.tasks
         .aggregate([
           {
             $facet: {
-              total: [{ $count: "count" }],
+              total: [{ $match: buildMatchCondition() }, { $count: "count" }],
               completed: [
-                { $match: { status: "Completed" } },
+                { $match: buildMatchCondition({ status: "Completed" }) },
                 { $count: "count" },
               ],
             },
@@ -77,6 +138,7 @@ export const getDashboardStats = async (companyId) => {
       // Earnings stats
       collections.earnings
         .aggregate([
+          { $match: buildMatchCondition() },
           {
             $group: {
               _id: null,
@@ -98,10 +160,14 @@ export const getDashboardStats = async (companyId) => {
         .toArray(),
 
       // Employee stats
-      collections.employees.countDocuments({ status: "Active" }),
+      collections.employees.countDocuments(
+        buildMatchCondition({ status: "Active" })
+      ),
 
       // Job applications
-      collections.jobApplications.countDocuments({ status: "Active" }),
+      collections.jobApplications.countDocuments(
+        buildMatchCondition({ status: "Active" })
+      ),
     ]);
 
     const attendance = attendanceStats[0];
@@ -152,13 +218,20 @@ export const getDashboardStats = async (companyId) => {
 };
 
 // Get employees by department
-export const getEmployeesByDepartment = async (companyId) => {
+export const getEmployeesByDepartment = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Build match condition with year filter
+    const matchCondition = { status: "Active" };
+    const yearFilter = getYearFilter(year);
+    if (yearFilter) {
+      matchCondition.createdAt = yearFilter;
+    }
+
     const departmentData = await collections.employees
       .aggregate([
-        { $match: { status: "Active" } },
+        { $match: matchCondition },
         {
           $group: {
             _id: "$department",
@@ -185,13 +258,29 @@ export const getEmployeesByDepartment = async (companyId) => {
 };
 
 // Get employee status distribution
-export const getEmployeeStatus = async (companyId) => {
+export const getEmployeeStatus = async (
+  companyId,
+  filter = "all",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
+
+    // Get date filter for employee creation
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+    const employeeMatchFilter = { status: "Active" };
+
+    if (dateFilter) {
+      employeeMatchFilter.createdAt = dateFilter;
+    } else if (yearFilter) {
+      employeeMatchFilter.createdAt = yearFilter;
+    }
 
     const [statusData, topPerformer] = await Promise.all([
       collections.employees
         .aggregate([
+          { $match: employeeMatchFilter },
           {
             $group: {
               _id: "$employmentType",
@@ -207,9 +296,9 @@ export const getEmployeeStatus = async (companyId) => {
       ),
     ]);
 
-    const totalEmployees = await collections.employees.countDocuments({
-      status: "Active",
-    });
+    const totalEmployees = await collections.employees.countDocuments(
+      employeeMatchFilter
+    );
 
     const statusDistribution = statusData.reduce((acc, curr) => {
       acc[curr._id || "Other"] = curr.count;
@@ -239,21 +328,35 @@ export const getEmployeeStatus = async (companyId) => {
 };
 
 // Get attendance overview
-export const getAttendanceOverview = async (companyId) => {
+export const getAttendanceOverview = async (
+  companyId,
+  filter = "today",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    const today = new Date();
+    // Get date filter for attendance
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+    let attendanceMatchFilter = {};
+
+    if (dateFilter) {
+      attendanceMatchFilter.date = dateFilter;
+    } else if (yearFilter) {
+      attendanceMatchFilter.date = yearFilter;
+    } else {
+      // Default to today if no filter or 'all' is passed
+      const today = new Date();
+      attendanceMatchFilter.date = {
+        $gte: new Date(today.setHours(0, 0, 0, 0)),
+        $lt: new Date(today.setHours(23, 59, 59, 999)),
+      };
+    }
+
     const attendanceData = await collections.attendance
       .aggregate([
-        {
-          $match: {
-            date: {
-              $gte: new Date(today.setHours(0, 0, 0, 0)),
-              $lt: new Date(today.setHours(23, 59, 59, 999)),
-            },
-          },
-        },
+        { $match: attendanceMatchFilter },
         {
           $group: {
             _id: "$status",
@@ -273,7 +376,7 @@ export const getAttendanceOverview = async (companyId) => {
       0
     );
 
-    // Get absentees
+    // Get absentees - use the same date filter
     const absentees = await collections.employees
       .aggregate([
         {
@@ -286,18 +389,20 @@ export const getAttendanceOverview = async (companyId) => {
                   $expr: {
                     $and: [
                       { $eq: ["$employeeId", "$$empId"] },
-                      { $gte: ["$date", new Date(today.setHours(0, 0, 0, 0))] },
+                      dateFilter
+                        ? { $gte: ["$date", dateFilter.$gte] }
+                        : { $gte: ["$date", attendanceMatchFilter.date.$gte] },
                     ],
                   },
                 },
               },
             ],
-            as: "todayAttendance",
+            as: "attendanceInPeriod",
           },
         },
         {
           $match: {
-            todayAttendance: { $size: 0 },
+            attendanceInPeriod: { $size: 0 },
             status: "Active",
           },
         },
@@ -330,21 +435,35 @@ export const getAttendanceOverview = async (companyId) => {
 };
 
 // Get clock in/out data
-export const getClockInOutData = async (companyId) => {
+export const getClockInOutData = async (
+  companyId,
+  filter = "today",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    const today = new Date();
+    // Get date filter for clock in/out data
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+    let clockMatchFilter = {};
+
+    if (dateFilter) {
+      clockMatchFilter.date = dateFilter;
+    } else if (yearFilter) {
+      clockMatchFilter.date = yearFilter;
+    } else {
+      // Default to today if no filter or 'all' is passed
+      const today = new Date();
+      clockMatchFilter.date = {
+        $gte: new Date(today.setHours(0, 0, 0, 0)),
+        $lt: new Date(today.setHours(23, 59, 59, 999)),
+      };
+    }
+
     const clockData = await collections.attendance
       .aggregate([
-        {
-          $match: {
-            date: {
-              $gte: new Date(today.setHours(0, 0, 0, 0)),
-              $lt: new Date(today.setHours(23, 59, 59, 999)),
-            },
-          },
-        },
+        { $match: clockMatchFilter },
         {
           $lookup: {
             from: "employees",
@@ -383,18 +502,29 @@ export const getClockInOutData = async (companyId) => {
 };
 
 // Get sales overview data
-export const getSalesOverview = async (companyId) => {
+export const getSalesOverview = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
+
+    // Build date range for the specific year or default to last 12 months
+    let dateRange;
+    if (year) {
+      dateRange = {
+        $gte: new Date(year, 0, 1),
+        $lte: new Date(year, 11, 31),
+      };
+    } else {
+      dateRange = {
+        $gte: startOfMonth(subDays(new Date(), 365)),
+        $lte: endOfMonth(new Date()),
+      };
+    }
 
     const monthlyData = await collections.earnings
       .aggregate([
         {
           $match: {
-            date: {
-              $gte: startOfMonth(subDays(new Date(), 365)),
-              $lte: endOfMonth(new Date()),
-            },
+            date: dateRange,
           },
         },
         {
@@ -433,12 +563,30 @@ export const getSalesOverview = async (companyId) => {
 };
 
 // Get recent invoices
-export const getRecentInvoices = async (companyId) => {
+export const getRecentInvoices = async (
+  companyId,
+  filter = "week",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Get date filter for invoices
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+    let invoiceMatchFilter = {};
+
+    if (dateFilter) {
+      invoiceMatchFilter.createdAt = dateFilter;
+    } else if (yearFilter) {
+      invoiceMatchFilter.createdAt = yearFilter;
+    }
+
     const invoices = await collections.invoices
       .aggregate([
+        ...(Object.keys(invoiceMatchFilter).length > 0
+          ? [{ $match: invoiceMatchFilter }]
+          : []),
         { $sort: { createdAt: -1 } },
         { $limit: 5 },
         {
@@ -475,13 +623,20 @@ export const getRecentInvoices = async (companyId) => {
 };
 
 // Get employees list
-export const getEmployeesList = async (companyId) => {
+export const getEmployeesList = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Build match condition with year filter
+    const matchCondition = { status: "Active" };
+    const yearFilter = getYearFilter(year);
+    if (yearFilter) {
+      matchCondition.createdAt = yearFilter;
+    }
+
     const employees = await collections.employees
       .aggregate([
-        { $match: { status: "Active" } },
+        { $match: matchCondition },
         { $sort: { createdAt: -1 } },
         { $limit: 5 },
         {
@@ -506,13 +661,21 @@ export const getEmployeesList = async (companyId) => {
 };
 
 // Get job applicants
-export const getJobApplicants = async (companyId) => {
+export const getJobApplicants = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
+
+    // Build match condition with year filter
+    const matchCondition = { status: "Active" };
+    const yearFilter = getYearFilter(year);
+    if (yearFilter) {
+      matchCondition.createdAt = yearFilter;
+    }
 
     const [openings, applicants] = await Promise.all([
       collections.jobApplications
         .aggregate([
+          ...(yearFilter ? [{ $match: { createdAt: yearFilter } }] : []),
           {
             $group: {
               _id: "$position",
@@ -526,7 +689,7 @@ export const getJobApplicants = async (companyId) => {
 
       collections.jobApplications
         .aggregate([
-          { $match: { status: "Active" } },
+          { $match: matchCondition },
           { $sort: { createdAt: -1 } },
           { $limit: 4 },
           {
@@ -556,12 +719,19 @@ export const getJobApplicants = async (companyId) => {
 };
 
 // Get recent activities
-export const getRecentActivities = async (companyId) => {
+export const getRecentActivities = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Build match condition with year filter
+    const yearFilter = getYearFilter(year);
+    const matchStage = yearFilter
+      ? [{ $match: { createdAt: yearFilter } }]
+      : [];
+
     const activities = await collections.activities
       .aggregate([
+        ...matchStage,
         { $sort: { createdAt: -1 } },
         { $limit: 6 },
         {
@@ -598,7 +768,7 @@ export const getRecentActivities = async (companyId) => {
 };
 
 // Get birthdays
-export const getBirthdays = async (companyId) => {
+export const getBirthdays = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
@@ -671,7 +841,12 @@ export const getBirthdays = async (companyId) => {
 };
 
 // Get todos
-export const getTodos = async (companyId, userId, filter = "all") => {
+export const getTodos = async (
+  companyId,
+  userId,
+  filter = "all",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
@@ -734,12 +909,30 @@ export const getTodos = async (companyId, userId, filter = "all") => {
 };
 
 // Get projects data
-export const getProjectsData = async (companyId) => {
+export const getProjectsData = async (
+  companyId,
+  filter = "week",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Get date filter for projects
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+    let projectMatchFilter = {};
+
+    if (dateFilter) {
+      projectMatchFilter.createdAt = dateFilter;
+    } else if (yearFilter) {
+      projectMatchFilter.createdAt = yearFilter;
+    }
+
     const projects = await collections.projects
       .aggregate([
+        ...(Object.keys(projectMatchFilter).length > 0
+          ? [{ $match: projectMatchFilter }]
+          : []),
         { $sort: { createdAt: -1 } },
         { $limit: 7 },
         {
@@ -789,12 +982,30 @@ export const getProjectsData = async (companyId) => {
 };
 
 // Get task statistics
-export const getTaskStatistics = async (companyId) => {
+export const getTaskStatistics = async (
+  companyId,
+  filter = "week",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Get date filter for tasks
+    const dateFilter = getDateFilter(filter);
+    const yearFilter = getYearFilter(year);
+    let taskMatchFilter = {};
+
+    if (dateFilter) {
+      taskMatchFilter.createdAt = dateFilter;
+    } else if (yearFilter) {
+      taskMatchFilter.createdAt = yearFilter;
+    }
+
     const taskStats = await collections.tasks
       .aggregate([
+        ...(Object.keys(taskMatchFilter).length > 0
+          ? [{ $match: taskMatchFilter }]
+          : []),
         {
           $group: {
             _id: "$status",
@@ -808,14 +1019,18 @@ export const getTaskStatistics = async (companyId) => {
     const taskDistribution = taskStats.reduce((acc, stat) => {
       acc[stat._id] = {
         count: stat.count,
-        percentage: Math.round((stat.count / totalTasks) * 100),
+        percentage:
+          totalTasks > 0 ? Math.round((stat.count / totalTasks) * 100) : 0,
       };
       return acc;
     }, {});
 
-    // Get total hours spent
+    // Get total hours spent - also apply date filter
     const hoursData = await collections.tasks
       .aggregate([
+        ...(Object.keys(taskMatchFilter).length > 0
+          ? [{ $match: taskMatchFilter }]
+          : []),
         {
           $group: {
             _id: null,
@@ -844,7 +1059,7 @@ export const getTaskStatistics = async (companyId) => {
 };
 
 // Get schedules
-export const getSchedules = async (companyId) => {
+export const getSchedules = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
@@ -907,7 +1122,7 @@ export const getSchedules = async (companyId) => {
 };
 
 // Get pending items for the user
-export const getPendingItems = async (companyId, userId) => {
+export const getPendingItems = async (companyId, userId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
@@ -968,7 +1183,7 @@ export const getPendingItems = async (companyId, userId) => {
 };
 
 // Get employee growth data
-export const getEmployeeGrowth = async (companyId) => {
+export const getEmployeeGrowth = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 

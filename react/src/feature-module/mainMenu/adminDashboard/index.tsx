@@ -164,6 +164,26 @@ const AdminDashboard = () => {
   const [date, setDate] = useState(new Date());
   const [todoFilter, setTodoFilter] = useState('today');
 
+  // Filter states for different cards
+  const [filters, setFilters] = useState({
+    employeeStatus: 'week',
+    attendanceOverview: 'today',
+    clockInOut: 'today',
+    invoices: 'week',
+    projects: 'week',
+    taskStatistics: 'week'
+  });
+
+  const handleYearChange = (newDate: Date) => {
+    console.log(`[YEAR FILTER] Year changed to: ${newDate.getFullYear()}`);
+    setDate(newDate);
+
+    if (socket) {
+      const year = newDate.getFullYear();
+      socket.emit("admin/dashboard/get-all-data", { year });
+    }
+  };
+
   const getUserName = () => {
     if (!user) return "Admin";
     return user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || "Admin";
@@ -283,6 +303,66 @@ const AdminDashboard = () => {
               todos: prev.todos?.map(todo =>
                 todo._id === response.data._id ? response.data : todo
               )
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-employee-status-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              employeeStatus: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-attendance-overview-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              attendanceOverview: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-clock-inout-data-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              clockInOutData: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-recent-invoices-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              recentInvoices: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-projects-data-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              projectsData: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("admin/dashboard/get-task-statistics-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              taskStatistics: response.data
             }));
           }
         });
@@ -600,6 +680,42 @@ const AdminDashboard = () => {
     // Don't emit socket request here - let client-side filtering handle it
   };
 
+  // Handle filter changes for different cards
+  const handleFilterChange = (cardType: string, filter: string) => {
+    console.log(`[FILTER CHANGE] ${cardType}: ${filter}`);
+    setFilters(prev => ({
+      ...prev,
+      [cardType]: filter
+    }));
+
+    // Emit socket event for the specific card with current year
+    if (socket) {
+      const year = date.getFullYear();
+      const eventData = { filter, year };
+
+      switch(cardType) {
+        case 'employeeStatus':
+          socket.emit("admin/dashboard/get-employee-status", eventData);
+          break;
+        case 'attendanceOverview':
+          socket.emit("admin/dashboard/get-attendance-overview", eventData);
+          break;
+        case 'clockInOut':
+          socket.emit("admin/dashboard/get-clock-inout-data", eventData);
+          break;
+        case 'invoices':
+          socket.emit("admin/dashboard/get-recent-invoices", eventData);
+          break;
+        case 'projects':
+          socket.emit("admin/dashboard/get-projects-data", eventData);
+          break;
+        case 'taskStatistics':
+          socket.emit("admin/dashboard/get-task-statistics", eventData);
+          break;
+      }
+    }
+  };
+
   const formatTime = (dateString: string) => {
     if (!dateString) return '';
     return new Date(dateString).toLocaleTimeString('en-US', {
@@ -743,7 +859,7 @@ const AdminDashboard = () => {
                   <span className="input-icon-addon">
                     <i className="ti ti-calendar text-gray-9" />
                   </span>
-                  <Calendar value={date} onChange={(e: any) => setDate(e.value)} view="year" dateFormat="yy" className="Calendar-form" />
+                  <Calendar value={date} onChange={(e: any) => handleYearChange(e.value)} view="year" dateFormat="yy" className="Calendar-form" />
                 </div>
               </div>
               <div className="ms-2 head-icons">
@@ -1076,28 +1192,53 @@ const AdminDashboard = () => {
                       data-bs-toggle="dropdown"
                     >
                       <i className="ti ti-calendar me-1" />
-                      This Week
+                      {filters.employeeStatus === 'today' ? 'Today' :
+                        filters.employeeStatus === 'week' ? 'This Week' :
+                        filters.employeeStatus === 'month' ? 'This Month' : 'All'}
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeeStatus === 'month' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeeStatus', 'month');
+                          }}
                         >
                           This Month
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeeStatus === 'week' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeeStatus', 'week');
+                          }}
                         >
                           This Week
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeeStatus === 'today' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeeStatus', 'today');
+                          }}
                         >
                           Today
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="#"
+                          className={`dropdown-item rounded-1 ${filters.employeeStatus === 'all' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeeStatus', 'all');
+                          }}
+                        >
+                          All
                         </Link>
                       </li>
                     </ul>
@@ -1243,28 +1384,53 @@ const AdminDashboard = () => {
                       data-bs-toggle="dropdown"
                     >
                       <i className="ti ti-calendar me-1" />
-                      Today
+                      {filters.attendanceOverview === 'today' ? 'Today' :
+                        filters.attendanceOverview === 'week' ? 'This Week' :
+                        filters.attendanceOverview === 'month' ? 'This Month' : 'All'}
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'month' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('attendanceOverview', 'month');
+                          }}
                         >
                           This Month
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'week' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('attendanceOverview', 'week');
+                          }}
                         >
                           This Week
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'today' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('attendanceOverview', 'today');
+                          }}
                         >
                           Today
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="#"
+                          className={`dropdown-item rounded-1 ${filters.attendanceOverview === 'all' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('attendanceOverview', 'all');
+                          }}
+                        >
+                          All
                         </Link>
                       </li>
                     </ul>
@@ -1394,28 +1560,53 @@ const AdminDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        Today
+                        {filters.clockInOut === 'today' ? 'Today' :
+                          filters.clockInOut === 'week' ? 'This Week' :
+                          filters.clockInOut === 'month' ? 'This Month' : 'All'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.clockInOut === 'month' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('clockInOut', 'month');
+                            }}
                           >
                             This Month
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.clockInOut === 'week' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('clockInOut', 'week');
+                            }}
                           >
                             This Week
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.clockInOut === 'today' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('clockInOut', 'today');
+                            }}
                           >
                             Today
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${filters.clockInOut === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('clockInOut', 'all');
+                            }}
+                          >
+                            All
                           </Link>
                         </li>
                       </ul>
@@ -1877,28 +2068,53 @@ const AdminDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        This Week
+                        {filters.invoices === 'today' ? 'Today' :
+                         filters.invoices === 'week' ? 'This Week' :
+                         filters.invoices === 'month' ? 'This Month' : 'All'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.invoices === 'month' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('invoices', 'month');
+                            }}
                           >
                             This Month
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.invoices === 'week' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('invoices', 'week');
+                            }}
                           >
                             This Week
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.invoices === 'today' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('invoices', 'today');
+                            }}
                           >
                             Today
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${filters.invoices === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('invoices', 'all');
+                            }}
+                          >
+                            All
                           </Link>
                         </li>
                       </ul>
@@ -1972,28 +2188,53 @@ const AdminDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        This Week
+                        {filters.projects === 'today' ? 'Today' :
+                         filters.projects === 'week' ? 'This Week' :
+                         filters.projects === 'month' ? 'This Month' : 'All'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.projects === 'month' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('projects', 'month');
+                            }}
                           >
                             This Month
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.projects === 'week' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('projects', 'week');
+                            }}
                           >
                             This Week
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.projects === 'today' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('projects', 'today');
+                            }}
                           >
                             Today
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${filters.projects === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('projects', 'all');
+                            }}
+                          >
+                            All
                           </Link>
                         </li>
                       </ul>
@@ -2094,28 +2335,53 @@ const AdminDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        This Week
+                        {filters.taskStatistics === 'today' ? 'Today' :
+                         filters.taskStatistics === 'week' ? 'This Week' :
+                         filters.taskStatistics === 'month' ? 'This Month' : 'All'}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.taskStatistics === 'month' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('taskStatistics', 'month');
+                            }}
                           >
                             This Month
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.taskStatistics === 'week' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('taskStatistics', 'week');
+                            }}
                           >
                             This Week
                           </Link>
                         </li>
                         <li>
                           <Link to="#"
-                            className="dropdown-item rounded-1"
+                            className={`dropdown-item rounded-1 ${filters.taskStatistics === 'today' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('taskStatistics', 'today');
+                            }}
                           >
                             Today
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="#"
+                            className={`dropdown-item rounded-1 ${filters.taskStatistics === 'all' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFilterChange('taskStatistics', 'all');
+                            }}
+                          >
+                            All
                           </Link>
                         </li>
                       </ul>

@@ -86,10 +86,16 @@ const adminController = (socket, io) => {
   });
 
   // Get employee status distribution
-  socket.on("admin/dashboard/get-employee-status", async () => {
+  socket.on("admin/dashboard/get-employee-status", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getEmployeeStatus(companyId);
+      const filter = data?.filter || "all";
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getEmployeeStatus(
+        companyId,
+        filter,
+        year
+      );
       socket.emit("admin/dashboard/get-employee-status-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-employee-status-response", {
@@ -100,10 +106,16 @@ const adminController = (socket, io) => {
   });
 
   // Get attendance overview
-  socket.on("admin/dashboard/get-attendance-overview", async () => {
+  socket.on("admin/dashboard/get-attendance-overview", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getAttendanceOverview(companyId);
+      const filter = data?.filter || "today";
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getAttendanceOverview(
+        companyId,
+        filter,
+        year
+      );
       socket.emit("admin/dashboard/get-attendance-overview-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-attendance-overview-response", {
@@ -114,10 +126,16 @@ const adminController = (socket, io) => {
   });
 
   // Get clock in/out data
-  socket.on("admin/dashboard/get-clock-inout-data", async () => {
+  socket.on("admin/dashboard/get-clock-inout-data", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getClockInOutData(companyId);
+      const filter = data?.filter || "today";
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getClockInOutData(
+        companyId,
+        filter,
+        year
+      );
       socket.emit("admin/dashboard/get-clock-inout-data-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-clock-inout-data-response", {
@@ -142,10 +160,16 @@ const adminController = (socket, io) => {
   });
 
   // Get recent invoices
-  socket.on("admin/dashboard/get-recent-invoices", async () => {
+  socket.on("admin/dashboard/get-recent-invoices", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getRecentInvoices(companyId);
+      const filter = data?.filter || "week";
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getRecentInvoices(
+        companyId,
+        filter,
+        year
+      );
       socket.emit("admin/dashboard/get-recent-invoices-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-recent-invoices-response", {
@@ -228,10 +252,16 @@ const adminController = (socket, io) => {
   });
 
   // Get projects data
-  socket.on("admin/dashboard/get-projects-data", async () => {
+  socket.on("admin/dashboard/get-projects-data", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getProjectsData(companyId);
+      const filter = data?.filter || "week";
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getProjectsData(
+        companyId,
+        filter,
+        year
+      );
       socket.emit("admin/dashboard/get-projects-data-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-projects-data-response", {
@@ -242,10 +272,16 @@ const adminController = (socket, io) => {
   });
 
   // Get task statistics
-  socket.on("admin/dashboard/get-task-statistics", async () => {
+  socket.on("admin/dashboard/get-task-statistics", async (data) => {
     try {
       const companyId = validateCompanyAccess(socket);
-      const result = await adminService.getTaskStatistics(companyId);
+      const filter = data?.filter || "week";
+      const year = data?.year || new Date().getFullYear();
+      const result = await adminService.getTaskStatistics(
+        companyId,
+        filter,
+        year
+      );
       socket.emit("admin/dashboard/get-task-statistics-response", result);
     } catch (error) {
       socket.emit("admin/dashboard/get-task-statistics-response", {
@@ -270,10 +306,14 @@ const adminController = (socket, io) => {
   });
 
   // Get all dashboard data at once
-  socket.on("admin/dashboard/get-all-data", async () => {
+  socket.on("admin/dashboard/get-all-data", async (data = {}) => {
     try {
       const companyId = validateCompanyAccess(socket);
       const userId = socket.user.sub;
+
+      // Extract year from data, default to current year if not provided
+      const year = data.year || new Date().getFullYear();
+      console.log(`[ADMIN DASHBOARD] Getting all data for year: ${year}`);
 
       const [
         pendingItems,
@@ -294,23 +334,23 @@ const adminController = (socket, io) => {
         taskStatistics,
         schedules,
       ] = await Promise.all([
-        adminService.getPendingItems(companyId, userId),
-        adminService.getEmployeeGrowth(companyId),
-        adminService.getDashboardStats(companyId),
-        adminService.getEmployeesByDepartment(companyId),
-        adminService.getEmployeeStatus(companyId),
-        adminService.getAttendanceOverview(companyId),
-        adminService.getClockInOutData(companyId),
-        adminService.getSalesOverview(companyId),
-        adminService.getRecentInvoices(companyId),
-        adminService.getEmployeesList(companyId),
-        adminService.getJobApplicants(companyId),
-        adminService.getRecentActivities(companyId),
-        adminService.getBirthdays(companyId),
-        adminService.getTodos(companyId, userId, "today"),
-        adminService.getProjectsData(companyId),
-        adminService.getTaskStatistics(companyId),
-        adminService.getSchedules(companyId),
+        adminService.getPendingItems(companyId, userId, year),
+        adminService.getEmployeeGrowth(companyId, year),
+        adminService.getDashboardStats(companyId, year),
+        adminService.getEmployeesByDepartment(companyId, year),
+        adminService.getEmployeeStatus(companyId, "week", year),
+        adminService.getAttendanceOverview(companyId, "today", year),
+        adminService.getClockInOutData(companyId, "today", year),
+        adminService.getSalesOverview(companyId, year),
+        adminService.getRecentInvoices(companyId, "week", year),
+        adminService.getEmployeesList(companyId, year),
+        adminService.getJobApplicants(companyId, year),
+        adminService.getRecentActivities(companyId, year),
+        adminService.getBirthdays(companyId, year),
+        adminService.getTodos(companyId, userId, "today", year),
+        adminService.getProjectsData(companyId, "week", year),
+        adminService.getTaskStatistics(companyId, "week", year),
+        adminService.getSchedules(companyId, year),
       ]);
 
       socket.emit("admin/dashboard/get-all-data-response", {
