@@ -810,7 +810,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.attendance?.percentage)}
                         </span>
                       </h3>
-                      <Link to="attendance-employee.html" className="link-default">
+                      <Link to="/attendance-employee" className="link-default">
                         View Details
                       </Link>
                     </div>
@@ -832,7 +832,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.projects?.percentage)}
                         </span>
                       </h3>
-                      <Link to="projects.html" className="link-default">
+                      <Link to="/projects" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -854,7 +854,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.clientsGrowth)}
                         </span>
                       </h3>
-                      <Link to="clients.html" className="link-default">
+                      <Link to="/clients" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -876,7 +876,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.tasksGrowth)}
                         </span>
                       </h3>
-                      <Link to="tasks.html" className="link-default">
+                      <Link to="/tasks" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -898,7 +898,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.earningsGrowth)}
                         </span>
                       </h3>
-                      <Link to="expenses.html" className="link-default">
+                      <Link to="/expenses" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -920,7 +920,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.profitGrowth)}
                         </span>
                       </h3>
-                      <Link to="purchase-transaction.html" className="link-default">
+                      <Link to="/purchase-transaction" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -942,7 +942,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.applicationsGrowth)}
                         </span>
                       </h3>
-                      <Link to="job-list.html" className="link-default">
+                      <Link to="/job-list" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -964,7 +964,7 @@ const AdminDashboard = () => {
                           {formatGrowthPercentage(dashboardData.stats?.employeesGrowth)}
                         </span>
                       </h3>
-                      <Link to="employees.html" className="link-default">
+                      <Link to="/employees" className="link-default">
                         View All
                       </Link>
                     </div>
@@ -1172,7 +1172,7 @@ const AdminDashboard = () => {
                           <i className="ti ti-award-filled text-primary fs-24" />
                         </span>
                         <Link
-                          to="employee-details.html"
+                          to="/employee-details"
                           className="avatar avatar-md me-2"
                         >
                           <ImageWithBasePath
@@ -1183,7 +1183,7 @@ const AdminDashboard = () => {
                         </Link>
                         <div>
                           <h6 className="text-truncate mb-1 fs-14 fw-medium">
-                            <Link to="employee-details.html">{dashboardData.employeeStatus.topPerformer.name}</Link>
+                            <Link to="/employee-details">{dashboardData.employeeStatus.topPerformer.name}</Link>
                           </h6>
                           <p className="fs-13">{dashboardData.employeeStatus.topPerformer.position}</p>
                         </div>
@@ -1194,7 +1194,7 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   )}
-                  <Link to="employees.html" className="btn btn-light btn-md w-100">
+                  <Link to="/employees" className="btn btn-light btn-md w-100">
                     View All Employees
                   </Link>
                 </div>
@@ -1308,7 +1308,7 @@ const AdminDashboard = () => {
                         )}
                       </div>
                     </div>
-                    <Link to="leaves.html"
+                    <Link to="/leaves"
                       className="fs-13 link-primary text-decoration-underline mb-2"
                     >
                       View Details
@@ -1456,7 +1456,7 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   ))}
-                  <Link to="attendance-report.html" className="btn btn-light btn-md w-100">
+                  <Link to="/attendance-report" className="btn btn-light btn-md w-100">
                     View All Attendance
                   </Link>
                 </div>
@@ -1471,7 +1471,7 @@ const AdminDashboard = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Jobs Applicants</h5>
-                  <Link to="job-list.html" className="btn btn-light btn-md mb-2">
+                  <Link to="/job-list" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -1571,7 +1571,7 @@ const AdminDashboard = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Employees</h5>
-                  <Link to="employees.html" className="btn btn-light btn-md mb-2">
+                  <Link to="/employees" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -1883,7 +1883,7 @@ const AdminDashboard = () => {
                           <tr key={invoice._id}>
                             <td className="px-0">
                               <div className="d-flex align-items-center">
-                                <Link to="invoice-details.html" className="avatar">
+                                <Link to="/invoice-details" className="avatar">
                                   <ImageWithBasePath
                                     src={invoice.clientLogo}
                                     className="img-fluid rounded-circle"
@@ -1892,7 +1892,7 @@ const AdminDashboard = () => {
                                 </Link>
                                 <div className="ms-2">
                                   <h6 className="fw-medium">
-                                    <Link to="invoice-details.html">
+                                    <Link to="/invoice-details">
                                       {invoice.title}
                                     </Link>
                                   </h6>
@@ -1919,7 +1919,7 @@ const AdminDashboard = () => {
                       </tbody>
                     </table>
                   </div>
-                  <Link to="invoice.html" className="btn btn-light btn-md w-100 mt-2">
+                  <Link to="/invoice" className="btn btn-light btn-md w-100 mt-2">
                     View All
                   </Link>
                 </div>
@@ -1987,13 +1987,13 @@ const AdminDashboard = () => {
                         {dashboardData.projectsData?.slice(0, 7).map((project, index) => (
                           <tr key={project.id}>
                             <td>
-                              <Link to="project-details.html" className="link-default">
+                              <Link to="/project-details" className="link-default">
                                 PRO-{String(index + 1).padStart(3, '0')}
                               </Link>
                             </td>
                             <td>
                               <h6 className="fw-medium">
-                                <Link to="project-details.html">
+                                <Link to="/project-details">
                                   {project.name}
                                 </Link>
                               </h6>
@@ -2135,7 +2135,7 @@ const AdminDashboard = () => {
                       <h4 className="text-success">{dashboardData.taskStatistics?.hoursSpent || 0}/{dashboardData.taskStatistics?.targetHours || 0} hrs</h4>
                       <p className="fs-13 mb-0">Spent on Overall Tasks This Week</p>
                     </div>
-                    <Link to="tasks.html" className="btn btn-sm btn-light mb-2 text-nowrap">
+                    <Link to="/tasks" className="btn btn-sm btn-light mb-2 text-nowrap">
                       View All
                     </Link>
                   </div>
@@ -2151,7 +2151,7 @@ const AdminDashboard = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Schedules</h5>
-                  <Link to="candidates.html" className="btn btn-light btn-md mb-2">
+                  <Link to="/candidates" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -2210,7 +2210,7 @@ const AdminDashboard = () => {
               <div className="card flex-fill">
                 <div className="card-header pb-2 d-flex align-items-center justify-content-between flex-wrap">
                   <h5 className="mb-2">Recent Activities</h5>
-                  <Link to="activity.html" className="btn btn-light btn-md mb-2">
+                  <Link to="/activity" className="btn btn-light btn-md mb-2">
                     View All
                   </Link>
                 </div>
@@ -2362,7 +2362,12 @@ const AdminDashboard = () => {
       {/* /Page Wrapper */}
 
       <ProjectModals />
-      <RequestModals />
+      <RequestModals socket={socket} onLeaveRequestCreated={() => {
+        // Refresh dashboard data when a leave request is created
+        if (socket) {
+          socket.emit("admin/dashboard/get-all-data");
+        }
+      }} />
       <TodoModal socket={socket} onTodoAdded={() => {
         // Refresh todo data when a new todo is added
         if (socket) {

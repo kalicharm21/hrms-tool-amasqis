@@ -632,6 +632,91 @@ const adminController = (socket, io) => {
       });
     }
   });
+
+  // Get leave request employees
+  socket.on("admin/leave/get-employees", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getLeaveRequestEmployees(companyId);
+      socket.emit("admin/leave/get-employees-response", result);
+    } catch (error) {
+      socket.emit("admin/leave/get-employees-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get leave types
+  socket.on("admin/leave/get-types", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getLeaveTypes(companyId);
+      socket.emit("admin/leave/get-types-response", result);
+    } catch (error) {
+      socket.emit("admin/leave/get-types-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get employee leave balance
+  socket.on("admin/leave/get-employee-balance", async (data) => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const { employeeId } = data;
+      const result = await adminService.getEmployeeLeaveBalance(
+        companyId,
+        employeeId
+      );
+      socket.emit("admin/leave/get-employee-balance-response", result);
+    } catch (error) {
+      socket.emit("admin/leave/get-employee-balance-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Create leave request
+  socket.on("admin/leave/create-request", async (leaveData) => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const userId = socket.user.sub;
+      const result = await adminService.createLeaveRequest(
+        companyId,
+        userId,
+        leaveData
+      );
+      socket.emit("admin/leave/create-request-response", result);
+
+      // Broadcast to admin room to update leave requests
+      io.to(`admin_room_${companyId}`).emit(
+        "admin/leave/request-created",
+        result
+      );
+    } catch (error) {
+      socket.emit("admin/leave/create-request-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // Get leave request modal data (all data in one call)
+  socket.on("admin/leave/get-modal-data", async () => {
+    try {
+      const companyId = validateCompanyAccess(socket);
+      const result = await adminService.getLeaveRequestModalData(companyId);
+      socket.emit("admin/leave/get-modal-data-response", result);
+    } catch (error) {
+      socket.emit("admin/leave/get-modal-data-response", {
+        done: false,
+        error: error.message,
+      });
+    }
+  });
 };
 
 export default adminController;

@@ -6,6 +6,7 @@ import {
   startOfMonth,
   endOfMonth,
 } from "date-fns";
+import { ObjectId } from "mongodb";
 
 // Get dashboard statistics
 export const getDashboardStats = async (companyId) => {
@@ -1291,6 +1292,251 @@ export const getProjectStatuses = async () => {
     };
   } catch (error) {
     console.error("Error fetching project statuses:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get employees for leave request
+export const getLeaveRequestEmployees = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const employees = await collections.employees
+      .find(
+        {
+          status: "Active",
+        },
+        {
+          projection: {
+            _id: 1,
+            firstName: 1,
+            lastName: 1,
+            position: 1,
+            department: 1,
+            email: 1,
+            avatar: 1,
+            employeeId: 1,
+            remainingLeaves: 1,
+            totalLeaves: 1,
+          },
+        }
+      )
+      .sort({ firstName: 1 })
+      .toArray();
+
+    const employeeOptions = employees.map((emp) => ({
+      value: emp._id.toString(),
+      label: `${emp.firstName} ${emp.lastName}`,
+      position: emp.position,
+      department: emp.department,
+      email: emp.email,
+      avatar: emp.avatar,
+      employeeId: emp.employeeId,
+      remainingLeaves: emp.remainingLeaves || 0,
+      totalLeaves: emp.totalLeaves || 21,
+    }));
+
+    return {
+      done: true,
+      data: employeeOptions,
+    };
+  } catch (error) {
+    console.error("Error fetching leave request employees:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get leave types
+export const getLeaveTypes = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    // Try to get existing leave types from database
+    let leaveTypes = [];
+    try {
+      const existingTypes = await collections.leaveTypes.find({}).toArray();
+      leaveTypes = existingTypes.map((type) => ({
+        value: type._id.toString(),
+        label: type.name,
+        maxDays: type.maxDays,
+        description: type.description,
+      }));
+    } catch (error) {
+      console.log("Leave types collection not found, using default types");
+    }
+
+    // If no custom leave types found, use default ones
+    if (leaveTypes.length === 0) {
+      leaveTypes = [
+        {
+          value: "annual",
+          label: "Annual Leave",
+          maxDays: 21,
+          description: "Annual vacation leave",
+        },
+        {
+          value: "medical",
+          label: "Medical Leave",
+          maxDays: 30,
+          description: "Medical/sick leave",
+        },
+        {
+          value: "casual",
+          label: "Casual Leave",
+          maxDays: 12,
+          description: "Casual leave for personal matters",
+        },
+        {
+          value: "maternity",
+          label: "Maternity Leave",
+          maxDays: 90,
+          description: "Maternity leave",
+        },
+        {
+          value: "paternity",
+          label: "Paternity Leave",
+          maxDays: 15,
+          description: "Paternity leave",
+        },
+        {
+          value: "emergency",
+          label: "Emergency Leave",
+          maxDays: 7,
+          description: "Emergency leave",
+        },
+      ];
+    }
+
+    return {
+      done: true,
+      data: leaveTypes,
+    };
+  } catch (error) {
+    console.error("Error fetching leave types:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get employee leave balance
+export const getEmployeeLeaveBalance = async (companyId, employeeId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    const employee = await collections.employees.findOne({
+      _id: new ObjectId(employeeId),
+    });
+
+    if (!employee) {
+      return { done: false, error: "Employee not found" };
+    }
+
+    // Calculate used leaves this year
+    const currentYear = new Date().getFullYear();
+    const usedLeaves = await collections.leaves.countDocuments({
+      employeeId: new ObjectId(employeeId),
+      status: { $in: ["Approved", "Taken"] },
+      year: currentYear,
+    });
+
+    const totalLeaves = employee.totalLeaves || 21;
+    const remainingLeaves = totalLeaves - usedLeaves;
+
+    return {
+      done: true,
+      data: {
+        totalLeaves,
+        usedLeaves,
+        remainingLeaves: Math.max(0, remainingLeaves),
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching employee leave balance:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Create leave request
+export const createLeaveRequest = async (companyId, userId, leaveData) => {
+  try {
+    const collections = getTenantCollections(companyId);
+
+    // Generate leave request ID
+    const lastRequest = await collections.leaves.findOne(
+      {},
+      { sort: { createdAt: -1 } }
+    );
+
+    let nextId = 1;
+    if (lastRequest && lastRequest.requestId) {
+      const lastIdNumber = parseInt(lastRequest.requestId.replace("LR-", ""));
+      nextId = lastIdNumber + 1;
+    }
+
+    const requestId = `LR-${String(nextId).padStart(4, "0")}`;
+
+    // Calculate number of days
+    const fromDate = new Date(leaveData.fromDate);
+    const toDate = new Date(leaveData.toDate);
+    const timeDiff = toDate.getTime() - fromDate.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+
+    const newLeaveRequest = {
+      ...leaveData,
+      requestId,
+      employeeId: new ObjectId(leaveData.employeeId),
+      createdBy: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: "Pending",
+      numberOfDays: daysDiff,
+      year: new Date().getFullYear(),
+      isDeleted: false,
+    };
+
+    const result = await collections.leaves.insertOne(newLeaveRequest);
+
+    // Add activity log
+    const employee = await collections.employees.findOne({
+      _id: new ObjectId(leaveData.employeeId),
+    });
+
+    if (employee) {
+      await collections.activities.insertOne({
+        employeeId: new ObjectId(leaveData.employeeId),
+        action: "Leave Request Created",
+        description: `Leave request created for ${employee.firstName} ${employee.lastName} (${leaveData.leaveType}) from ${leaveData.fromDate} to ${leaveData.toDate}`,
+        createdAt: new Date(),
+      });
+    }
+
+    return {
+      done: true,
+      data: { ...newLeaveRequest, _id: result.insertedId },
+    };
+  } catch (error) {
+    console.error("Error creating leave request:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Get leave request modal data (all data in one call)
+export const getLeaveRequestModalData = async (companyId) => {
+  try {
+    const [employees, leaveTypes] = await Promise.all([
+      getLeaveRequestEmployees(companyId),
+      getLeaveTypes(companyId),
+    ]);
+
+    return {
+      done: true,
+      data: {
+        employees: employees.data,
+        leaveTypes: leaveTypes.data,
+      },
+    };
+  } catch (error) {
+    console.error("Error fetching leave request modal data:", error);
     return { done: false, error: error.message };
   }
 };

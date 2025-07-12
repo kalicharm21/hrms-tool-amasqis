@@ -40,6 +40,7 @@ export const getTenantCollections = (tenantDbName) => {
     attendance: db.collection("attendance"),
     departments: db.collection("departments"),
     leaves: db.collection("leaves"),
+    leaveTypes: db.collection("leaveTypes"),
     invoices: db.collection("invoices"),
     activities: db.collection("activities"),
     todos: db.collection("todos"),
