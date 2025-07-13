@@ -7,14 +7,16 @@ const Validate = () => {
   useEffect(() => {
     if (!isSignedIn || !user) return;
 
-    const publicMetadata = user.publicMetadata || {};
-    const subdomain = publicMetadata.subdomain;
+    const publicMetadata = user?.publicMetadata || {};
+    const subdomain = publicMetadata?.subdomain;
 
-    if (subdomain) {
-      window.location.href = `http://${subdomain}.localhost:3000/employee-dashboard`;
-    } else {
-      window.location.href = `http://localhost:3000/employee-dashboard`;
-    }
+    // if (subdomain) {
+    //   window.location.href = `http://${subdomain}.localhost:3000/employee-dashboard`;
+    // } else {
+    //   window.location.href = `http://localhost:3000/employee-dashboard`;
+    // }
+
+    // Logics for multitenancy system
   }, [isSignedIn, user]);
 
   return (

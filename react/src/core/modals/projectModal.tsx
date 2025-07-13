@@ -9,8 +9,19 @@ import io from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 
 interface ProjectModalData {
-  clients: Array<{ value: string; label: string; email: string; company: string }>;
-  employees: Array<{ value: string; label: string; position: string; department: string; avatar: string }>;
+  clients: Array<{
+    value: string;
+    label: string;
+    email: string;
+    company: string;
+  }>;
+  employees: Array<{
+    value: string;
+    label: string;
+    position: string;
+    department: string;
+    avatar: string;
+  }>;
   tags: Array<{ value: string; label: string }>;
   priorities: Array<{ value: string; label: string; color: string }>;
   statuses: Array<{ value: string; label: string; color: string }>;
@@ -92,7 +103,9 @@ const ProjectModals = () => {
   };
 
   // Handle image upload
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -152,7 +165,7 @@ const ProjectModals = () => {
   const removeLogo = () => {
     setLogo(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value = "";+
     }
   };
 
@@ -204,7 +217,7 @@ const ProjectModals = () => {
             setLogo(null);
             removeLogo();
             // Close modal
-            const modal = document.getElementById('add_project') as any;
+            const modal = document.getElementById("add_project") as any;
             if (modal) {
               const bootstrap = (window as any).bootstrap;
               const modalInstance = bootstrap.Modal.getInstance(modal);
@@ -258,9 +271,9 @@ const ProjectModals = () => {
 
   // Handle form input changes
   const handleInputChange = (field: keyof ProjectFormData, value: any) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
@@ -315,19 +328,19 @@ const ProjectModals = () => {
     const projectData = {
       ...formData,
       // Convert string arrays to actual IDs where needed
-      teamMembers: formData.teamMembers.map(member => {
-        const emp = modalData.employees.find(e => e.label === member);
+      teamMembers: formData.teamMembers.map((member) => {
+        const emp = modalData.employees.find((e) => e.label === member);
         return emp ? emp.value : member;
       }),
-      teamLeader: formData.teamLeader.map(leader => {
-        const emp = modalData.employees.find(e => e.label === leader);
+      teamLeader: formData.teamLeader.map((leader) => {
+        const emp = modalData.employees.find((e) => e.label === leader);
         return emp ? emp.value : leader;
       }),
-      projectManager: formData.projectManager.map(manager => {
-        const emp = modalData.employees.find(e => e.label === manager);
+      projectManager: formData.projectManager.map((manager) => {
+        const emp = modalData.employees.find((e) => e.label === manager);
         return emp ? emp.value : manager;
       }),
-      projectValue: parseFloat(formData.projectValue.replace('$', '')) || 0,
+      projectValue: parseFloat(formData.projectValue.replace("$", "")) || 0,
       logo: logo,
     };
 
@@ -336,18 +349,21 @@ const ProjectModals = () => {
 
   // Modal container functions for date pickers
   const getModalContainer = () => {
-    const modalElement = document.getElementById('add_project');
+    const modalElement = document.getElementById("add_project");
     return modalElement ? modalElement : document.body;
   };
 
   // Get select options with default
-  const getSelectOptions = (options: Array<{ value: string; label: string }>, defaultLabel: string = "Select") => {
+  const getSelectOptions = (
+    options: Array<{ value: string; label: string }>,
+    defaultLabel: string = "Select"
+  ) => {
     return [{ value: "", label: defaultLabel }, ...options];
   };
 
   // Handle modal events
   useEffect(() => {
-    const modalElement = document.getElementById('add_project');
+    const modalElement = document.getElementById("add_project");
     if (modalElement) {
       const handleModalShow = () => {
         handleModalOpen();
@@ -376,15 +392,15 @@ const ProjectModals = () => {
         });
       };
 
-      modalElement.addEventListener('show.bs.modal', handleModalShow);
-      modalElement.addEventListener('hide.bs.modal', handleModalHide);
+      modalElement.addEventListener("show.bs.modal", handleModalShow);
+      modalElement.addEventListener("hide.bs.modal", handleModalHide);
 
       return () => {
-        modalElement.removeEventListener('show.bs.modal', handleModalShow);
-        modalElement.removeEventListener('hide.bs.modal', handleModalHide);
+        modalElement.removeEventListener("show.bs.modal", handleModalShow);
+        modalElement.removeEventListener("hide.bs.modal", handleModalHide);
       };
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   return (
@@ -429,10 +445,18 @@ const ProjectModals = () => {
               <div className="add-info-fieldset">
                 <div className="add-details-wizard p-3 pb-0">
                   <ul className="progress-bar-wizard d-flex align-items-center border-bottom">
-                    <li className={`p-2 pt-0 ${currentStep === 1 ? 'active' : ''}`}>
+                    <li
+                      className={`p-2 pt-0 ${
+                        currentStep === 1 ? "active" : ""
+                      }`}
+                    >
                       <h6 className="fw-medium">Basic Information</h6>
                     </li>
-                    <li className={`p-2 pt-0 ${currentStep === 2 ? 'active' : ''}`}>
+                    <li
+                      className={`p-2 pt-0 ${
+                        currentStep === 2 ? "active" : ""
+                      }`}
+                    >
                       <h6 className="fw-medium">Members</h6>
                     </li>
                   </ul>
@@ -472,7 +496,9 @@ const ProjectModals = () => {
                             <div className="profile-upload">
                               <div className="mb-2">
                                 <h6 className="mb-1">Upload Project Logo</h6>
-                                <p className="fs-12">Image should be below 4 mb</p>
+                                <p className="fs-12">
+                                  Image should be below 4 mb
+                                </p>
                               </div>
                               <div className="profile-uploader d-flex align-items-center">
                                 <div className="drag-upload-btn btn btn-sm btn-primary me-2">
@@ -504,12 +530,17 @@ const ProjectModals = () => {
                         </div>
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label">Project Name <span className="text-danger">*</span></label>
+                            <label className="form-label">
+                              Project Name{" "}
+                              <span className="text-danger">*</span>
+                            </label>
                             <input
                               type="text"
                               className="form-control"
                               value={formData.name}
-                              onChange={(e) => handleInputChange("name", e.target.value)}
+                              onChange={(e) =>
+                                handleInputChange("name", e.target.value)
+                              }
                               placeholder="Enter project name"
                             />
                           </div>
@@ -520,8 +551,15 @@ const ProjectModals = () => {
                             <CommonSelect
                               className="select"
                               options={getSelectOptions(modalData.clients)}
-                              defaultValue={getSelectOptions(modalData.clients).find(c => c.value === formData.clientId)}
-                              onChange={(option: any) => handleInputChange("clientId", option?.value || "")}
+                              defaultValue={getSelectOptions(
+                                modalData.clients
+                              ).find((c) => c.value === formData.clientId)}
+                              onChange={(option: any) =>
+                                handleInputChange(
+                                  "clientId",
+                                  option?.value || ""
+                                )
+                              }
                             />
                           </div>
                         </div>
@@ -529,14 +567,19 @@ const ProjectModals = () => {
                           <div className="row">
                             <div className="col-md-6">
                               <div className="mb-3">
-                                <label className="form-label">Start Date <span className="text-danger">*</span></label>
+                                <label className="form-label">
+                                  Start Date{" "}
+                                  <span className="text-danger">*</span>
+                                </label>
                                 <div className="input-icon-end position-relative">
                                   <DatePicker
                                     className="form-control datetimepicker"
                                     format="DD-MM-YYYY"
                                     getPopupContainer={getModalContainer}
                                     placeholder="DD-MM-YYYY"
-                                    onChange={(date, dateString) => handleInputChange("startDate", dateString)}
+                                    onChange={(date, dateString) =>
+                                      handleInputChange("startDate", dateString)
+                                    }
                                   />
                                   <span className="input-icon-addon">
                                     <i className="ti ti-calendar text-gray-7" />
@@ -546,14 +589,19 @@ const ProjectModals = () => {
                             </div>
                             <div className="col-md-6">
                               <div className="mb-3">
-                                <label className="form-label">End Date <span className="text-danger">*</span></label>
+                                <label className="form-label">
+                                  End Date{" "}
+                                  <span className="text-danger">*</span>
+                                </label>
                                 <div className="input-icon-end position-relative">
                                   <DatePicker
                                     className="form-control datetimepicker"
                                     format="DD-MM-YYYY"
                                     getPopupContainer={getModalContainer}
                                     placeholder="DD-MM-YYYY"
-                                    onChange={(date, dateString) => handleInputChange("endDate", dateString)}
+                                    onChange={(date, dateString) =>
+                                      handleInputChange("endDate", dateString)
+                                    }
                                   />
                                   <span className="input-icon-addon">
                                     <i className="ti ti-calendar text-gray-7" />
@@ -566,27 +614,45 @@ const ProjectModals = () => {
                                 <label className="form-label">Priority</label>
                                 <CommonSelect
                                   className="select"
-                                  options={getSelectOptions(modalData.priorities)}
-                                  defaultValue={getSelectOptions(modalData.priorities).find(p => p.value === formData.priority)}
-                                  onChange={(option: any) => handleInputChange("priority", option?.value || "")}
+                                  options={getSelectOptions(
+                                    modalData.priorities
+                                  )}
+                                  defaultValue={getSelectOptions(
+                                    modalData.priorities
+                                  ).find((p) => p.value === formData.priority)}
+                                  onChange={(option: any) =>
+                                    handleInputChange(
+                                      "priority",
+                                      option?.value || ""
+                                    )
+                                  }
                                 />
                               </div>
                             </div>
                             <div className="col-md-6">
                               <div className="mb-3">
-                                <label className="form-label">Project Value</label>
+                                <label className="form-label">
+                                  Project Value
+                                </label>
                                 <input
                                   type="text"
                                   className="form-control"
                                   value={formData.projectValue}
-                                  onChange={(e) => handleInputChange("projectValue", e.target.value)}
+                                  onChange={(e) =>
+                                    handleInputChange(
+                                      "projectValue",
+                                      e.target.value
+                                    )
+                                  }
                                   placeholder="$0"
                                 />
                               </div>
                             </div>
                             <div className="col-md-6">
                               <div className="mb-3">
-                                <label className="form-label">Total Working Hours</label>
+                                <label className="form-label">
+                                  Total Working Hours
+                                </label>
                                 <div className="input-icon-end position-relative">
                                   <TimePicker
                                     getPopupContainer={getModalContainer}
@@ -594,7 +660,12 @@ const ProjectModals = () => {
                                     placeholder="Choose"
                                     format="h:mm A"
                                     className="form-control timepicker"
-                                    onChange={(time, timeString) => handleInputChange("totalWorkingHours", timeString || "")}
+                                    onChange={(time, timeString) =>
+                                      handleInputChange(
+                                        "totalWorkingHours",
+                                        timeString || ""
+                                      )
+                                    }
                                   />
                                   <span className="input-icon-addon">
                                     <i className="ti ti-clock-hour-3 text-gray-7" />
@@ -609,7 +680,12 @@ const ProjectModals = () => {
                                   type="text"
                                   className="form-control"
                                   value={formData.extraTime}
-                                  onChange={(e) => handleInputChange("extraTime", e.target.value)}
+                                  onChange={(e) =>
+                                    handleInputChange(
+                                      "extraTime",
+                                      e.target.value
+                                    )
+                                  }
                                   placeholder="Enter extra time"
                                 />
                               </div>
@@ -621,7 +697,9 @@ const ProjectModals = () => {
                             <label className="form-label">Description</label>
                             <CommonTextEditor
                               defaultValue={formData.description}
-                              onChange={(content) => handleInputChange("description", content)}
+                              onChange={(content) =>
+                                handleInputChange("description", content)
+                              }
                             />
                           </div>
                         </div>
@@ -654,24 +732,36 @@ const ProjectModals = () => {
                       <div className="row">
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label me-2">Team Members <span className="text-danger">*</span></label>
+                            <label className="form-label me-2">
+                              Team Members{" "}
+                              <span className="text-danger">*</span>
+                            </label>
                             <CommonTagsInput
                               value={formData.teamMembers}
-                              onChange={(tags) => handleInputChange("teamMembers", tags)}
+                              onChange={(tags) =>
+                                handleInputChange("teamMembers", tags)
+                              }
                               placeholder="Add team members"
                               className="custom-input-class"
                             />
                             <small className="form-text text-muted">
-                              Available employees: {modalData.employees.map(emp => emp.label).join(", ")}
+                              Available employees:{" "}
+                              {modalData.employees
+                                .map((emp) => emp.label)
+                                .join(", ")}
                             </small>
                           </div>
                         </div>
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label me-2">Team Leader <span className="text-danger">*</span></label>
+                            <label className="form-label me-2">
+                              Team Leader <span className="text-danger">*</span>
+                            </label>
                             <CommonTagsInput
                               value={formData.teamLeader}
-                              onChange={(tags) => handleInputChange("teamLeader", tags)}
+                              onChange={(tags) =>
+                                handleInputChange("teamLeader", tags)
+                              }
                               placeholder="Add team leader"
                               className="custom-input-class"
                             />
@@ -679,10 +769,15 @@ const ProjectModals = () => {
                         </div>
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label me-2">Project Manager <span className="text-danger">*</span></label>
+                            <label className="form-label me-2">
+                              Project Manager{" "}
+                              <span className="text-danger">*</span>
+                            </label>
                             <CommonTagsInput
                               value={formData.projectManager}
-                              onChange={(tags) => handleInputChange("projectManager", tags)}
+                              onChange={(tags) =>
+                                handleInputChange("projectManager", tags)
+                              }
                               placeholder="Add project manager"
                               className="custom-input-class"
                             />
@@ -694,8 +789,15 @@ const ProjectModals = () => {
                             <CommonSelect
                               className="select"
                               options={getSelectOptions(modalData.statuses)}
-                              defaultValue={getSelectOptions(modalData.statuses).find(s => s.value === formData.status)}
-                              onChange={(option: any) => handleInputChange("status", option?.value || "Active")}
+                              defaultValue={getSelectOptions(
+                                modalData.statuses
+                              ).find((s) => s.value === formData.status)}
+                              onChange={(option: any) =>
+                                handleInputChange(
+                                  "status",
+                                  option?.value || "Active"
+                                )
+                              }
                             />
                           </div>
                         </div>
@@ -704,7 +806,9 @@ const ProjectModals = () => {
                             <label className="form-label">Tags</label>
                             <CommonTagsInput
                               value={formData.tags}
-                              onChange={(tags) => handleInputChange("tags", tags)}
+                              onChange={(tags) =>
+                                handleInputChange("tags", tags)
+                              }
                               placeholder="Add project tags"
                               className="custom-input-class"
                             />
@@ -737,7 +841,11 @@ const ProjectModals = () => {
                           >
                             {isSubmitting ? (
                               <>
-                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                <span
+                                  className="spinner-border spinner-border-sm me-2"
+                                  role="status"
+                                  aria-hidden="true"
+                                ></span>
                                 Creating...
                               </>
                             ) : (
@@ -761,4 +869,3 @@ const ProjectModals = () => {
 };
 
 export default ProjectModals;
-
