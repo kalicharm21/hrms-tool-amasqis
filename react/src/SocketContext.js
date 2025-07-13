@@ -19,7 +19,8 @@ export const SocketProvider = ({ children }) => {
       }
 
       const token = await getToken();
-      const newSocket = io("http://localhost:5000", {
+      const backend_url = process.env.REACT_APP_BACKEND_URL;
+      const newSocket = io(backend_url, {
         auth: { token },
       });
 
