@@ -6,7 +6,6 @@ import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 const EmailVerification3 = () => {
   const routes = all_routes;
   const navigation = useNavigate();
-
   const navigationPath = () => {
     navigation(routes.login3);
   };
@@ -42,7 +41,11 @@ const EmailVerification3 = () => {
                         </Link>
                       </h6>
                     </div>
-                    <button type="submit" className="btn btn-primary w-100" onClick={navigationPath}>
+                    <button
+                      type="submit"
+                      className="btn btn-primary w-100"
+                      onClick={navigationPath}
+                    >
                       Skip Now
                     </button>
                   </div>

@@ -1,20 +1,28 @@
 import { useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
+import { useNavigate } from "react-router-dom";
+import { all_routes } from "../../router/all_routes";
 
 const Validate = () => {
   const { isSignedIn, user } = useUser();
-
+  const routes = all_routes;
+  const navigate = useNavigate();
   useEffect(() => {
-    if (!isSignedIn || !user) return;
+    if (!isSignedIn || !user) {
+      navigate(routes.login);
+    }
 
-    const publicMetadata = user?.publicMetadata || {};
-    const subdomain = publicMetadata?.subdomain;
+    console.log("Hihihi");
+    // const publicMetadata = user?.publicMetadata || {};
+    // const subdomain = publicMetadata?.subdomain;
 
     // if (subdomain) {
     //   window.location.href = `http://${subdomain}.localhost:3000/employee-dashboard`;
     // } else {
     //   window.location.href = `http://localhost:3000/employee-dashboard`;
     // }
+
+    navigate(routes.superAdminCompanies);
 
     // Logics for multitenancy system
   }, [isSignedIn, user]);
