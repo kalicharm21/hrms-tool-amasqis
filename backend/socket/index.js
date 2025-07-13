@@ -62,6 +62,7 @@ const allowedOrigins = [
   "http://byte.localhost:3000",
   "http://test.localhost:3000",
   "http://dummy.localhost:3000",
+  process.env.FRONTEND_URL,
 ];
 
 const authorizedParties = [
