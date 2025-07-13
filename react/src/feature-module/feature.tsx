@@ -83,15 +83,15 @@ const Feature = () => {
          ? "expand-menu"
          : ""
      }
-      
+
       `}
     >
        <>
-          {showLoader ? 
+          {showLoader ?
           <>
           <Preloader />
           <div
-            className={`main-wrapper 
+            className={`main-wrapper
         ${mobileSidebar ? "slide-nav" : ""}`}
           >
             <Header />
@@ -106,7 +106,7 @@ const Feature = () => {
           </> :
           <>
           <div
-            className={`main-wrapper 
+            className={`main-wrapper
         ${mobileSidebar ? "slide-nav" : ""}`}
           >
             <Header />
@@ -119,7 +119,7 @@ const Feature = () => {
             {!location.pathname.includes("layout") && <ThemeSettings />}
           </div>
           </>}
-          
+
         </>
       {/* <Loader/> */}
 

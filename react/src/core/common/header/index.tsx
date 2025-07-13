@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { useUser, useClerk } from "@clerk/clerk-react";
 import {
   setDataLayout,
 } from "../../data/redux/themeSettingSlice";
@@ -11,14 +12,55 @@ import {
 } from "../../data/redux/sidebarSlice";
 import { all_routes } from "../../../feature-module/router/all_routes";
 import { HorizontalSidebarData } from '../../data/json/horizontalSidebar'
-const Header = () => {
+
+const Header = (): JSX.Element => {
   const routes = all_routes;
   const dispatch = useDispatch();
   const dataLayout = useSelector((state: any) => state.themeSetting.dataLayout);
   const Location = useLocation();
 
+  // Clerk authentication hooks
+  const { user, isLoaded, isSignedIn } = useUser();
+  const { signOut } = useClerk();
+
   const [subOpen, setSubopen] = useState<any>("");
   const [subsidebar, setSubsidebar] = useState("");
+
+  // Get user details with fallbacks
+  const getUserName = () => {
+    if (!user) return "Guest User";
+    return user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || "User";
+  };
+
+  const getUserEmail = () => {
+    if (!user) return "guest@example.com";
+    return user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || "No email";
+  };
+
+	const getCompanyId = () => {
+		if (!user) return "Guest Company";
+		return user.publicMetadata?.companyId as string || "Company";
+	};
+
+  const getUserImage = () => {
+    if (!user) return "assets/img/profiles/avatar-12.jpg";
+    return user.imageUrl || "assets/img/profiles/avatar-12.jpg";
+  };
+
+  const getUserRole = (): string => {
+    if (!user) return "Guest";
+    return user.publicMetadata?.role as string || "Employee";
+  };
+
+  // Handle signout
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // User will be redirected to afterSignOutUrl defined in ClerkProvider
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   const toggleSidebar = (title: any) => {
 	localStorage.setItem("menuOpened", title);
@@ -36,6 +78,7 @@ const Header = () => {
 	  setSubsidebar(subitem);
 	}
   };
+
   const mobileSidebar = useSelector(
     (state: any) => state.sidebarSlice.mobileSidebar
   );
@@ -43,7 +86,6 @@ const Header = () => {
   const toggleMobileSidebar = () => {
     dispatch(setMobileSidebar(!mobileSidebar));
   };
-
 
   const handleToggleMiniSidebar = () => {
     if (dataLayout === "mini_layout") {
@@ -53,9 +95,6 @@ const Header = () => {
       dispatch(toggleMiniSidebar());
     }
   };
-
-
-
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const toggleFullscreen = () => {
@@ -75,6 +114,36 @@ const Header = () => {
       }
     }
   };
+
+  // Show loading state if Clerk data is not loaded yet
+  if (!isLoaded) {
+    return (
+      <div className="header">
+        <div className="main-header">
+          <div className="header-left">
+            <Link to={routes.adminDashboard} className="logo">
+              <ImageWithBasePath src="assets/img/logo.svg" alt="Logo"/>
+            </Link>
+          </div>
+          <div className="header-user">
+            <div className="nav user-menu nav-list">
+              <div className="d-flex align-items-center">
+                <div className="dropdown profile-dropdown">
+                  <div className="d-flex align-items-center">
+                    <span className="avatar avatar-sm">
+                      <div className="spinner-border spinner-border-sm" role="status">
+                        <span className="sr-only">Loading...</span>
+                      </div>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -124,56 +193,56 @@ const Header = () => {
 										<div className="card-header">
 											<h4>CRM</h4>
 										</div>
-										<div className="card-body pb-1">		
+										<div className="card-body pb-1">
 											<div className="row">
-												<div className="col-sm-6">							
+												<div className="col-sm-6">
 													<Link to={routes.contactList} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
 														<span className="d-flex align-items-center me-3">
 															<i className="ti ti-user-shield text-default me-2"></i>Contacts
 														</span>
 														<i className="ti ti-arrow-right"></i>
-													</Link>							
+													</Link>
 													<Link to={routes.dealsGrid} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
 														<span className="d-flex align-items-center me-3">
 															<i className="ti ti-heart-handshake text-default me-2"></i>Deals
 														</span>
 														<i className="ti ti-arrow-right"></i>
-													</Link>								
+													</Link>
 													<Link to={routes.pipeline} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
 														<span className="d-flex align-items-center me-3">
 															<i className="ti ti-timeline-event-text text-default me-2"></i>Pipeline
 														</span>
 														<i className="ti ti-arrow-right"></i>
-													</Link>		
+													</Link>
 												</div>
-												<div className="col-sm-6">							
+												<div className="col-sm-6">
 													<Link to={routes.companiesGrid} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
 														<span className="d-flex align-items-center me-3">
 															<i className="ti ti-building text-default me-2"></i>Companies
 														</span>
 														<i className="ti ti-arrow-right"></i>
-													</Link>								
+													</Link>
 													<Link to={routes.leadsGrid} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
 														<span className="d-flex align-items-center me-3">
 															<i className="ti ti-user-check text-default me-2"></i>Leads
 														</span>
 														<i className="ti ti-arrow-right"></i>
-													</Link>								
+													</Link>
 													<Link to={routes.activity} className="d-flex align-items-center justify-content-between p-2 crm-link mb-3">
 														<span className="d-flex align-items-center me-3">
 															<i className="ti ti-activity text-default me-2"></i>Activities
 														</span>
 														<i className="ti ti-arrow-right"></i>
-													</Link>		
+													</Link>
 												</div>
-											</div>		
+											</div>
 										</div>
 									</div>
 								</div>
 							</div>
 							<Link to={routes.profilesettings} className="btn btn-menubar">
 								<i className="ti ti-settings-cog"></i>
-							</Link>	
+							</Link>
 						</div>
 
 						<div className="sidebar sidebar-horizontal" id="horizontal-single">
@@ -191,7 +260,7 @@ const Header = () => {
 														${
 															data?.subMenus
 																?.map((link: any) => link?.route)
-																.includes(Location.pathname) 
+																.includes(Location.pathname)
 																? "active"
 																: ""
 															} ${subOpen === data.menuValue ? "subdrop" : ""}`} onClick={() => toggleSidebar(data.menuValue)}>
@@ -255,22 +324,22 @@ const Header = () => {
 										<div className="card-header">
 											<h4>Applications</h4>
 										</div>
-										<div className="card-body">											
+										<div className="card-body">
 											<Link to={routes.calendar} className="d-block pb-2">
 												<span className="avatar avatar-md bg-transparent-dark me-2"><i className="ti ti-calendar text-gray-9"></i></span>Calendar
-											</Link>										
+											</Link>
 											<Link to={routes.todo} className="d-block py-2">
 												<span className="avatar avatar-md bg-transparent-dark me-2"><i className="ti ti-subtask text-gray-9"></i></span>To Do
-											</Link>										
+											</Link>
 											<Link to={routes.notes} className="d-block py-2">
 												<span className="avatar avatar-md bg-transparent-dark me-2"><i className="ti ti-notes text-gray-9"></i></span>Notes
-											</Link>										
+											</Link>
 											<Link to={routes.fileManager} className="d-block py-2">
 												<span className="avatar avatar-md bg-transparent-dark me-2"><i className="ti ti-folder text-gray-9"></i></span>File Manager
-											</Link>								
+											</Link>
 											<Link to={routes.kanbanView} className="d-block py-2">
 												<span className="avatar avatar-md bg-transparent-dark me-2"><i className="ti ti-layout-kanban text-gray-9"></i></span>Kanban
-											</Link>								
+											</Link>
 											<Link to={routes.invoice} className="d-block py-2 pb-0">
 												<span className="avatar avatar-md bg-transparent-dark me-2"><i className="ti ti-file-invoice text-gray-9"></i></span>Invoices
 											</Link>
@@ -370,7 +439,7 @@ const Header = () => {
 															<ImageWithBasePath src="assets/img/profiles/avatar-25.jpg" alt="Profile"/>
 														</span>
 														<div className="flex-grow-1">
-															<p className="mb-1">New student record <span className="text-dark fw-semibold"> George</span> 
+															<p className="mb-1">New student record <span className="text-dark fw-semibold"> George</span>
 																is created by <span className="text-dark fw-semibold">Teressa</span>
 															</p>
 															<span>2 hrs ago</span>
@@ -402,7 +471,19 @@ const Header = () => {
 							<div className="dropdown profile-dropdown">
 								<Link to="#" className="dropdown-toggle d-flex align-items-center" data-bs-toggle="dropdown">
 									<span className="avatar avatar-sm online">
-										<ImageWithBasePath src="assets/img/profiles/avatar-12.jpg" alt="Img" className="img-fluid rounded-circle"/>
+										{isSignedIn && user ? (
+											<img
+												src={getUserImage()}
+												alt="Profile"
+												className="img-fluid rounded-circle"
+												onError={(e) => {
+													// Fallback to default image if user image fails to load
+													(e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+												}}
+											/>
+										) : (
+											<ImageWithBasePath src="assets/img/profiles/avatar-12.jpg" alt="Img" className="img-fluid rounded-circle"/>
+										)}
 									</span>
 								</Link>
 								<div className="dropdown-menu shadow-none">
@@ -410,11 +491,28 @@ const Header = () => {
 										<div className="card-header">
 											<div className="d-flex align-items-center">
 												<span className="avatar avatar-lg me-2 avatar-rounded">
-													<ImageWithBasePath src="assets/img/profiles/avatar-12.jpg" alt="img"/>
+													{isSignedIn && user ? (
+														<img
+															src={getUserImage()}
+															alt="Profile"
+															onError={(e) => {
+																// Fallback to default image if user image fails to load
+																(e.target as HTMLImageElement).src = "assets/img/profiles/avatar-12.jpg";
+															}}
+														/>
+													) : (
+														<ImageWithBasePath src="assets/img/profiles/avatar-12.jpg" alt="img"/>
+													)}
 												</span>
 												<div>
-													<h5 className="mb-0">Kevin Larry</h5>
-													<p className="fs-12 fw-medium mb-0">warren@example.com</p>
+													<h5 className="mb-0">{getUserName()}</h5>
+													<p className="fs-12 fw-medium mb-0">{getUserEmail()}</p>
+													{isSignedIn && user ? (
+														<>
+															<p className="fs-10 text-muted mb-0">Role: {getUserRole()}</p>
+															<p className="fs-10 text-muted mt-0 mb-0">CId: {getCompanyId()}</p>
+														</>
+													) : null}
 												</div>
 											</div>
 										</div>
@@ -436,7 +534,13 @@ const Header = () => {
 											</Link>
 										</div>
 										<div className="card-footer">
-											<Link className="dropdown-item d-inline-flex align-items-center p-0 py-2" to={routes.login}><i className="ti ti-login me-2"></i>Logout</Link>
+											<button
+												className="dropdown-item d-inline-flex align-items-center p-0 py-2 btn btn-link text-start"
+												onClick={handleSignOut}
+												style={{ border: 'none', background: 'none', width: '100%' }}
+											>
+												<i className="ti ti-login me-2"></i>Logout
+											</button>
 										</div>
 									</div>
 								</div>
@@ -452,7 +556,13 @@ const Header = () => {
 					<div className="dropdown-menu dropdown-menu-end">
 						<Link className="dropdown-item" to={routes.profile}>My Profile</Link>
 						<Link className="dropdown-item" to={routes.profilesettings}>Settings</Link>
-						<Link className="dropdown-item" to={routes.login}>Logout</Link>
+						<button
+							className="dropdown-item btn btn-link text-start"
+							onClick={handleSignOut}
+							style={{ border: 'none', background: 'none', width: '100%' }}
+						>
+							Logout
+						</button>
 					</div>
 				</div>
 
