@@ -62,6 +62,8 @@ const allowedOrigins = [
   "http://byte.localhost:3000",
   "http://test.localhost:3000",
   "http://dummy.localhost:3000",
+  "https://hrms-tool-amasqis.onrender.com",
+  process.env.FRONTEND_URL,
 ];
 
 const authorizedParties = [
@@ -71,6 +73,8 @@ const authorizedParties = [
   "http://byte.localhost:3000",
   "http://test.localhost:3000",
   "http://dummy.localhost:3000",
+  "https://hrms-tool-amasqis.onrender.com",
+  "https://hrms-tool-amasqis.onrender.com/",
 ];
 
 export const socketHandler = (httpServer) => {
