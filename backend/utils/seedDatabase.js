@@ -6,8 +6,6 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Read mock data from JSON file
 const mockDataPath = path.join(__dirname, "../data/mockData.json");
 const mockData = JSON.parse(fs.readFileSync(mockDataPath, "utf8"));
 
@@ -160,6 +158,18 @@ const processJobApplications = (jobApplications) => {
   }));
 };
 
+// Function to process approvals with proper ObjectId references
+const processApprovals = (approvals, employeeMapping) => {
+  return approvals.map((approval) => ({
+    ...approval,
+    _id: new ObjectId(),
+    requesterId: employeeMapping[approval.requesterId] || approval.requesterId,
+    createdAt: new Date(approval.createdAt),
+    updatedAt: new Date(approval.createdAt),
+    isDeleted: false,
+  }));
+};
+
 // Function to process leaves with proper ObjectId references
 const processLeaves = (leaves, employeeMapping) => {
   return leaves.map((leave) => ({
@@ -251,6 +261,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
       collections.jobApplications.deleteMany({}),
       collections.leaves.deleteMany({}),
       collections.leaveTypes.deleteMany({}),
+      collections.approvals?.deleteMany({}) || Promise.resolve(),
     ]);
     console.log("Cleared existing data");
 
@@ -287,6 +298,10 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
       mockData.jobApplications
     );
     const processedLeaves = processLeaves(mockData.leaves, employeeMapping);
+    const processedApprovals = processApprovals(
+      mockData.approvals || [],
+      employeeMapping
+    );
     const leaveTypes = createLeaveTypes();
 
     // Insert data into collections
@@ -331,6 +346,11 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
     await collections.leaveTypes.insertMany(leaveTypes);
     console.log(`Inserted ${leaveTypes.length} leave types`);
 
+    if (collections.approvals && processedApprovals.length > 0) {
+      await collections.approvals.insertMany(processedApprovals);
+      console.log(`Inserted ${processedApprovals.length} approvals`);
+    }
+
     console.log("Database seeding completed successfully!");
     console.log(`Summary:
       - Company ID: ${companyId}
@@ -347,6 +367,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
       - Job Applications: ${processedJobApplications.length}
       - Leave Requests: ${processedLeaves.length}
       - Leave Types: ${leaveTypes.length}
+      - Approvals: ${processedApprovals.length}
     `);
 
     return {
@@ -370,6 +391,7 @@ export const seedDatabase = async (companyId = "68443081dcdfe43152aebf80") => {
           jobApplications: processedJobApplications.length,
           leaves: processedLeaves.length,
           leaveTypes: leaveTypes.length,
+          approvals: processedApprovals.length,
         },
       },
     };

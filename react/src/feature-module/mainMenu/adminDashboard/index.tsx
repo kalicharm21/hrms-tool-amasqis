@@ -13,6 +13,8 @@ import TodoModal from "../../../core/modals/todoModal";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import io from "socket.io-client";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 
 interface DashboardData {
   pendingItems?: {
@@ -904,6 +906,246 @@ const AdminDashboard = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardData.todos, todoFilter, filterTodosByCurrentFilter]);
 
+  // Export functions
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const currentDate = new Date().toLocaleDateString();
+      const currentYear = date.getFullYear();
+
+      // Title
+      doc.setFontSize(20);
+      doc.text("Admin Dashboard Report", 20, 20);
+
+      doc.setFontSize(12);
+      doc.text(`Generated on: ${currentDate}`, 20, 35);
+      doc.text(`Year: ${currentYear}`, 20, 45);
+
+      let yPosition = 60;
+
+      // Dashboard Stats
+      doc.setFontSize(16);
+      doc.text("Dashboard Statistics", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(10);
+      const stats = dashboardData.stats;
+      if (stats) {
+        doc.text(`Attendance: ${stats.attendance?.present || 0}/${stats.attendance?.total || 0} (${stats.attendance?.percentage?.toFixed(1) || 0}%)`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Projects: ${stats.projects?.completed || 0}/${stats.projects?.total || 0} (${stats.projects?.percentage?.toFixed(1) || 0}%)`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Total Clients: ${stats.clients || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Tasks: ${stats.tasks?.completed || 0}/${stats.tasks?.total || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Earnings: $${stats.earnings?.toLocaleString() || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Weekly Profit: $${stats.weeklyProfit?.toLocaleString() || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Total Employees: ${stats.employees || 0}`, 20, yPosition);
+        yPosition += 20;
+      }
+
+      // Employee Status
+      if (dashboardData.employeeStatus) {
+        doc.setFontSize(16);
+        doc.text("Employee Status Distribution", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        const distribution = dashboardData.employeeStatus.distribution;
+        Object.entries(distribution).forEach(([status, count]) => {
+          doc.text(`${status}: ${count}`, 30, yPosition);
+          yPosition += 8;
+        });
+        yPosition += 10;
+
+        if (dashboardData.employeeStatus.topPerformer) {
+          doc.text("Top Performer:", 20, yPosition);
+          yPosition += 8;
+          doc.text(`${dashboardData.employeeStatus.topPerformer.name} - ${dashboardData.employeeStatus.topPerformer.performance}%`, 30, yPosition);
+          yPosition += 20;
+        }
+      }
+
+      // Recent Activities
+      if (dashboardData.recentActivities && dashboardData.recentActivities.length > 0) {
+        if (yPosition > 250) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        doc.setFontSize(16);
+        doc.text("Recent Activities", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        dashboardData.recentActivities.slice(0, 10).forEach((activity) => {
+          if (yPosition > 280) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          doc.text(`${activity.action}: ${activity.description}`, 20, yPosition);
+          yPosition += 8;
+          doc.text(`By: ${activity.employeeName} - ${formatDate(activity.createdAt)}`, 30, yPosition);
+          yPosition += 12;
+        });
+      }
+
+      // Save the PDF
+      doc.save(`admin-dashboard-report-${currentDate.replace(/\//g, '-')}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Error generating PDF export. Please try again.");
+    }
+  };
+
+  const exportToExcel = () => {
+    try {
+      const currentDate = new Date().toLocaleDateString();
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Dashboard Stats Sheet
+      const statsData: (string | number)[][] = [];
+      if (dashboardData.stats) {
+        statsData.push(["Metric", "Value"]);
+        statsData.push(["Attendance Present", dashboardData.stats.attendance?.present || 0]);
+        statsData.push(["Attendance Total", dashboardData.stats.attendance?.total || 0]);
+        statsData.push(["Attendance Percentage", `${dashboardData.stats.attendance?.percentage?.toFixed(1) || 0}%`]);
+        statsData.push(["Projects Completed", dashboardData.stats.projects?.completed || 0]);
+        statsData.push(["Projects Total", dashboardData.stats.projects?.total || 0]);
+        statsData.push(["Total Clients", dashboardData.stats.clients || 0]);
+        statsData.push(["Tasks Completed", dashboardData.stats.tasks?.completed || 0]);
+        statsData.push(["Tasks Total", dashboardData.stats.tasks?.total || 0]);
+        statsData.push(["Earnings", dashboardData.stats.earnings || 0]);
+        statsData.push(["Weekly Profit", dashboardData.stats.weeklyProfit || 0]);
+        statsData.push(["Total Employees", dashboardData.stats.employees || 0]);
+      }
+      const statsWS = XLSX.utils.aoa_to_sheet(statsData);
+      XLSX.utils.book_append_sheet(wb, statsWS, "Dashboard Stats");
+
+      // Employee Status Sheet
+      if (dashboardData.employeeStatus) {
+        const employeeStatusData: (string | number)[][] = [["Status", "Count"]];
+        Object.entries(dashboardData.employeeStatus.distribution).forEach(([status, count]) => {
+          employeeStatusData.push([status, count]);
+        });
+        const employeeStatusWS = XLSX.utils.aoa_to_sheet(employeeStatusData);
+        XLSX.utils.book_append_sheet(wb, employeeStatusWS, "Employee Status");
+      }
+
+      // Employees by Department Sheet
+      if (dashboardData.employeesByDepartment) {
+        const deptData: (string | number)[][] = [["Department", "Employee Count"]];
+        dashboardData.employeesByDepartment.forEach((dept) => {
+          deptData.push([dept.department, dept.count]);
+        });
+        const deptWS = XLSX.utils.aoa_to_sheet(deptData);
+        XLSX.utils.book_append_sheet(wb, deptWS, "Employees by Department");
+      }
+
+      // Recent Invoices Sheet
+      if (dashboardData.recentInvoices) {
+        const invoiceData: (string | number)[][] = [["Invoice Number", "Title", "Client", "Amount", "Status"]];
+        dashboardData.recentInvoices.forEach((invoice) => {
+          invoiceData.push([
+            invoice.invoiceNumber,
+            invoice.title,
+            invoice.clientName,
+            invoice.amount,
+            invoice.status
+          ]);
+        });
+        const invoiceWS = XLSX.utils.aoa_to_sheet(invoiceData);
+        XLSX.utils.book_append_sheet(wb, invoiceWS, "Recent Invoices");
+      }
+
+      // Projects Data Sheet
+      if (dashboardData.projectsData) {
+        const projectData: (string | number)[][] = [["Project Name", "Hours", "Total Hours", "Progress %", "Priority", "Deadline"]];
+        dashboardData.projectsData.forEach((project) => {
+          projectData.push([
+            project.name,
+            project.hours,
+            project.totalHours,
+            project.progress,
+            project.priority,
+            formatDate(project.deadline)
+          ]);
+        });
+        const projectWS = XLSX.utils.aoa_to_sheet(projectData);
+        XLSX.utils.book_append_sheet(wb, projectWS, "Projects");
+      }
+
+      // Recent Activities Sheet
+      if (dashboardData.recentActivities) {
+        const activityData: string[][] = [["Employee", "Action", "Description", "Date"]];
+        dashboardData.recentActivities.forEach((activity) => {
+          activityData.push([
+            activity.employeeName,
+            activity.action,
+            activity.description,
+            formatDate(activity.createdAt)
+          ]);
+        });
+        const activityWS = XLSX.utils.aoa_to_sheet(activityData);
+        XLSX.utils.book_append_sheet(wb, activityWS, "Recent Activities");
+      }
+
+      // Attendance Overview Sheet
+      if (dashboardData.attendanceOverview) {
+        const attendanceData: (string | number)[][] = [["Metric", "Count"]];
+        attendanceData.push(["Total", dashboardData.attendanceOverview.total]);
+        attendanceData.push(["Present", dashboardData.attendanceOverview.present]);
+        attendanceData.push(["Late", dashboardData.attendanceOverview.late]);
+        attendanceData.push(["Permission", dashboardData.attendanceOverview.permission]);
+        attendanceData.push(["Absent", dashboardData.attendanceOverview.absent]);
+        const attendanceWS = XLSX.utils.aoa_to_sheet(attendanceData);
+        XLSX.utils.book_append_sheet(wb, attendanceWS, "Attendance Overview");
+      }
+
+      // Clock In/Out Data Sheet
+      if (dashboardData.clockInOutData) {
+        const clockData: (string | number)[][] = [["Employee", "Position", "Clock In", "Clock Out", "Status", "Hours Worked"]];
+        dashboardData.clockInOutData.forEach((record) => {
+          clockData.push([
+            record.name,
+            record.position,
+            formatTime(record.clockIn),
+            formatTime(record.clockOut),
+            record.status,
+            record.hoursWorked
+          ]);
+        });
+        const clockWS = XLSX.utils.aoa_to_sheet(clockData);
+        XLSX.utils.book_append_sheet(wb, clockWS, "Clock In-Out Data");
+      }
+
+      // Todos Sheet
+      if (filteredTodos && filteredTodos.length > 0) {
+        const todoData: string[][] = [["Title", "Completed", "Created Date"]];
+        filteredTodos.forEach((todo) => {
+          todoData.push([
+            todo.title,
+            todo.completed ? "Yes" : "No",
+            formatDate(todo.createdAt)
+          ]);
+        });
+        const todoWS = XLSX.utils.aoa_to_sheet(todoData);
+        XLSX.utils.book_append_sheet(wb, todoWS, "Todos");
+      }
+
+      // Save the Excel file
+      XLSX.writeFile(wb, `admin-dashboard-report-${currentDate.replace(/\//g, '-')}.xlsx`);
+    } catch (error) {
+      console.error("Error generating Excel:", error);
+      alert("Error generating Excel export. Please try again.");
+    }
+  };
+
   // Filter invoices based on the selected filter
   const filteredInvoices = useMemo(() => {
     if (!dashboardData.recentInvoices || invoiceFilter === 'all') {
@@ -1002,6 +1244,10 @@ const AdminDashboard = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          exportToPDF();
+                        }}
                       >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
@@ -1011,6 +1257,10 @@ const AdminDashboard = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          exportToExcel();
+                        }}
                       >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel{" "}
@@ -1374,9 +1624,9 @@ const AdminDashboard = () => {
                     <span className={`fw-bold ${dashboardData.employeeGrowth?.trend === 'up' ? 'text-success' : dashboardData.employeeGrowth?.trend === 'down' ? 'text-danger' : 'text-secondary'}`}>
                       {dashboardData.employeeGrowth?.trend === 'up' ? '+' : dashboardData.employeeGrowth?.trend === 'down' ? '-' : ''}
                       {Math.abs(dashboardData.employeeGrowth?.percentage || 0)}%
-                    </span> from last {filters.employeesByDepartment === 'today' ? 'Day' : 
-                      filters.employeesByDepartment === 'week' ? 'Week' : 
-                      filters.employeesByDepartment === 'month' ? 'Month' : 
+                    </span> from last {filters.employeesByDepartment === 'today' ? 'Day' :
+                      filters.employeesByDepartment === 'week' ? 'Week' :
+                      filters.employeesByDepartment === 'month' ? 'Month' :
                       filters.employeesByDepartment === 'year' ? 'Year' : 'Period'}
                   </p>
                 </div>

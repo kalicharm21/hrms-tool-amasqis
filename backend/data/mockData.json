@@ -449,6 +449,42 @@
       "totalLeaves": 21,
       "dateOfBirth": "2008-06-20",
       "createdAt": "2025-01-18T08:00:00.000Z"
+    },
+    {
+      "firstName": "Steve",
+      "lastName": "Minecraft",
+      "email": "steve@nintendo.com",
+      "position": "Block Engineer",
+      "department": "Engineering",
+      "employeeId": "EMP026",
+      "phone": "+1-555-0026",
+      "avatar": "assets/img/profiles/avatar-26.jpg",
+      "employmentType": "Fulltime",
+      "salary": 76000,
+      "status": "Active",
+      "performance": 91,
+      "remainingLeaves": 21,
+      "totalLeaves": 21,
+      "dateOfBirth": "2011-05-17",
+      "createdAt": "2025-01-20T08:00:00.000Z"
+    },
+    {
+      "firstName": "Pyra",
+      "lastName": "Aegis",
+      "email": "pyra@nintendo.com",
+      "position": "Fire Systems Specialist",
+      "department": "Engineering",
+      "employeeId": "EMP027",
+      "phone": "+1-555-0027",
+      "avatar": "assets/img/profiles/avatar-27.jpg",
+      "employmentType": "Fulltime",
+      "salary": 84000,
+      "status": "Active",
+      "performance": 95,
+      "remainingLeaves": 21,
+      "totalLeaves": 21,
+      "dateOfBirth": "2017-12-01",
+      "createdAt": "2025-01-22T08:00:00.000Z"
     }
   ],
   "clients": [
@@ -1886,7 +1922,7 @@
       "completed": false,
       "priority": "Low",
       "dueDate": "2025-02-28",
-      "userId": "luigi",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
       "tag": "Audio",
       "createdAt": "2025-01-14T12:00:00.000Z"
     },
@@ -1896,9 +1932,121 @@
       "completed": false,
       "priority": "High",
       "dueDate": "2025-02-01",
-      "userId": "zelda",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
       "tag": "Performance",
       "createdAt": "2025-01-15T13:00:00.000Z"
+    },
+    {
+      "title": "Complete dashboard performance review",
+      "description": "Review and optimize admin dashboard loading times",
+      "completed": false,
+      "priority": "High",
+      "dueDate": "2025-01-31",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "tag": "Performance",
+      "createdAt": "2025-01-20T08:00:00.000Z"
+    },
+    {
+      "title": "Fix Mario Kart mobile bugs",
+      "description": "Resolve frame rate issues on mobile devices",
+      "completed": false,
+      "priority": "Medium",
+      "dueDate": "2025-01-28",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "tag": "Bugs",
+      "createdAt": "2025-01-21T09:00:00.000Z"
+    },
+    {
+      "title": "Implement new character animations",
+      "description": "Add smooth transition animations for new characters",
+      "completed": false,
+      "priority": "Medium",
+      "dueDate": "2025-02-05",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "tag": "Animation",
+      "createdAt": "2025-01-22T10:00:00.000Z"
+    },
+    {
+      "title": "Review security protocols",
+      "description": "Audit and update all security measures",
+      "completed": true,
+      "priority": "High",
+      "dueDate": "2025-01-25",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "tag": "Security",
+      "createdAt": "2025-01-23T11:00:00.000Z"
+    },
+    {
+      "title": "Prepare quarterly report",
+      "description": "Compile Q1 2025 development progress report",
+      "completed": false,
+      "priority": "High",
+      "dueDate": "2025-01-30",
+      "userId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "tag": "Reports",
+      "createdAt": "2025-01-24T12:00:00.000Z"
+    }
+  ],
+  "approvals": [
+    {
+      "requestId": "APR-0001",
+      "title": "Budget Approval for Mario Odyssey 2",
+      "description": "Request approval for additional $500K budget allocation",
+      "requestType": "Budget",
+      "requesterId": "mario",
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "status": "Pending",
+      "priority": "High",
+      "amount": 500000,
+      "createdAt": "2025-01-20T08:00:00.000Z"
+    },
+    {
+      "requestId": "APR-0002",
+      "title": "Equipment Purchase Approval",
+      "description": "New development hardware for Engineering team",
+      "requestType": "Purchase",
+      "requesterId": "tails",
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "status": "Pending",
+      "priority": "Medium",
+      "amount": 25000,
+      "createdAt": "2025-01-21T10:00:00.000Z"
+    },
+    {
+      "requestId": "APR-0003",
+      "title": "Overtime Authorization",
+      "description": "Extra hours approval for Zelda project deadline",
+      "requestType": "Overtime",
+      "requesterId": "link",
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "status": "Pending",
+      "priority": "High",
+      "amount": 15000,
+      "createdAt": "2025-01-22T14:00:00.000Z"
+    },
+    {
+      "requestId": "APR-0004",
+      "title": "Marketing Campaign Approval",
+      "description": "Q1 2025 marketing campaign for new game releases",
+      "requestType": "Marketing",
+      "requesterId": "peach",
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "status": "Pending",
+      "priority": "Medium",
+      "amount": 75000,
+      "createdAt": "2025-01-23T16:00:00.000Z"
+    },
+    {
+      "requestId": "APR-0005",
+      "title": "Security Upgrade Approval",
+      "description": "Castle security system modernization",
+      "requestType": "Security",
+      "requesterId": "bowser",
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "status": "Pending",
+      "priority": "High",
+      "amount": 120000,
+      "createdAt": "2025-01-24T09:00:00.000Z"
     }
   ],
   "jobApplications": [
@@ -2215,6 +2363,7 @@
       "reason": "Star exploration mission",
       "status": "Pending",
       "year": 2025,
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
       "createdAt": "2025-01-15T08:00:00.000Z"
     },
     {
@@ -2227,7 +2376,34 @@
       "reason": "Power suit upgrade",
       "status": "Pending",
       "year": 2025,
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
       "createdAt": "2025-02-05T08:00:00.000Z"
+    },
+    {
+      "requestId": "LR-0014",
+      "employeeId": "steve",
+      "leaveType": "annual",
+      "fromDate": "2025-02-15",
+      "toDate": "2025-02-17",
+      "numberOfDays": 3,
+      "reason": "Mining expedition in the Nether",
+      "status": "Pending",
+      "year": 2025,
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "createdAt": "2025-01-22T08:00:00.000Z"
+    },
+    {
+      "requestId": "LR-0015",
+      "employeeId": "pyra",
+      "leaveType": "medical",
+      "fromDate": "2025-02-20",
+      "toDate": "2025-02-21",
+      "numberOfDays": 2,
+      "reason": "Core crystal maintenance",
+      "status": "Pending",
+      "year": 2025,
+      "approverClerkId": "user_2xUKJYXfOYM8AGCxLc9jAxBQbIB",
+      "createdAt": "2025-01-23T08:00:00.000Z"
     },
     {
       "requestId": "LR-0013",

@@ -1319,58 +1319,36 @@ export const getPendingItems = async (companyId, userId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    // Check if collections exist before trying to access them
-    let pendingApprovals = 0;
-    let pendingLeaveRequests = 0;
+    // Count pending approvals
+    const pendingApprovals = await collections.approvals.countDocuments({
+      approverClerkId: userId,
+      status: "Pending",
+      isDeleted: { $ne: true },
+    });
 
-    // Try to get pending approvals from existing collections
-    try {
-      if (collections.approvals) {
-        pendingApprovals = await collections.approvals.countDocuments({
-          approverClerkId: userId,
-          status: "Pending",
-        });
-      }
-    } catch (approvalError) {
-      console.log("Approvals collection not found, using default value");
-      pendingApprovals = 0;
-    }
+    // Count pending leave requests
+    const pendingLeaveRequests = await collections.leaves.countDocuments({
+      approverClerkId: userId,
+      status: "Pending",
+      isDeleted: { $ne: true },
+    });
 
-    // Try to get pending leave requests from existing collections
-    try {
-      if (collections.leaveRequests) {
-        pendingLeaveRequests = await collections.leaveRequests.countDocuments({
-          approverClerkId: userId,
-          status: "Pending",
-        });
-      } else if (collections.leaves) {
-        // Try alternative collection name
-        pendingLeaveRequests = await collections.leaves.countDocuments({
-          approverClerkId: userId,
-          status: "Pending",
-        });
-      }
-    } catch (leaveError) {
-      console.log("Leave requests collection not found, using default value");
-      pendingLeaveRequests = 0;
-    }
+    console.log(
+      `[PENDING ITEMS] Found ${pendingApprovals} approvals and ${pendingLeaveRequests} leave requests for user ${userId}`
+    );
 
     return {
       done: true,
       data: {
-        approvals: pendingApprovals || 0,
-        leaveRequests: pendingLeaveRequests || 0,
+        approvals: pendingApprovals,
+        leaveRequests: pendingLeaveRequests,
       },
     };
   } catch (error) {
     console.error("Error fetching pending items:", error);
-    // Return default values instead of throwing error
     return {
-      done: true,
-      data: {
-        approvals: 0,
-        leaveRequests: 0,
-      },
+      done: false,
+      error: error.message,
     };
   }
 };
