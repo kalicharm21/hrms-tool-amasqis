@@ -87,9 +87,44 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
         // Success - close modal and reset form
         const modal = document.getElementById('add_leaves');
         if (modal) {
-          const bootstrapModal = (window as any).bootstrap.Modal.getInstance(modal);
-          if (bootstrapModal) {
-            bootstrapModal.hide();
+          try {
+            const bootstrap = (window as any).bootstrap;
+            if (bootstrap && bootstrap.Modal) {
+              const modalInstance = bootstrap.Modal.getInstance(modal);
+              if (modalInstance) {
+                modalInstance.hide();
+              } else {
+                // If no instance exists, create one and hide it
+                const newModalInstance = new bootstrap.Modal(modal);
+                newModalInstance.hide();
+              }
+            } else {
+              throw new Error('Bootstrap not available');
+            }
+          } catch (error) {
+            console.warn('Bootstrap Modal API not available, using fallback method');
+            // Fallback: manually trigger the modal close
+            const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+            if (closeButton) {
+              closeButton.click();
+            } else {
+              // Manual modal close
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+              modal.setAttribute('aria-hidden', 'true');
+              modal.removeAttribute('aria-modal');
+
+              // Remove backdrop
+              const backdrop = document.querySelector('.modal-backdrop');
+              if (backdrop) {
+                backdrop.remove();
+              }
+
+              // Restore body
+              document.body.classList.remove('modal-open');
+              document.body.style.overflow = '';
+              document.body.style.paddingRight = '';
+            }
           }
         }
         resetForm();
@@ -163,7 +198,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!socket) {
       alert("No connection available. Please refresh the page.");
       return;
@@ -175,7 +210,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
     }
 
     setSubmitting(true);
-    
+
     const requestData = {
       ...formData,
       days: calculateDays(formData.fromDate, formData.toDate)
@@ -199,10 +234,39 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
     setCalculatedDays(0);
   };
 
+  const loadModalData = () => {
+    if (!socket) return;
+    setLoading(true);
+    socket.emit("admin/leave/get-modal-data");
+  };
+
   const getModalContainer = () => {
     const modalElement = document.getElementById('add_leaves');
     return modalElement ? modalElement : document.body;
   };
+
+  // Handle modal events
+  useEffect(() => {
+    const modalElement = document.getElementById('add_leaves');
+    if (modalElement) {
+      const handleModalShow = () => {
+        loadModalData();
+      };
+
+      const handleModalHide = () => {
+        resetForm();
+      };
+
+      modalElement.addEventListener('show.bs.modal', handleModalShow);
+      modalElement.addEventListener('hide.bs.modal', handleModalHide);
+
+      return () => {
+        modalElement.removeEventListener('show.bs.modal', handleModalShow);
+        modalElement.removeEventListener('hide.bs.modal', handleModalHide);
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   return (
     <>

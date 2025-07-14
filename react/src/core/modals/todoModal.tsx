@@ -137,18 +137,42 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
 
           const modal = document.getElementById('add_todo');
           if (modal) {
-            const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modal);
-            if (bootstrapModal) {
-              bootstrapModal.hide();
-            } else {
-              modal.style.display = 'none';
-              modal.setAttribute('aria-hidden', 'true');
-              modal.classList.remove('show');
-              const backdrops = document.querySelectorAll('.modal-backdrop');
-              backdrops.forEach(backdrop => backdrop.remove());
-              document.body.classList.remove('modal-open');
-              document.body.style.overflow = '';
-              document.body.style.paddingRight = '';
+            try {
+              const bootstrap = (window as any).bootstrap;
+              if (bootstrap && bootstrap.Modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                  modalInstance.hide();
+                } else {
+                  // If no instance exists, create one and hide it
+                  const newModalInstance = new bootstrap.Modal(modal);
+                  newModalInstance.hide();
+                }
+              } else {
+                throw new Error('Bootstrap not available');
+              }
+            } catch (error) {
+              console.warn('Bootstrap Modal API not available, using fallback method');
+              // Fallback: manually trigger the modal close
+              const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+              if (closeButton) {
+                closeButton.click();
+              } else {
+                // Manual modal close
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+                modal.classList.remove('show');
+                modal.removeAttribute('aria-modal');
+
+                // Remove backdrop
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+
+                // Restore body
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+              }
             }
           }
 

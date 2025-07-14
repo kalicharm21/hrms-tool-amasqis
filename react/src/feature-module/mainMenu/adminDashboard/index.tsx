@@ -3193,17 +3193,22 @@ const AdminDashboard = () => {
       </div>
       {/* /Page Wrapper */}
 
-      <ProjectModals />
-      <RequestModals onLeaveRequestCreated={() => {
-        // Refresh dashboard data when a leave request is created
+      <ProjectModals onProjectCreated={() => {
         if (socket) {
-          socket.emit("admin/dashboard/get-all-data");
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+        }
+      }} />
+      <RequestModals onLeaveRequestCreated={() => {
+        if (socket) {
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
         }
       }} />
       <TodoModal onTodoAdded={() => {
-        // Refresh all dashboard data when a new todo is added
         if (socket) {
-          socket.emit("admin/dashboard/get-all-data");
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
         }
       }} />
     </>
