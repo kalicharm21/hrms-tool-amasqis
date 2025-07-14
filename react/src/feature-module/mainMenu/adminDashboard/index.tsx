@@ -163,17 +163,18 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState(new Date());
-  const [todoFilter, setTodoFilter] = useState('today');
+  const [todoFilter, setTodoFilter] = useState('all');
 
   // Filter states for different cards
   const [filters, setFilters] = useState({
-    employeeStatus: 'week',
-    attendanceOverview: 'today',
-    clockInOut: 'today',
-    invoices: 'week',
-    projects: 'week',
-    taskStatistics: 'week',
-    salesOverview: 'week'
+    employeeStatus: 'all',
+    attendanceOverview: 'all',
+    clockInOut: 'all',
+    invoices: 'all',
+    projects: 'all',
+    taskStatistics: 'all',
+    salesOverview: 'all',
+    employeesByDepartment: 'all'
   });
 
   // Additional filter states for departments and invoice types
@@ -271,7 +272,9 @@ const AdminDashboard = () => {
         currentSocket.on("connect", () => {
           console.log("Connected to admin dashboard");
           console.log("Requesting dashboard data...");
-          currentSocket.emit("admin/dashboard/get-all-data");
+          const currentYear = date.getFullYear();
+          console.log(`[INITIAL LOAD] Sending year: ${currentYear}`);
+          currentSocket.emit("admin/dashboard/get-all-data", { year: currentYear });
         });
 
         currentSocket.on("admin/dashboard/get-all-data-response", (response: any) => {
@@ -387,6 +390,16 @@ const AdminDashboard = () => {
           }
         });
 
+        currentSocket.on("admin/dashboard/get-employees-by-department-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              employeesByDepartment: response.data
+            }));
+          }
+        });
+
         currentSocket.on("connect_error", (err: any) => {
           console.error("Socket connection error:", err);
           clearTimeout(timeoutId);
@@ -435,8 +448,8 @@ const AdminDashboard = () => {
       type: 'bar' as const,
       padding: {
         top: 0,
-        left: 0,
-        right: 0,
+        left: 10,
+        right: 10,
         bottom: 0
       },
       toolbar: {
@@ -453,8 +466,8 @@ const AdminDashboard = () => {
       strokeDashArray: 5,
       padding: {
         top: -20,
-        left: 0,
-        right: 0,
+        left: 20,
+        right: 20,
         bottom: 0
       }
     },
@@ -462,23 +475,62 @@ const AdminDashboard = () => {
       bar: {
         borderRadius: 5,
         horizontal: true,
-        barHeight: '35%',
+        barHeight: '45%',
         endingShape: 'rounded'
       }
     },
     dataLabels: {
-      enabled: false
+      enabled: true,
+      style: {
+        fontSize: '12px',
+        fontWeight: 'bold',
+        colors: ['#fff']
+      },
+      offsetX: 10
     },
     series: [{
-      data: dashboardData.employeesByDepartment?.map(dept => dept.count) || [],
-      name: 'Employee'
+      data: dashboardData.employeesByDepartment?.map(dept => ({
+        x: dept.department,
+        y: dept.count
+      })) || [],
+      name: 'Employees'
     }],
     xaxis: {
-      categories: dashboardData.employeesByDepartment?.map(dept => dept.department) || [],
       labels: {
         style: {
           colors: '#111827',
-          fontSize: '13px',
+          fontSize: '12px',
+        }
+      },
+      axisBorder: {
+        show: true,
+        color: '#E5E7EB'
+      },
+      axisTicks: {
+        show: true,
+        color: '#E5E7EB'
+      },
+      min: 0,
+      max: (() => {
+        const maxValue = Math.max(...(dashboardData.employeesByDepartment?.map(dept => dept.count) || [0]));
+        return maxValue > 0 ? Math.ceil(maxValue * 1.2) : 10;
+      })(),
+      tickAmount: 5,
+      forceNiceScale: true
+    },
+    yaxis: {
+      labels: {
+        style: {
+          colors: '#6B7280',
+          fontSize: '12px',
+        }
+      }
+    },
+    tooltip: {
+      enabled: true,
+      y: {
+        formatter: function (val: number) {
+          return val + " employees";
         }
       }
     }
@@ -734,6 +786,9 @@ const AdminDashboard = () => {
           break;
         case 'salesOverview':
           socket.emit("admin/dashboard/get-sales-overview", eventData);
+          break;
+        case 'employeesByDepartment':
+          socket.emit("admin/dashboard/get-employees-by-department", eventData);
           break;
       }
     }
@@ -1241,28 +1296,65 @@ const AdminDashboard = () => {
                       data-bs-toggle="dropdown"
                     >
                       <i className="ti ti-calendar me-1" />
-                      This Week
+                      {filters.employeesByDepartment === 'today' ? 'Today' :
+                        filters.employeesByDepartment === 'week' ? 'This Week' :
+                        filters.employeesByDepartment === 'month' ? 'This Month' :
+                        filters.employeesByDepartment === 'year' ? 'This Year' : 'All Time'}
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'all' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'all');
+                          }}
+                        >
+                          All Time
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="#"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'year' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'year');
+                          }}
+                        >
+                          This Year
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="#"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'month' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'month');
+                          }}
                         >
                           This Month
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'week' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'week');
+                          }}
                         >
                           This Week
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'today' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'today');
+                          }}
                         >
-                          Last Week
+                          Today
                         </Link>
                       </li>
                     </ul>
@@ -1282,7 +1374,10 @@ const AdminDashboard = () => {
                     <span className={`fw-bold ${dashboardData.employeeGrowth?.trend === 'up' ? 'text-success' : dashboardData.employeeGrowth?.trend === 'down' ? 'text-danger' : 'text-secondary'}`}>
                       {dashboardData.employeeGrowth?.trend === 'up' ? '+' : dashboardData.employeeGrowth?.trend === 'down' ? '-' : ''}
                       {Math.abs(dashboardData.employeeGrowth?.percentage || 0)}%
-                    </span> from last Week
+                    </span> from last {filters.employeesByDepartment === 'today' ? 'Day' : 
+                      filters.employeesByDepartment === 'week' ? 'Week' : 
+                      filters.employeesByDepartment === 'month' ? 'Month' : 
+                      filters.employeesByDepartment === 'year' ? 'Year' : 'Period'}
                   </p>
                 </div>
               </div>
