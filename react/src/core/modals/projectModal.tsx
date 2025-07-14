@@ -4,8 +4,8 @@ import CommonSelect from "../common/commonSelect";
 import { DatePicker, TimePicker } from "antd";
 import CommonTextEditor from "../common/textEditor";
 import CommonTagsInput from "../common/Taginput";
-import { useAuth } from "@clerk/clerk-react";
-import io from "socket.io-client";
+import { useSocket } from "../../SocketContext";
+import { Socket } from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 
 interface ProjectModalData {
@@ -36,8 +36,7 @@ interface ProjectFormData {
 }
 
 const ProjectModals = () => {
-  const { getToken } = useAuth();
-  const [socket, setSocket] = useState<any>(null);
+  const socket = useSocket() as Socket | null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -156,96 +155,73 @@ const ProjectModals = () => {
     }
   };
 
-  // Initialize socket connection
   useEffect(() => {
-    const initSocket = async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
+    if (!socket) return;
 
-        const newSocket = io("http://localhost:5000", {
-          auth: { token },
-          timeout: 20000,
-        });
-
-        newSocket.on("connect", () => {
-          console.log("Connected to project modal socket");
-        });
-
-        newSocket.on("admin/project/get-modal-data-response", (response) => {
-          if (response.done) {
-            setModalData(response.data);
-          } else {
-            setError(response.error || "Failed to load project data");
-          }
-          setLoading(false);
-        });
-
-        newSocket.on("admin/project/add-response", (response) => {
-          if (response.done) {
-            // Reset form
-            setFormData({
-              name: "",
-              clientId: "",
-              startDate: "",
-              endDate: "",
-              priority: "",
-              projectValue: "",
-              totalWorkingHours: "",
-              extraTime: "",
-              description: "",
-              teamMembers: [],
-              teamLeader: [],
-              projectManager: [],
-              status: "Active",
-              tags: [],
-            });
-            setCurrentStep(1);
-            setLogo(null);
-            removeLogo();
-            // Close modal
-            const modal = document.getElementById('add_project') as any;
-            if (modal) {
-              const bootstrap = (window as any).bootstrap;
-              const modalInstance = bootstrap.Modal.getInstance(modal);
-              if (modalInstance) {
-                modalInstance.hide();
-              }
-            }
-            toast.success("Project created successfully!", {
-              position: "top-right",
-              autoClose: 3000,
-              hideProgressBar: true,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
-            });
-          } else {
-            setError(response.error || "Failed to create project");
-          }
-          setIsSubmitting(false);
-        });
-
-        newSocket.on("connect_error", (err) => {
-          console.error("Socket connection error:", err);
-          setError("Failed to connect to server");
-          setLoading(false);
-        });
-
-        setSocket(newSocket);
-
-        return () => {
-          newSocket.disconnect();
-        };
-      } catch (err) {
-        console.error("Failed to initialize socket:", err);
-        setError("Failed to initialize connection");
-        setLoading(false);
+    const handleModalDataResponse = (response: any) => {
+      if (response.done) {
+        setModalData(response.data);
+      } else {
+        setError(response.error || "Failed to load project data");
       }
+      setLoading(false);
     };
 
-    initSocket();
-  }, [getToken]);
+    const handleAddProjectResponse = (response: any) => {
+      if (response.done) {
+        setFormData({
+          name: "",
+          clientId: "",
+          startDate: "",
+          endDate: "",
+          priority: "",
+          projectValue: "",
+          totalWorkingHours: "",
+          extraTime: "",
+          description: "",
+          teamMembers: [],
+          teamLeader: [],
+          projectManager: [],
+          status: "Active",
+          tags: [],
+        });
+        setCurrentStep(1);
+        setLogo(null);
+        removeLogo();
+
+        const modal = document.getElementById('add_project') as any;
+        if (modal) {
+          const bootstrap = (window as any).bootstrap;
+          const modalInstance = bootstrap.Modal.getInstance(modal);
+          if (modalInstance) {
+            modalInstance.hide();
+          }
+        }
+        toast.success("Project created successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: true,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } else {
+        setError(response.error || "Failed to create project");
+      }
+      setIsSubmitting(false);
+    };
+
+    socket.on("admin/project/get-modal-data-response", handleModalDataResponse);
+    socket.on("admin/project/add-response", handleAddProjectResponse);
+
+    // Cleanup event listeners when component unmounts or socket changes
+    return () => {
+      if (socket) {
+        socket.off("admin/project/get-modal-data-response", handleModalDataResponse);
+        socket.off("admin/project/add-response", handleAddProjectResponse);
+      }
+    };
+  }, [socket]);
 
   // Load modal data when modal opens
   const handleModalOpen = () => {

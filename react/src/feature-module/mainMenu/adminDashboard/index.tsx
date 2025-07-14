@@ -11,8 +11,9 @@ import ProjectModals from "../../../core/modals/projectModal";
 import RequestModals from "../../../core/modals/requestModal";
 import TodoModal from "../../../core/modals/todoModal";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useAuth, useUser } from "@clerk/clerk-react";
-import io from "socket.io-client";
+import { useUser } from "@clerk/clerk-react";
+import { useSocket } from "../../../SocketContext";
+import { Socket } from "socket.io-client";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 
@@ -158,9 +159,8 @@ interface DashboardData {
 
 const AdminDashboard = () => {
   const routes = all_routes;
-  const { getToken } = useAuth();
   const { user, isLoaded, isSignedIn } = useUser();
-  const [socket, setSocket] = useState<any>(null);
+  const socket = useSocket() as Socket | null;
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -248,200 +248,193 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     let isMounted = true;
-    let currentSocket: any = null;
 
-    const initSocket = async () => {
-      try {
-        console.log("Initializing socket connection...");
-        const token = await getToken();
-        console.log("Token obtained, creating socket...");
+    const initDashboard = () => {
+      if (!socket) {
+        console.log("Socket not available yet, waiting...");
+        return;
+      }
 
+      console.log("Socket available, initializing dashboard...");
+      setLoading(true);
+
+      const timeoutId = setTimeout(() => {
+        if (loading && isMounted) {
+          console.warn("Dashboard loading timeout - showing fallback");
+          setError("Dashboard loading timed out. Please refresh the page.");
+          setLoading(false);
+        }
+      }, 30000); // 30 second timeout
+
+      const currentYear = date.getFullYear();
+      console.log(`[INITIAL LOAD] Sending year: ${currentYear}`);
+      socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+
+      // Set up event listeners
+      const handleDashboardResponse = (response: any) => {
+        console.log("Received dashboard data response:", response);
+        clearTimeout(timeoutId);
         if (!isMounted) return;
 
-        currentSocket = io("http://localhost:5000", {
-          auth: { token },
-          timeout: 20000, // 20 second timeout
-        });
-
-        const timeoutId = setTimeout(() => {
-          if (loading && isMounted) {
-            console.warn("Dashboard loading timeout - showing fallback");
-            setError("Dashboard loading timed out. Please refresh the page.");
-            setLoading(false);
-          }
-        }, 30000); // 30 second timeout
-
-        currentSocket.on("connect", () => {
-          console.log("Connected to admin dashboard");
-          console.log("Requesting dashboard data...");
-          const currentYear = date.getFullYear();
-          console.log(`[INITIAL LOAD] Sending year: ${currentYear}`);
-          currentSocket.emit("admin/dashboard/get-all-data", { year: currentYear });
-        });
-
-        currentSocket.on("admin/dashboard/get-all-data-response", (response: any) => {
-          console.log("Received dashboard data response:", response);
-          clearTimeout(timeoutId);
-          if (!isMounted) return;
-
-          if (response.done) {
-            console.log("Dashboard data loaded successfully");
-            setDashboardData(response.data);
-            setLoading(false);
-          } else {
-            console.error("Dashboard data error:", response.error);
-            setError(response.error || "Failed to fetch dashboard data");
-            setLoading(false);
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-todos-response", (response: any) => {
-          console.log(`[TODO BROADCAST] Received todos broadcast:`, response);
-          if (!isMounted) return;
-
-          if (response.done) {
-            // Don't filter here - just update the todos directly from server
-            console.log(`[TODO BROADCAST] Setting todos:`, response.data);
-            setDashboardData(prev => ({
-              ...prev,
-              todos: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/update-todo-response", (response: any) => {
-          if (!isMounted) return;
-
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              todos: prev.todos?.map(todo =>
-                todo._id === response.data._id ? response.data : todo
-              )
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-employee-status-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              employeeStatus: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-attendance-overview-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              attendanceOverview: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-clock-inout-data-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              clockInOutData: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-recent-invoices-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              recentInvoices: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-projects-data-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              projectsData: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-task-statistics-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              taskStatistics: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-sales-overview-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              salesOverview: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-employees-by-department-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              employeesByDepartment: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("connect_error", (err: any) => {
-          console.error("Socket connection error:", err);
-          clearTimeout(timeoutId);
-          if (!isMounted) return;
-
-          setError("Failed to connect to server");
+        if (response.done) {
+          console.log("Dashboard data loaded successfully");
+          setDashboardData(response.data);
           setLoading(false);
-        });
-
-        currentSocket.on("disconnect", (reason: any) => {
-          console.log("Socket disconnected:", reason);
-          clearTimeout(timeoutId);
-        });
-
-        if (isMounted) {
-          setSocket(currentSocket);
-        }
-      } catch (err) {
-        console.error("Failed to initialize socket:", err);
-        if (isMounted) {
-          setError("Failed to authenticate");
+        } else {
+          console.error("Dashboard data error:", response.error);
+          setError(response.error || "Failed to fetch dashboard data");
           setLoading(false);
         }
-      }
+      };
+
+      const handleTodosResponse = (response: any) => {
+        console.log(`[TODO BROADCAST] Received todos broadcast:`, response);
+        if (!isMounted) return;
+
+        if (response.done) {
+          console.log(`[TODO BROADCAST] Setting todos:`, response.data);
+          setDashboardData(prev => ({
+            ...prev,
+            todos: response.data
+          }));
+        }
+      };
+
+      const handleUpdateTodoResponse = (response: any) => {
+        if (!isMounted) return;
+
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            todos: prev.todos?.map(todo =>
+              todo._id === response.data._id ? response.data : todo
+            )
+          }));
+        }
+      };
+
+      const handleEmployeeStatusResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            employeeStatus: response.data
+          }));
+        }
+      };
+
+      const handleAttendanceOverviewResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            attendanceOverview: response.data
+          }));
+        }
+      };
+
+      const handleClockInOutResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            clockInOutData: response.data
+          }));
+        }
+      };
+
+      const handleRecentInvoicesResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            recentInvoices: response.data
+          }));
+        }
+      };
+
+      const handleProjectsDataResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            projectsData: response.data
+          }));
+        }
+      };
+
+      const handleTaskStatisticsResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            taskStatistics: response.data
+          }));
+        }
+      };
+
+      const handleSalesOverviewResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            salesOverview: response.data
+          }));
+        }
+      };
+
+      const handleEmployeesByDepartmentResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            employeesByDepartment: response.data
+          }));
+        }
+      };
+
+      // Add all event listeners
+      socket.on("admin/dashboard/get-all-data-response", handleDashboardResponse);
+      socket.on("admin/dashboard/get-todos-response", handleTodosResponse);
+      socket.on("admin/dashboard/update-todo-response", handleUpdateTodoResponse);
+      socket.on("admin/dashboard/get-employee-status-response", handleEmployeeStatusResponse);
+      socket.on("admin/dashboard/get-attendance-overview-response", handleAttendanceOverviewResponse);
+      socket.on("admin/dashboard/get-clock-inout-data-response", handleClockInOutResponse);
+      socket.on("admin/dashboard/get-recent-invoices-response", handleRecentInvoicesResponse);
+      socket.on("admin/dashboard/get-projects-data-response", handleProjectsDataResponse);
+      socket.on("admin/dashboard/get-task-statistics-response", handleTaskStatisticsResponse);
+      socket.on("admin/dashboard/get-sales-overview-response", handleSalesOverviewResponse);
+      socket.on("admin/dashboard/get-employees-by-department-response", handleEmployeesByDepartmentResponse);
+
+      // Cleanup function
+      return () => {
+        clearTimeout(timeoutId);
+        if (socket) {
+          socket.off("admin/dashboard/get-all-data-response", handleDashboardResponse);
+          socket.off("admin/dashboard/get-todos-response", handleTodosResponse);
+          socket.off("admin/dashboard/update-todo-response", handleUpdateTodoResponse);
+          socket.off("admin/dashboard/get-employee-status-response", handleEmployeeStatusResponse);
+          socket.off("admin/dashboard/get-attendance-overview-response", handleAttendanceOverviewResponse);
+          socket.off("admin/dashboard/get-clock-inout-data-response", handleClockInOutResponse);
+          socket.off("admin/dashboard/get-recent-invoices-response", handleRecentInvoicesResponse);
+          socket.off("admin/dashboard/get-projects-data-response", handleProjectsDataResponse);
+          socket.off("admin/dashboard/get-task-statistics-response", handleTaskStatisticsResponse);
+          socket.off("admin/dashboard/get-sales-overview-response", handleSalesOverviewResponse);
+          socket.off("admin/dashboard/get-employees-by-department-response", handleEmployeesByDepartmentResponse);
+        }
+      };
     };
 
-    if (!socket) {
-      initSocket();
+    if (socket) {
+      const cleanup = initDashboard();
+      return cleanup;
     }
 
     return () => {
       isMounted = false;
-      if (currentSocket) {
-        console.log("Cleaning up socket connection...");
-        currentSocket.removeAllListeners();
-        currentSocket.disconnect();
-      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [socket, date]);
 
   // Chart configurations
   const empDepartmentOptions = {
@@ -3201,13 +3194,13 @@ const AdminDashboard = () => {
       {/* /Page Wrapper */}
 
       <ProjectModals />
-      <RequestModals socket={socket} onLeaveRequestCreated={() => {
+      <RequestModals onLeaveRequestCreated={() => {
         // Refresh dashboard data when a leave request is created
         if (socket) {
           socket.emit("admin/dashboard/get-all-data");
         }
       }} />
-      <TodoModal socket={socket} onTodoAdded={() => {
+      <TodoModal onTodoAdded={() => {
         // Refresh all dashboard data when a new todo is added
         if (socket) {
           socket.emit("admin/dashboard/get-all-data");
