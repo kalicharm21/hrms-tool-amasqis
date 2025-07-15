@@ -31,6 +31,7 @@ export const getTenantCollections = (tenantDbName) => {
     // Existing collections
     stats: db.collection("stats"),
     companies: db.collection("companies"),
+    details: db.collection("details"),     // for company details
 
     // Admin dashboard collections
     employees: db.collection("employees"),
@@ -51,9 +52,9 @@ export const getTenantCollections = (tenantDbName) => {
     
     // employee dashboard collection 
     skills: db.collection("skills"),
+    salaryHistory: db.collection("salaryHistory"),
     meetings: db.collection("meetings"),
     notifications: db.collection('notifications'),
-    productivityRecords: db.collection("productivityRecords"),
   };
 };
 

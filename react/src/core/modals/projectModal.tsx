@@ -165,7 +165,7 @@ const ProjectModals = () => {
   const removeLogo = () => {
     setLogo(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";+
+      fileInputRef.current.value = "";
     }
   };
 
