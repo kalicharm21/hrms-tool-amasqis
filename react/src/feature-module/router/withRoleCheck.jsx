@@ -7,11 +7,9 @@ const routes = all_routes;
 export const withRoleCheck = (Component, allowedRoles) => {
   return function WrappedComponent(props) {
     const { isLoaded, user } = useUser();
-
     if (!isLoaded) {
       return <p>Loading...</p>;
     }
-
     const userRole = user?.publicMetadata?.role || "public"; // Default to "public" if no role is found // changge it in production
     console.log("User Role:", userRole);
     return <Component {...props} />;
