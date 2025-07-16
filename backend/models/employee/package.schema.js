@@ -71,9 +71,6 @@ const AttendanceSchema = new Schema({
 
 export const attendance = mongoose.model("attendance", AttendanceSchema);
 
-import mongoose from 'mongoose';
-const { Schema, Types } = mongoose;
-
 const salaryHistorySchema = new Schema({
   empId: { type: Types.ObjectId, ref: 'employees', required: true },
   salary: { type: Number, required: true },
@@ -84,3 +81,5 @@ const salaryHistorySchema = new Schema({
   });
 
 export const SalaryHistory = mongoose.model('salaryHistory', salaryHistorySchema);
+
+// leaves
