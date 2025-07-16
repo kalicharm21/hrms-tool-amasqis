@@ -61,17 +61,20 @@ export const getDashboardStats = async (companyId, year = null) => {
     const collections = getTenantCollections(companyId);
     const yearFilter = getYearFilter(year);
 
-    const buildMatchCondition = (baseCondition = {}) => {
+    const buildMatchCondition = (
+      baseCondition = {},
+      dateField = "createdAt"
+    ) => {
       if (yearFilter) {
-        const dateFieldName = baseCondition.createdAt ? "createdAt" : "date";
         return {
           ...baseCondition,
-          [dateFieldName]: yearFilter,
+          [dateField]: yearFilter,
         };
       }
       return baseCondition;
     };
 
+    // Get current period data
     const [
       attendanceStats,
       projectStats,
@@ -85,13 +88,19 @@ export const getDashboardStats = async (companyId, year = null) => {
         .aggregate([
           {
             $facet: {
-              total: [{ $match: buildMatchCondition() }, { $count: "count" }],
+              total: [
+                { $match: buildMatchCondition({}, "date") },
+                { $count: "count" },
+              ],
               present: [
                 {
-                  $match: buildMatchCondition({
-                    status: "Present",
-                    date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-                  }),
+                  $match: buildMatchCondition(
+                    {
+                      status: "Present",
+                      date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+                    },
+                    "date"
+                  ),
                 },
                 { $count: "count" },
               ],
@@ -138,7 +147,7 @@ export const getDashboardStats = async (companyId, year = null) => {
       // Earnings stats
       collections.earnings
         .aggregate([
-          { $match: buildMatchCondition() },
+          { $match: buildMatchCondition({}, "date") },
           {
             $group: {
               _id: null,
@@ -170,10 +179,94 @@ export const getDashboardStats = async (companyId, year = null) => {
       ),
     ]);
 
+    // Get previous period data for growth calculation
+    const currentYear = year || new Date().getFullYear();
+    const previousYear = currentYear - 1;
+    const previousYearFilter = getYearFilter(previousYear);
+
+    const buildPreviousMatchCondition = (
+      baseCondition = {},
+      dateField = "createdAt"
+    ) => {
+      if (previousYearFilter) {
+        return {
+          ...baseCondition,
+          [dateField]: previousYearFilter,
+        };
+      }
+      return baseCondition;
+    };
+
+    const [
+      prevProjectStats,
+      prevClientStats,
+      prevTaskStats,
+      prevEarningsStats,
+      prevEmployeeStats,
+      prevJobApplicationStats,
+    ] = await Promise.all([
+      collections.projects.countDocuments(buildPreviousMatchCondition()),
+      collections.clients.countDocuments(
+        buildPreviousMatchCondition({ status: "Active" })
+      ),
+      collections.tasks.countDocuments(buildPreviousMatchCondition()),
+      collections.earnings
+        .aggregate([
+          { $match: buildPreviousMatchCondition({}, "date") },
+          {
+            $group: {
+              _id: null,
+              totalEarnings: { $sum: "$amount" },
+              weeklyProfit: { $sum: "$profit" },
+            },
+          },
+        ])
+        .toArray(),
+      collections.employees.countDocuments(
+        buildPreviousMatchCondition({ status: "Active" })
+      ),
+      collections.jobApplications.countDocuments(
+        buildPreviousMatchCondition({ status: "Active" })
+      ),
+    ]);
+
+    // Calculate growth percentages
+    const calculateGrowth = (current, previous) => {
+      if (!previous || previous === 0) {
+        // Handle edge case: if previous was 0 but now we have data
+        if (current > 0) {
+          // Cap the growth at reasonable percentage to avoid infinity
+          return current >= 100
+            ? 100
+            : current >= 50
+            ? 50
+            : current >= 10
+            ? 25
+            : 10;
+        }
+        return 0;
+      }
+      const growth = Math.round(((current - previous) / previous) * 100);
+      // Cap extreme growth percentages for better display
+      return Math.max(-99, Math.min(999, growth));
+    };
+
     const attendance = attendanceStats[0];
     const projects = projectStats[0];
     const tasks = taskStats[0];
     const earnings = earningsStats[0] || { totalEarnings: 0, weeklyProfit: 0 };
+    const prevEarnings = prevEarningsStats[0] || {
+      totalEarnings: 0,
+      weeklyProfit: 0,
+    };
+
+    const currentProjectCount = projects.total[0]?.count || 0;
+    const currentClientCount = clientStats || 0;
+    const currentTaskCount = tasks.total[0]?.count || 0;
+    const currentEarnings = earnings.totalEarnings || 0;
+    const currentWeeklyProfit = earnings.weeklyProfit || 0;
+    const currentEmployeeCount = employeeStats || 0;
+    const currentJobAppCount = jobApplicationStats || 0;
 
     return {
       done: true,
@@ -190,25 +283,43 @@ export const getDashboardStats = async (companyId, year = null) => {
             : 0,
         },
         projects: {
-          total: projects.total[0]?.count || 0,
+          total: currentProjectCount,
           completed: projects.completed[0]?.count || 0,
-          percentage: projects.total[0]?.count
+          percentage: currentProjectCount
             ? Math.round(
-                ((projects.completed[0]?.count || 0) /
-                  projects.total[0].count) *
+                ((projects.completed[0]?.count || 0) / currentProjectCount) *
                   100
               )
             : 0,
         },
-        clients: clientStats || 0,
+        clients: currentClientCount,
         tasks: {
-          total: tasks.total[0]?.count || 0,
+          total: currentTaskCount,
           completed: tasks.completed[0]?.count || 0,
         },
-        earnings: earnings.totalEarnings || 0,
-        weeklyProfit: earnings.weeklyProfit || 0,
-        employees: employeeStats || 0,
-        jobApplications: jobApplicationStats || 0,
+        earnings: currentEarnings,
+        weeklyProfit: currentWeeklyProfit,
+        employees: currentEmployeeCount,
+        jobApplications: currentJobAppCount,
+        // Growth percentages
+        clientsGrowth: calculateGrowth(currentClientCount, prevClientStats),
+        tasksGrowth: calculateGrowth(currentTaskCount, prevTaskStats),
+        earningsGrowth: calculateGrowth(
+          currentEarnings,
+          prevEarnings.totalEarnings
+        ),
+        profitGrowth: calculateGrowth(
+          currentWeeklyProfit,
+          prevEarnings.weeklyProfit
+        ),
+        applicationsGrowth: calculateGrowth(
+          currentJobAppCount,
+          prevJobApplicationStats
+        ),
+        employeesGrowth: calculateGrowth(
+          currentEmployeeCount,
+          prevEmployeeStats
+        ),
       },
     };
   } catch (error) {
@@ -218,14 +329,24 @@ export const getDashboardStats = async (companyId, year = null) => {
 };
 
 // Get employees by department
-export const getEmployeesByDepartment = async (companyId, year = null) => {
+export const getEmployeesByDepartment = async (
+  companyId,
+  filter = "week",
+  year = null
+) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    // Build match condition with year filter
+    // Build match condition with date filter and year filter
     const matchCondition = { status: "Active" };
+
+    // Apply date filter based on filter parameter
+    const dateFilter = getDateFilter(filter);
     const yearFilter = getYearFilter(year);
-    if (yearFilter) {
+
+    if (dateFilter) {
+      matchCondition.createdAt = dateFilter;
+    } else if (yearFilter) {
       matchCondition.createdAt = yearFilter;
     }
 
@@ -453,13 +574,6 @@ export const getClockInOutData = async (
       clockMatchFilter.date = dateFilter;
     } else if (yearFilter) {
       clockMatchFilter.date = yearFilter;
-    } else {
-      // Default to today if no filter or 'all' is passed
-      const today = new Date();
-      clockMatchFilter.date = {
-        $gte: new Date(today.setHours(0, 0, 0, 0)),
-        $lt: new Date(today.setHours(23, 59, 59, 999)),
-      };
     }
 
     // Build the aggregation pipeline
@@ -1135,18 +1249,25 @@ export const getSchedules = async (companyId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
+    // Build match condition with year filter if provided
+    const yearFilter = getYearFilter(year);
+    let matchCondition = {};
+
+    if (yearFilter) {
+      matchCondition.createdAt = yearFilter;
+    } else {
+      // Show upcoming schedules if no year filter
+      matchCondition.date = {
+        $gte: new Date(),
+        $lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Next 7 days
+      };
+    }
+
     const schedules = await collections.schedules
       .aggregate([
-        {
-          $match: {
-            date: {
-              $gte: new Date(),
-              $lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Next 7 days
-            },
-          },
-        },
+        { $match: matchCondition },
         { $sort: { date: 1 } },
-        { $limit: 2 },
+        { $limit: 5 },
         {
           $lookup: {
             from: "employees",
@@ -1198,58 +1319,36 @@ export const getPendingItems = async (companyId, userId, year = null) => {
   try {
     const collections = getTenantCollections(companyId);
 
-    // Check if collections exist before trying to access them
-    let pendingApprovals = 0;
-    let pendingLeaveRequests = 0;
+    // Count pending approvals
+    const pendingApprovals = await collections.approvals.countDocuments({
+      approverClerkId: userId,
+      status: "Pending",
+      isDeleted: { $ne: true },
+    });
 
-    // Try to get pending approvals from existing collections
-    try {
-      if (collections.approvals) {
-        pendingApprovals = await collections.approvals.countDocuments({
-          approverClerkId: userId,
-          status: "Pending",
-        });
-      }
-    } catch (approvalError) {
-      console.log("Approvals collection not found, using default value");
-      pendingApprovals = 0;
-    }
+    // Count pending leave requests
+    const pendingLeaveRequests = await collections.leaves.countDocuments({
+      approverClerkId: userId,
+      status: "Pending",
+      isDeleted: { $ne: true },
+    });
 
-    // Try to get pending leave requests from existing collections
-    try {
-      if (collections.leaveRequests) {
-        pendingLeaveRequests = await collections.leaveRequests.countDocuments({
-          approverClerkId: userId,
-          status: "Pending",
-        });
-      } else if (collections.leaves) {
-        // Try alternative collection name
-        pendingLeaveRequests = await collections.leaves.countDocuments({
-          approverClerkId: userId,
-          status: "Pending",
-        });
-      }
-    } catch (leaveError) {
-      console.log("Leave requests collection not found, using default value");
-      pendingLeaveRequests = 0;
-    }
+    console.log(
+      `[PENDING ITEMS] Found ${pendingApprovals} approvals and ${pendingLeaveRequests} leave requests for user ${userId}`
+    );
 
     return {
       done: true,
       data: {
-        approvals: pendingApprovals || 0,
-        leaveRequests: pendingLeaveRequests || 0,
+        approvals: pendingApprovals,
+        leaveRequests: pendingLeaveRequests,
       },
     };
   } catch (error) {
     console.error("Error fetching pending items:", error);
-    // Return default values instead of throwing error
     return {
-      done: true,
-      data: {
-        approvals: 0,
-        leaveRequests: 0,
-      },
+      done: false,
+      error: error.message,
     };
   }
 };

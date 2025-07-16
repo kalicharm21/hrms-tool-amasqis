@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import CommonSelect from "../common/commonSelect";
 import { DatePicker } from "antd";
 import moment from 'moment';
+import { useSocket } from "../../SocketContext";
+import { Socket } from "socket.io-client";
 
 interface Employee {
   value: string;
@@ -30,11 +32,11 @@ interface LeaveBalance {
 }
 
 interface RequestModalsProps {
-  socket: any;
   onLeaveRequestCreated?: () => void;
 }
 
-const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCreated }) => {
+const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) => {
+  const socket = useSocket() as Socket | null;
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -51,33 +53,15 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
     fromDate: '',
     toDate: '',
     reason: '',
+    days: 0
   });
 
   const [calculatedDays, setCalculatedDays] = useState(0);
 
   useEffect(() => {
-    if (socket) {
-      loadModalData();
-      setupSocketListeners();
-    }
+    if (!socket) return;
 
-    return () => {
-      if (socket) {
-        socket.off("admin/leave/get-modal-data-response");
-        socket.off("admin/leave/get-employee-balance-response");
-        socket.off("admin/leave/create-request-response");
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket]);
-
-  const loadModalData = () => {
-    setLoading(true);
-    socket.emit("admin/leave/get-modal-data");
-  };
-
-  const setupSocketListeners = () => {
-    socket.on("admin/leave/get-modal-data-response", (response: any) => {
+    const handleModalDataResponse = (response: any) => {
       setLoading(false);
       if (response.done) {
         setEmployees(response.data.employees);
@@ -85,9 +69,9 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
       } else {
         console.error("Error loading modal data:", response.error);
       }
-    });
+    };
 
-    socket.on("admin/leave/get-employee-balance-response", (response: any) => {
+    const handleEmployeeBalanceResponse = (response: any) => {
       setLoadingBalance(false);
       if (response.done) {
         setLeaveBalance(response.data);
@@ -95,17 +79,52 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
         console.error("Error loading employee balance:", response.error);
         setLeaveBalance(null);
       }
-    });
+    };
 
-    socket.on("admin/leave/create-request-response", (response: any) => {
+    const handleCreateRequestResponse = (response: any) => {
       setSubmitting(false);
       if (response.done) {
         // Success - close modal and reset form
         const modal = document.getElementById('add_leaves');
         if (modal) {
-          const bootstrapModal = (window as any).bootstrap.Modal.getInstance(modal);
-          if (bootstrapModal) {
-            bootstrapModal.hide();
+          try {
+            const bootstrap = (window as any).bootstrap;
+            if (bootstrap && bootstrap.Modal) {
+              const modalInstance = bootstrap.Modal.getInstance(modal);
+              if (modalInstance) {
+                modalInstance.hide();
+              } else {
+                // If no instance exists, create one and hide it
+                const newModalInstance = new bootstrap.Modal(modal);
+                newModalInstance.hide();
+              }
+            } else {
+              throw new Error('Bootstrap not available');
+            }
+          } catch (error) {
+            console.warn('Bootstrap Modal API not available, using fallback method');
+            // Fallback: manually trigger the modal close
+            const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+            if (closeButton) {
+              closeButton.click();
+            } else {
+              // Manual modal close
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+              modal.setAttribute('aria-hidden', 'true');
+              modal.removeAttribute('aria-modal');
+
+              // Remove backdrop
+              const backdrop = document.querySelector('.modal-backdrop');
+              if (backdrop) {
+                backdrop.remove();
+              }
+
+              // Restore body
+              document.body.classList.remove('modal-open');
+              document.body.style.overflow = '';
+              document.body.style.paddingRight = '';
+            }
           }
         }
         resetForm();
@@ -118,8 +137,22 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
         console.error("Error creating leave request:", response.error);
         alert("Error creating leave request: " + response.error);
       }
-    });
-  };
+    };
+
+    // Add event listeners
+    socket.on("admin/leave/get-modal-data-response", handleModalDataResponse);
+    socket.on("admin/leave/get-employee-balance-response", handleEmployeeBalanceResponse);
+    socket.on("admin/leave/create-request-response", handleCreateRequestResponse);
+
+    // Cleanup event listeners
+    return () => {
+      if (socket) {
+        socket.off("admin/leave/get-modal-data-response", handleModalDataResponse);
+        socket.off("admin/leave/get-employee-balance-response", handleEmployeeBalanceResponse);
+        socket.off("admin/leave/create-request-response", handleCreateRequestResponse);
+      }
+    };
+  }, [socket, onLeaveRequestCreated]);
 
   const handleEmployeeChange = (employee: Employee) => {
     setSelectedEmployee(employee);
@@ -127,7 +160,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
     setLeaveBalance(null);
 
     // Fetch employee leave balance
-    if (employee.value) {
+    if (employee.value && socket) {
       setLoadingBalance(true);
       socket.emit("admin/leave/get-employee-balance", { employeeId: employee.value });
     }
@@ -156,35 +189,34 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
       const to = moment(toDate);
       const days = to.diff(from, 'days') + 1;
       setCalculatedDays(days > 0 ? days : 0);
+      return days;
     } else {
       setCalculatedDays(0);
+      return 0;
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    if (!formData.employeeId || !formData.leaveType || !formData.fromDate || !formData.toDate || !formData.reason.trim()) {
+    if (!socket) {
+      alert("No connection available. Please refresh the page.");
+      return;
+    }
+
+    if (!formData.employeeId || !formData.leaveType || !formData.fromDate || !formData.toDate || !formData.reason) {
       alert("Please fill in all required fields");
       return;
     }
 
-    if (calculatedDays <= 0) {
-      alert("Please select valid dates");
-      return;
-    }
-
-    if (leaveBalance && calculatedDays > leaveBalance.remainingLeaves) {
-      alert(`Cannot request ${calculatedDays} days. Only ${leaveBalance.remainingLeaves} days remaining.`);
-      return;
-    }
-
     setSubmitting(true);
-    socket.emit("admin/leave/create-request", {
+
+    const requestData = {
       ...formData,
-      numberOfDays: calculatedDays,
-    });
+      days: calculateDays(formData.fromDate, formData.toDate)
+    };
+
+    socket.emit("admin/leave/create-request", requestData);
   };
 
   const resetForm = () => {
@@ -194,6 +226,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
       fromDate: '',
       toDate: '',
       reason: '',
+      days: 0
     });
     setSelectedEmployee(null);
     setSelectedLeaveType(null);
@@ -201,10 +234,39 @@ const RequestModals: React.FC<RequestModalsProps> = ({ socket, onLeaveRequestCre
     setCalculatedDays(0);
   };
 
+  const loadModalData = () => {
+    if (!socket) return;
+    setLoading(true);
+    socket.emit("admin/leave/get-modal-data");
+  };
+
   const getModalContainer = () => {
     const modalElement = document.getElementById('add_leaves');
     return modalElement ? modalElement : document.body;
   };
+
+  // Handle modal events
+  useEffect(() => {
+    const modalElement = document.getElementById('add_leaves');
+    if (modalElement) {
+      const handleModalShow = () => {
+        loadModalData();
+      };
+
+      const handleModalHide = () => {
+        resetForm();
+      };
+
+      modalElement.addEventListener('show.bs.modal', handleModalShow);
+      modalElement.addEventListener('hide.bs.modal', handleModalHide);
+
+      return () => {
+        modalElement.removeEventListener('show.bs.modal', handleModalShow);
+        modalElement.removeEventListener('hide.bs.modal', handleModalHide);
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   return (
     <>
