@@ -1,6 +1,93 @@
 import * as pipelineService from "../../services/pipeline/pipeline.services.js";
+
 const pipelineController = (socket, io) => {
-      
+  // Helper to validate company access (pattern from admin.controller.js)
+  const validateCompanyAccess = (socket) => {
+    if (!socket.companyId) {
+      console.error("[Pipeline] Company ID not found in user metadata", { user: socket.user?.sub });
+      throw new Error("Company ID not found in user metadata");
+    }
+    const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
+    if (!companyIdRegex.test(socket.companyId)) {
+      console.error(`[Pipeline] Invalid company ID format: ${socket.companyId}`);
+      throw new Error("Invalid company ID format");
+    }
+    if (socket.userMetadata?.companyId !== socket.companyId) {
+      console.error(`[Pipeline] Company ID mismatch: user metadata has ${socket.userMetadata?.companyId}, socket has ${socket.companyId}`);
+      throw new Error("Unauthorized: Company ID mismatch");
+    }
+    return socket.companyId;
+  };
+
+  // Only allow admin
+  const isAdmin = socket.userMetadata?.role === "admin";
+
+  // CREATE pipeline
+  socket.on("pipeline:create", async (data) => {
+    try {
+      console.log("[Pipeline] pipeline:create event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, data });
+      if (!isAdmin) throw new Error("Unauthorized: Admins only");
+      const companyId = validateCompanyAccess(socket);
+      const result = await pipelineService.createPipeline(companyId, data);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to create pipeline", { error: result.error });
+      }
+      socket.emit("pipeline:create-response", result);
+    } catch (error) {
+      console.error("[Pipeline] Error in pipeline:create", { error: error.message });
+      socket.emit("pipeline:create-response", { done: false, error: error.message });
+    }
+  });
+
+  // GET all pipelines
+  socket.on("pipeline:getAll", async () => {
+    try {
+      console.log("[Pipeline] pipeline:getAll event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId });
+      const companyId = validateCompanyAccess(socket);
+      const result = await pipelineService.getPipelines(companyId);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to get pipelines", { error: result.error });
+      }
+      socket.emit("pipeline:getAll-response", result);
+    } catch (error) {
+      console.error("[Pipeline] Error in pipeline:getAll", { error: error.message });
+      socket.emit("pipeline:getAll-response", { done: false, error: error.message });
+    }
+  });
+
+  // UPDATE pipeline
+  socket.on("pipeline:update", async ({ pipelineId, update }) => {
+    try {
+      console.log("[Pipeline] pipeline:update event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, pipelineId, update });
+      if (!isAdmin) throw new Error("Unauthorized: Admins only");
+      const companyId = validateCompanyAccess(socket);
+      const result = await pipelineService.updatePipeline(companyId, pipelineId, update);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to update pipeline", { error: result.error });
+      }
+      socket.emit("pipeline:update-response", result);
+    } catch (error) {
+      console.error("[Pipeline] Error in pipeline:update", { error: error.message });
+      socket.emit("pipeline:update-response", { done: false, error: error.message });
+    }
+  });
+
+  // DELETE pipeline
+  socket.on("pipeline:delete", async ({ pipelineId }) => {
+    try {
+      console.log("[Pipeline] pipeline:delete event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, pipelineId });
+      if (!isAdmin) throw new Error("Unauthorized: Admins only");
+      const companyId = validateCompanyAccess(socket);
+      const result = await pipelineService.deletePipeline(companyId, pipelineId);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to delete pipeline", { error: result.error });
+      }
+      socket.emit("pipeline:delete-response", result);
+    } catch (error) {
+      console.error("[Pipeline] Error in pipeline:delete", { error: error.message });
+      socket.emit("pipeline:delete-response", { done: false, error: error.message });
+    }
+  });
 };
 
 export default pipelineController;
