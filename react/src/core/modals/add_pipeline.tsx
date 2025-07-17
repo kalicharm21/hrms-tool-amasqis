@@ -6,86 +6,91 @@ import { beforeuse, company, contacts, deals, guests, owner, owners, status } fr
 import { label } from 'yet-another-react-lightbox/*';
 import CommonTagsInput from '../common/Taginput';
 import ImageWithBasePath from '../common/imageWithBasePath';
+import { useSocket } from '../../SocketContext';
+import { Socket } from 'socket.io-client';
+import dayjs, { Dayjs } from 'dayjs';
+
+const DEFAULT_STAGE_OPTIONS = [
+  'Won',
+  'In Pipeline',
+  'Conversation',
+  'Follow Up',
+];
 
 const AddPipeline = () => {
+  const socket = useSocket() as Socket | null;
 
-  const getModalContainer = () => {
-    const modalElement = document.getElementById('modal-datepicker');
-    return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
+  // Form state
+  const [pipelineName, setPipelineName] = useState('');
+  const [stage, setStage] = useState('');
+  const [stageOptions, setStageOptions] = useState<string[]>([...DEFAULT_STAGE_OPTIONS]);
+  const [showStageModal, setShowStageModal] = useState(false);
+  const [newStage, setNewStage] = useState('');
+  const [totalDealValue, setTotalDealValue] = useState<number | ''>('');
+  const [noOfDeals, setNoOfDeals] = useState<number | ''>('');
+  const [createdDate, setCreatedDate] = useState<Dayjs | null>(null);
+  const [status, setStatus] = useState('Active');
+
+  // Helper to close modal
+  const closeModal = () => {
+    const modal = document.getElementById('add_pipeline');
+    if (modal) {
+      const bootstrapModal = (window as any).bootstrap?.Modal?.getOrCreateInstance(modal);
+      if (bootstrapModal) {
+        bootstrapModal.hide();
+      } else {
+        // Fallback: forcibly hide modal if Bootstrap instance is missing
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        modal.classList.remove('show');
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        backdrops.forEach(backdrop => backdrop.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+      }
+    }
   };
-  const owner = [
-    { value: "Select", label: "Select" },
-    { value: "Hendry Milner", label: "Hendry Milner" },
-    { value: "Guilory Berggren", label: "Guilory Berggren" },
-    { value: "Jami Carlile", label: "Jami Carlile" },
-  ];
-  const dealsChoose = [
-    { value: "Select", label: "Select" },
-    { value: "Collins", label: "Collins" },
-    { value: "Konopelski", label: "Konopelski" },
-    { value: "Adams", label: "Adams" },
-  ]
-  const industryChoose = [
-    { value: "Select", label: "Select" },
-    { value: "Retail Industry", label: "Retail Industry" },
-    { value: "Banking", label: "Banking" },
-    { value: "Hotels", label: "Hotels" },
-    { value: "Financial Services", label: "Financial Services" },
-    { value: "Insurance", label: "Insurance" },
-  ]
-  const sourcesChoose = [
-    { value: "Select", label: "Select" },
-    { value: "Phone Calls", label: "Phone Calls" },
-    { value: "Social Media", label: "Social Media" },
-    { value: "Refferal Sites", label: "Refferal Sites" },
-    { value: "Web Analytics", label: "Web Analytics" },
-    { value: "Previous Purchase", label: "Previous Purchase" },
-  ]
-  const currencyChoose = [
-    { value: "Select", label: "Select" },
-    { value: "USD", label: "USD" },
-    { value: "Euro", label: "Euro" },
-  ]
-  const languageChoose = [
-    { value: "Select", label: "Select" },
-    { value: "English", label: "English" },
-    { value: "Arabic", label: "Arabic " },
-  ]
-  const contactChoose = [
-    { value: "Select", label: "Select" },
-    { value: "Darlee Robertson", label: "Darlee Robertson" },
-    { value: "Sharon Roy", label: "Sharon Roy" },
-    { value: "Vaughan", label: "Vaughan" },
-    { value: "Jessica", label: "Jessica" },
-    { value: "Carol Thomas", label: "Carol Thomas" },
-  ]
-  const countryChoose = [
-    { value: "Select", label: "Select" },
-    { value: "USA", label: "USA" },
-    { value: "Canada", label: "Canada" },
-    { value: "Germany", label: "Germany" },
-    { value: "France", label: "France" },
-  ]
-  const stateChoose = [
-    { value: "Select", label: "Select" },
-    { value: "California", label: "California" },
-    { value: "New York", label: "New York" },
-    { value: "Texas", label: "Texas" },
-    { value: "Florida", label: "Florida" },
-  ]
-  const cityChoose = [
-    { value: "Select", label: "Select" },
-    { value: "Los Angeles", label: "Los Angeles" },
-    { value: "San Diego", label: "San Diego" },
-    { value: "Fresno", label: "Fresno" },
-    { value: "San Francisco", label: "San Francisco" },
-  ]
-  const status = [
-    { value: "Select", label: "Select" },
-    { value: "Active", label: "Active" },
-    { value: "Inactive", label: "Inactive" },
-  ]
-  const [tags, setTags] = useState<string[]>(["Collab"]);
+
+  // Handle form submit
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!socket) return;
+    const data = {
+      pipelineName,
+      stage,
+      totalDealValue: totalDealValue === '' ? 0 : totalDealValue,
+      noOfDeals: noOfDeals === '' ? 0 : noOfDeals,
+      createdDate: createdDate ? createdDate.toISOString() : new Date().toISOString(),
+      status,
+    };
+    socket.emit('pipeline:create', data);
+    socket.once('pipeline:create-response', (res: any) => {
+      if (res.done) {
+        setPipelineName('');
+        setStage('');
+        setTotalDealValue('');
+        setNoOfDeals('');
+        setCreatedDate(null);
+        setStatus('Active');
+        closeModal();
+        window.dispatchEvent(new CustomEvent('refresh-pipelines'));
+      }
+    });
+  };
+
+  // Handle add new stage
+  const handleAddStage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newStage.trim();
+    if (trimmed && !stageOptions.includes(trimmed)) {
+      setStageOptions([...stageOptions, trimmed]);
+      setStage(trimmed);
+    }
+    setNewStage('');
+    setShowStageModal(false);
+  };
+
   return (
     <>
       {/* Add Pipeline */}
@@ -103,7 +108,7 @@ const AddPipeline = () => {
                 <i className="ti ti-x" />
               </button>
             </div>
-            <form>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body pb-0">
                 <div className="row">
                   <div className="col-md-12">
@@ -111,7 +116,7 @@ const AddPipeline = () => {
                       <label className="form-label">
                         Pipeline Name <span className="text-danger"> *</span>
                       </label>
-                      <input type="text" className="form-control" />
+                      <input type="text" className="form-control" value={pipelineName} onChange={e => setPipelineName(e.target.value)} required />
                     </div>
                   </div>
                   <div className="col-md-12">
@@ -123,204 +128,61 @@ const AddPipeline = () => {
                         <Link
                           to="#"
                           className="add-new text-primary"
-                          data-bs-toggle="modal"
-                          data-bs-target="#add_stage"
+                          onClick={e => { e.preventDefault(); setShowStageModal(true); }}
                         >
                           <i className="ti ti-plus text-primary me-1" />
                           Add New
                         </Link>
                       </div>
-                      <div className="p-3 border border-gray br-5 mb-2">
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div className="d-flex align-items-center">
-                            <span className="me-2">
-                              <i className="ti ti-grip-vertical" />
-                            </span>
-                            <h6 className="fs-14 fw-normal">Inpipline</h6>
-                          </div>
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="text-default"
-                              data-bs-toggle="modal"
-                              data-bs-target="#edit_stage"
-                            >
-                              <span className="me-2">
-                                <i className="ti ti-edit" />
-                              </span>
-                            </Link>
-                            <Link
-                              to="#"
-                              className="text-default"
-                              data-bs-toggle="modal"
-                              data-bs-target="#delete_modal"
-                            >
-                              <span>
-                                <i className="ti ti-trash" />
-                              </span>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-3 border border-gray br-5 mb-2">
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div className="d-flex align-items-center">
-                            <span className="me-2">
-                              <i className="ti ti-grip-vertical" />
-                            </span>
-                            <h6 className="fs-14 fw-normal">Follow Up</h6>
-                          </div>
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="text-default"
-                              data-bs-toggle="modal"
-                              data-bs-target="#edit_stage"
-                            >
-                              <span className="me-2">
-                                <i className="ti ti-edit" />
-                              </span>
-                            </Link>
-                            <Link
-                              to="#"
-                              className="text-default"
-                              data-bs-toggle="modal"
-                              data-bs-target="#delete_modal"
-                            >
-                              <span>
-                                <i className="ti ti-trash" />
-                              </span>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-3 border border-gray br-5">
-                        <div className="d-flex align-items-center justify-content-between">
-                          <div className="d-flex align-items-center">
-                            <span className="me-2">
-                              <i className="ti ti-grip-vertical" />
-                            </span>
-                            <h6 className="fs-14 fw-normal">Schedule Service</h6>
-                          </div>
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="text-default"
-                              data-bs-toggle="modal"
-                              data-bs-target="#edit_stage"
-                            >
-                              <span className="me-2">
-                                <i className="ti ti-edit" />
-                              </span>
-                            </Link>
-                            <Link to="#" className="text-default">
-                              <span>
-                                <i
-                                  className="ti ti-trash"
-                                  data-bs-toggle="modal"
-                                  data-bs-target="#delete_modal"
-                                />
-                              </span>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
+                      <select
+                        className="form-select"
+                        value={stage}
+                        onChange={e => setStage(e.target.value)}
+                        required
+                      >
+                        <option value="" disabled>Select Stage</option>
+                        {stageOptions.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                  <div className="col-md-12">
+                  <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Access</label>
-                      <div className="d-flex  access-item nav">
-                        <div className="d-flex align-items-center">
-                          <div
-                            className="radio-btn d-flex align-items-center "
-                            data-bs-toggle="tab"
-                            data-bs-target="#all"
-                          >
-                            <input
-                              type="radio"
-                              className="status-radio me-2"
-                              id="all"
-                              name="status"
-                              defaultChecked
-                            />
-                            <label htmlFor="all">All</label>
-                          </div>
-                          <div
-                            className="radio-btn d-flex align-items-center "
-                            data-bs-toggle="tab"
-                            data-bs-target="#select-person"
-                          >
-                            <input
-                              type="radio"
-                              className="status-radio me-2"
-                              id="select"
-                              name="status"
-                            />
-                            <label htmlFor="select">Select Person</label>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="tab-content">
-                        <div className="tab-pane fade" id="select-person">
-                          <div className="access-wrapper">
-                            <div className="p-3 border border-gray br-5 mb-2">
-                              <div className="d-flex align-items-center justify-content-between">
-                                <div className="d-flex align-items-center file-name-icon">
-                                  <Link
-                                    to="#"
-                                    className="avatar avatar-md border avatar-rounded"
-                                  >
-                                    <ImageWithBasePath
-                                      src="assets/img/profiles/avatar-20.jpg"
-                                      className="img-fluid"
-                                      alt="img"
-                                    />
-                                  </Link>
-                                  <div className="ms-2">
-                                    <h6 className="fw-medium">
-                                      <Link to="#">Sharon Roy</Link>
-                                    </h6>
-                                  </div>
-                                </div>
-                                <div className="d-flex align-items-center">
-                                  <Link to="#" className="text-danger">
-                                    Remove
-                                  </Link>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="p-3 border border-gray br-5 mb-2">
-                              <div className="d-flex align-items-center justify-content-between">
-                                <div className="d-flex align-items-center file-name-icon">
-                                  <Link
-                                    to="#"
-                                    className="avatar avatar-md border avatar-rounded"
-                                  >
-                                    <ImageWithBasePath
-                                      src="assets/img/profiles/avatar-21.jpg"
-                                      className="img-fluid"
-                                      alt="img"
-                                    />
-                                  </Link>
-                                  <div className="ms-2">
-                                    <h6 className="fw-medium">
-                                      <Link to="#">Sharon Roy</Link>
-                                    </h6>
-                                  </div>
-                                </div>
-                                <div className="d-flex align-items-center">
-                                  <Link to="#" className="text-danger">
-                                    Remove
-                                  </Link>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <label className="form-label">Total Deal Value <span className="text-danger">*</span></label>
+                      <input type="number" className="form-control" value={totalDealValue} onChange={e => setTotalDealValue(e.target.value === '' ? '' : Number(e.target.value))} required min={0} />
                     </div>
                   </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">No of Deals <span className="text-danger">*</span></label>
+                      <input type="number" className="form-control" value={noOfDeals} onChange={e => setNoOfDeals(e.target.value === '' ? '' : Number(e.target.value))} required min={0} />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Created Date <span className="text-danger">*</span></label>
+                      <DatePicker
+                        className="form-control"
+                        value={createdDate}
+                        onChange={value => setCreatedDate(value)}
+                        format="YYYY-MM-DD"
+                        required
+                        picker="date"
+                        // calendar only
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">Status <span className="text-danger">*</span></label>
+                      <select className="form-select" value={status} onChange={e => setStatus(e.target.value)} required>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+                  {/* ...other fields as needed... */}
                 </div>
               </div>
               <div className="modal-footer">
@@ -331,7 +193,7 @@ const AddPipeline = () => {
                 >
                   Cancel
                 </button>
-                <button type="button" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary">
                   Add Pipeline
                 </button>
               </div>
@@ -340,13 +202,39 @@ const AddPipeline = () => {
         </div>
       </div>
       {/* /Add Pipeline */}
+
+      {/* Add Stage Modal */}
+      {showStageModal && (
+        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }} tabIndex={-1}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Add New Stage</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowStageModal(false); setNewStage(''); }} />
+              </div>
+              <form onSubmit={handleAddStage}>
+                <div className="modal-body">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Enter new stage name"
+                    value={newStage}
+                    onChange={e => setNewStage(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-light" onClick={() => { setShowStageModal(false); setNewStage(''); }}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Add Stage</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* /Add Stage Modal */}
     </>
-
-
-
-
-
-  )
+  );
 }
 
-export default AddPipeline
+export default AddPipeline;
