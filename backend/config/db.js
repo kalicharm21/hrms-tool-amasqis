@@ -20,13 +20,13 @@ export const connectDB = async () => {
   }
 };
 
-export const getTenantCollections = () => {
+export const getTenantCollections = (tenantDbName) => {
   if (!isConnected) {
     throw new Error(
       "MongoDB client not connected yet. Call connectDB() first."
     );
   }
-  const db = client.db("68443081dcdfe43152aebf80");
+  const db = client.db(tenantDbName);
   return {
     // Existing collections
     stats: db.collection("stats"),
