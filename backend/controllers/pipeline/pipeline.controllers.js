@@ -42,11 +42,11 @@ const pipelineController = (socket, io) => {
   });
 
   // GET all pipelines
-  socket.on("pipeline:getAll", async () => {
+  socket.on("pipeline:getAll", async (filters = {}) => {
     try {
-      console.log("[Pipeline] pipeline:getAll event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId });
+      console.log("[Pipeline] pipeline:getAll event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, filters });
       const companyId = validateCompanyAccess(socket);
-      const result = await pipelineService.getPipelines(companyId);
+      const result = await pipelineService.getPipelines(companyId, filters);
       if (!result.done) {
         console.error("[Pipeline] Failed to get pipelines", { error: result.error });
       }

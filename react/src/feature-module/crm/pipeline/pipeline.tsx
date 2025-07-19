@@ -13,6 +13,19 @@ import DeletePipeline from '../../../core/modals/delete_pipeline';
 import { message } from "antd";
 import AddPipeline from "../../../core/modals/add_pipeline";
 
+const DEAL_VALUE_RANGES = [
+  { label: '$0 - $1,000', value: [0, 1000] },
+  { label: '$1,000 - $5,000', value: [1000, 5000] },
+  { label: '$5,000 - $10,000', value: [5000, 10000] },
+  { label: '$10,000+', value: [10000, Infinity] },
+];
+const SORT_OPTIONS = [
+  { label: 'Last 7 Days', value: 'last7days' },
+  { label: 'Recently Added', value: 'recent' },
+  { label: 'Ascending', value: 'asc' },
+  { label: 'Descending', value: 'desc' },
+];
+
 const Pipeline = () => {
   const routes = all_routes;
   // const data = pipelineData; // Commented out static data
@@ -24,15 +37,28 @@ const Pipeline = () => {
   const [deletePipeline, setDeletePipeline] = useState<any | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  // Refetch pipelines function (fetch all, no filters)
-  const fetchPipelines = () => {
-    if (!socket) {
-      console.error('No socket connection available for fetching pipelines');
-      return;
-    }
+  const [filters, setFilters] = useState({
+    dateRange: null,
+    stage: '',
+    status: '',
+    dealValue: '',
+    sort: '',
+  });
+
+  const handleFilterChange = (field: string, value: any) => {
+    setFilters(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleClearFilters = () => {
+    setFilters({ dateRange: null, stage: '', status: '', dealValue: '', sort: '' });
+    fetchPipelines({ dateRange: null, stage: '', status: '', dealValue: '', sort: '' });
+  };
+
+  const fetchPipelines = (filterObj = filters) => {
+    if (!socket) return;
     setLoading(true);
     setError(null);
-    socket.emit("pipeline:getAll");
+    socket.emit('pipeline:getAll', filterObj);
   };
 
   useEffect(() => {
@@ -55,6 +81,12 @@ const Pipeline = () => {
       socket.off("pipeline:getAll-response", handler);
     };
   }, [socket]);
+
+  // Update useEffect to fetch pipelines on filter change
+  useEffect(() => {
+    fetchPipelines();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   // Listen for global refresh events
   useEffect(() => {
@@ -392,7 +424,10 @@ const Pipeline = () => {
                 {/* Date Range Filter */}
                 <div className="me-3">
                   <div className="input-icon-end position-relative">
-                   <PredefinedDateRanges/>
+                   <PredefinedDateRanges
+                    value={filters.dateRange === null ? undefined : filters.dateRange}
+                    onChange={range => handleFilterChange('dateRange', range)}
+                  />
                     <span className="input-icon-addon">
                       <i className="ti ti-chevron-down" />
                     </span>
@@ -401,167 +436,62 @@ const Pipeline = () => {
 
                 {/* Stage Filter */}
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
+                  <select
+                    className="form-select"
+                    value={filters.stage}
+                    onChange={e => handleFilterChange('stage', e.target.value)}
                   >
-                    Stage
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Won
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        In Pipeline
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Conversation
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Follow Up
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Deal Value Range Filter */}
-                <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
-                  >
-                    $0.00 - $0.00
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        $10 - $20
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        $20 - $30
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        $40 - $50
-                      </Link>
-                    </li>
-                  </ul>
+                    <option value="">All Stages</option>
+                    <option value="Won">Won</option>
+                    <option value="In Pipeline">In Pipeline</option>
+                    <option value="Conversation">Conversation</option>
+                    <option value="Follow Up">Follow Up</option>
+                    <option value="Schedule servise">Schedule servise</option>
+                  </select>
                 </div>
 
                 {/* Status Filter */}
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
+                  <select
+                    className="form-select"
+                    value={filters.status}
+                    onChange={e => handleFilterChange('status', e.target.value)}
                   >
-                    Select Status
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Active
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Inactive
-                      </Link>
-                    </li>
-                  </ul>
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                {/* Deal Value Range Filter */}
+                <div className="dropdown me-3">
+                  <select
+                    className="form-select"
+                    value={filters.dealValue}
+                    onChange={e => handleFilterChange('dealValue', e.target.value)}
+                  >
+                    <option value="">All Deal Values</option>
+                    {DEAL_VALUE_RANGES.map(range => (
+                      <option key={range.label} value={range.label}>{range.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Sort Options */}
                 <div className="dropdown me-3">
-                  <Link
-                    to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
+                  <select
+                    className="form-select"
+                    value={filters.sort}
+                    onChange={e => handleFilterChange('sort', e.target.value)}
                   >
-                    Sort By : Last 7 Days
-                  </Link>
-                  <ul className="dropdown-menu dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Recently Added
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Ascending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Desending
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Last Month
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        Last 7 Days
-                      </Link>
-                    </li>
-                  </ul>
+                    <option value="">Sort By</option>
+                    {SORT_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
+                {/* Clear Filters Button */}
+                <button className="btn btn-light ms-2" onClick={handleClearFilters}>Clear Filters</button>
               </div>
             </div>
             <div className="card-body p-0">

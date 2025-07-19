@@ -29,11 +29,53 @@ export const createPipeline = async (companyId, pipelineData) => {
   }
 };
 
-export const getPipelines = async (companyId) => {
+export const getPipelines = async (companyId, filters = {}) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[PipelineService] getPipelines", { companyId });
-    const pipelines = await collections.pipelines.find({}).toArray();
+    console.log("[PipelineService] getPipelines", { companyId, filters });
+    const query = { companyId };
+
+    // Date range filter
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      query.createdDate = {
+        $gte: new Date(filters.dateRange.start),
+        $lte: new Date(filters.dateRange.end)
+      };
+    }
+    // Stage filter
+    if (filters.stage) {
+      query.stage = filters.stage;
+    }
+    // Status filter
+    if (filters.status) {
+      query.status = filters.status;
+    }
+    // Deal value filter
+    if (filters.dealValue) {
+      // Map label to range
+      const ranges = {
+        '$0 - $1,000': [0, 1000],
+        '$1,000 - $5,000': [1000, 5000],
+        '$5,000 - $10,000': [5000, 10000],
+        '$10,000+': [10000, Infinity],
+      };
+      const range = ranges[filters.dealValue];
+      if (range) {
+        query.totalDealValue = { $gte: range[0] };
+        if (range[1] !== Infinity) query.totalDealValue.$lte = range[1];
+      }
+    }
+
+    // Sort
+    let sort = { createdDate: -1 };
+    if (filters.sort) {
+      if (filters.sort === 'asc') sort = { createdDate: 1 };
+      else if (filters.sort === 'desc') sort = { createdDate: -1 };
+      else if (filters.sort === 'recent') sort = { createdDate: -1 };
+      else if (filters.sort === 'last7days') sort = { createdDate: -1 };
+    }
+
+    const pipelines = await collections.pipelines.find(query).sort(sort).toArray();
     console.log("[PipelineService] found pipelines", { count: pipelines.length });
     return { done: true, data: pipelines };
   } catch (error) {
