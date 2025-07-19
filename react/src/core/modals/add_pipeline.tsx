@@ -1,5 +1,5 @@
 import { DatePicker } from 'antd';
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import CommonSelect from '../common/commonSelect';
 import { beforeuse, company, contacts, deals, guests, owner, owners, status } from '../common/selectoption/selectoption';
@@ -9,6 +9,7 @@ import ImageWithBasePath from '../common/imageWithBasePath';
 import { useSocket } from '../../SocketContext';
 import { Socket } from 'socket.io-client';
 import dayjs, { Dayjs } from 'dayjs';
+import AddStage from './add_stage';
 
 const DEFAULT_STAGE_OPTIONS = [
   'Won',
@@ -19,17 +20,44 @@ const DEFAULT_STAGE_OPTIONS = [
 
 const AddPipeline = () => {
   const socket = useSocket() as Socket | null;
+  // TODO: Replace with actual companyId source (e.g., from context or props)
+  const companyId = window.localStorage.getItem('companyId') || 'demoCompanyId';
 
   // Form state
   const [pipelineName, setPipelineName] = useState('');
   const [stage, setStage] = useState('');
   const [stageOptions, setStageOptions] = useState<string[]>([...DEFAULT_STAGE_OPTIONS]);
-  const [showStageModal, setShowStageModal] = useState(false);
-  const [newStage, setNewStage] = useState('');
   const [totalDealValue, setTotalDealValue] = useState<number | ''>('');
   const [noOfDeals, setNoOfDeals] = useState<number | ''>('');
   const [createdDate, setCreatedDate] = useState<Dayjs | null>(null);
   const [status, setStatus] = useState('Active');
+
+  // Fetch stages from backend on modal open and after stage is added
+  useEffect(() => {
+    const modal = document.getElementById('add_pipeline');
+    if (!modal) return;
+    const fetchStages = () => {
+      if (socket && companyId) {
+        socket.emit('stage:getAll', { companyId });
+        socket.once('stage:getAll-response', (res: any) => {
+          if (res.done && Array.isArray(res.data)) {
+            const customStages = res.data.map((s: any) => s.name);
+            const merged = [...DEFAULT_STAGE_OPTIONS, ...customStages.filter((s: string) => !DEFAULT_STAGE_OPTIONS.includes(s))];
+            setStageOptions(merged);
+          } else {
+            setStageOptions([...DEFAULT_STAGE_OPTIONS]);
+          }
+        });
+      }
+    };
+    modal.addEventListener('show.bs.modal', fetchStages);
+    // Listen for custom event from AddStage
+    window.addEventListener('stage-added', fetchStages);
+    return () => {
+      modal.removeEventListener('show.bs.modal', fetchStages);
+      window.removeEventListener('stage-added', fetchStages);
+    };
+  }, [socket, companyId]);
 
   // Helper to close modal
   const closeModal = () => {
@@ -79,18 +107,6 @@ const AddPipeline = () => {
     });
   };
 
-  // Handle add new stage
-  const handleAddStage = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = newStage.trim();
-    if (trimmed && !stageOptions.includes(trimmed)) {
-      setStageOptions([...stageOptions, trimmed]);
-      setStage(trimmed);
-    }
-    setNewStage('');
-    setShowStageModal(false);
-  };
-
   return (
     <>
       {/* Add Pipeline */}
@@ -128,7 +144,9 @@ const AddPipeline = () => {
                         <Link
                           to="#"
                           className="add-new text-primary"
-                          onClick={e => { e.preventDefault(); setShowStageModal(true); }}
+                          data-bs-toggle="modal"
+                          data-bs-target="#add_stage"
+                          onClick={e => { e.preventDefault(); }}
                         >
                           <i className="ti ti-plus text-primary me-1" />
                           Add New
@@ -202,37 +220,7 @@ const AddPipeline = () => {
         </div>
       </div>
       {/* /Add Pipeline */}
-
-      {/* Add Stage Modal */}
-      {showStageModal && (
-        <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }} tabIndex={-1}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Add New Stage</h5>
-                <button type="button" className="btn-close" onClick={() => { setShowStageModal(false); setNewStage(''); }} />
-              </div>
-              <form onSubmit={handleAddStage}>
-                <div className="modal-body">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Enter new stage name"
-                    value={newStage}
-                    onChange={e => setNewStage(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-light" onClick={() => { setShowStageModal(false); setNewStage(''); }}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Add Stage</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* /Add Stage Modal */}
+      <AddStage />
     </>
   );
 }

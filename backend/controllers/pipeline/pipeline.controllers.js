@@ -1,4 +1,5 @@
 import * as pipelineService from "../../services/pipeline/pipeline.services.js";
+import { getStages, addStage, updateStage } from '../../services/pipeline/pipeline.services.js';
 
 const pipelineController = (socket, io) => {
   // Helper to validate company access (pattern from admin.controller.js)
@@ -174,6 +175,24 @@ const pipelineController = (socket, io) => {
         error: error.message
       });
     }
+  });
+
+  // Get all stages for the company
+  socket.on('stage:getAll', async ({ companyId }) => {
+    const result = await getStages(companyId);
+    socket.emit('stage:getAll-response', result);
+  });
+
+  // Add a new stage for the company
+  socket.on('stage:add', async ({ companyId, name }) => {
+    const result = await addStage(companyId, name);
+    socket.emit('stage:add-response', result);
+  });
+
+  // Update a stage for the company
+  socket.on('stage:update', async ({ companyId, stageId, newName }) => {
+    const result = await updateStage(companyId, stageId, newName);
+    socket.emit('stage:update-response', result);
   });
 };
 

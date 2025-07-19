@@ -421,3 +421,56 @@ export const exportPipelinesExcel = async (companyId) => {
   }
 };
 
+// --- Stage Management ---
+export const getStages = async (companyId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    const stages = await collections.stages.find({ companyId }).toArray();
+    return { done: true, data: stages };
+  } catch (error) {
+    console.error('[StageService] Error in getStages', { error: error.message });
+    return { done: false, error: error.message };
+  }
+};
+
+export const addStage = async (companyId, name) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    // Prevent duplicate stage names for the same company
+    const existing = await collections.stages.findOne({ name, companyId });
+    if (existing) {
+      return { done: false, error: 'Stage already exists' };
+    }
+    const result = await collections.stages.insertOne({ name, companyId });
+    if (result.insertedId) {
+      const stages = await collections.stages.find({ companyId }).toArray();
+      return { done: true, data: stages };
+    } else {
+      return { done: false, error: 'Failed to add stage' };
+    }
+  } catch (error) {
+    console.error('[StageService] Error in addStage', { error: error.message });
+    return { done: false, error: error.message };
+  }
+};
+
+export const updateStage = async (companyId, stageId, newName) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    // Only allow update for this company's stage
+    const result = await collections.stages.updateOne(
+      { _id: new ObjectId(stageId), companyId },
+      { $set: { name: newName } }
+    );
+    if (result.modifiedCount === 1) {
+      const stages = await collections.stages.find({ companyId }).toArray();
+      return { done: true, data: stages };
+    } else {
+      return { done: false, error: 'Stage not found or not updated' };
+    }
+  } catch (error) {
+    console.error('[StageService] Error in updateStage', { error: error.message });
+    return { done: false, error: error.message };
+  }
+};
+

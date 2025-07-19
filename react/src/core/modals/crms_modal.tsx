@@ -32,7 +32,6 @@ const CrmsModal = () => {
             <AddPipeline />
             <PipelineAccess />
             <AddStage />
-            <EditStage />
             <SuccesContacts />
         </>
 

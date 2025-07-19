@@ -50,7 +50,9 @@ export const getTenantCollections = (tenantDbName) => {
     earnings: db.collection("earnings"),
 
     //Pipeline Collections
-    pipelines: db.collection("pipelines")
+    pipelines: db.collection("pipelines"),
+    stages: db.collection("stages"),
+    
   };
 };
 

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useSocket } from '../../SocketContext';
 import { Socket } from 'socket.io-client';
 import dayjs, { Dayjs } from 'dayjs';
+import { Select } from 'antd';
 
 const DEFAULT_STAGE_OPTIONS = [
   'Won',
@@ -31,6 +32,7 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const companyId = window.localStorage.getItem('companyId') || 'demoCompanyId';
 
   // When pipeline changes, pre-fill form fields
   useEffect(() => {
@@ -45,6 +47,32 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
       setSuccess(false);
     }
   }, [pipeline]);
+
+  // Fetch stages from backend on modal open and after stage is updated
+  useEffect(() => {
+    const modal = document.getElementById('edit_pipeline');
+    if (!modal) return;
+    const fetchStages = () => {
+      if (socket && companyId) {
+        socket.emit('stage:getAll', { companyId });
+        socket.once('stage:getAll-response', (res: any) => {
+          if (res.done && Array.isArray(res.data)) {
+            const customStages = res.data.map((s: any) => s.name);
+            const merged = [...DEFAULT_STAGE_OPTIONS, ...customStages.filter((s: string) => !DEFAULT_STAGE_OPTIONS.includes(s))];
+            setStageOptions(merged);
+          } else {
+            setStageOptions([...DEFAULT_STAGE_OPTIONS]);
+          }
+        });
+      }
+    };
+    modal.addEventListener('show.bs.modal', fetchStages);
+    window.addEventListener('stage-updated', fetchStages);
+    return () => {
+      modal.removeEventListener('show.bs.modal', fetchStages);
+      window.removeEventListener('stage-updated', fetchStages);
+    };
+  }, [socket, companyId]);
 
   // Handle add new stage
   const handleAddStage = (e: React.FormEvent) => {
@@ -228,18 +256,86 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
                             Add New
                           </a>
                         </div>
-                        <select
-                          className="form-select"
-                          value={stage}
-                          onChange={e => setStage(e.target.value)}
-                          required
-                          disabled={loading}
-                        >
-                          <option value="" disabled>Select Stage</option>
+                        <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
                           {stageOptions.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
+                            <div key={opt} className="d-flex align-items-center me-3">
+                              <span>{opt}</span>
+                              {!DEFAULT_STAGE_OPTIONS.includes(opt) && (
+                                <button
+                                  type="button"
+                                  className="btn btn-link btn-sm p-0 ms-1"
+                                  title="Edit Stage"
+                                  onClick={() => {
+                                    console.log('Edit stage icon clicked for:', opt);
+                                    // Find the stage object from backend data
+                                    if (socket && companyId) {
+                                      socket.emit('stage:getAll', { companyId });
+                                      socket.once('stage:getAll-response', (res: any) => {
+                                        console.log('Received stage:getAll-response:', res);
+                                        if (res.done && Array.isArray(res.data)) {
+                                          const found = res.data.find((s: any) => s.name === opt);
+                                          if (found) {
+                                            console.log('Found stage object:', found);
+                                            setStage(found.name); // Set the stage directly
+                                          } else {
+                                            console.warn('Stage object not found for:', opt);
+                                            alert('Could not find the stage object for editing.');
+                                          }
+                                        } else {
+                                          console.error('Failed to fetch stages for editing.');
+                                          alert('Failed to fetch stages for editing.');
+                                        }
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <i className="ti ti-edit" />
+                                </button>
+                              )}
+                            </div>
                           ))}
-                        </select>
+                        </div>
+                        <Select
+                          className="form-select mt-2"
+                          value={stage}
+                          onChange={value => setStage(value)}
+                          style={{ width: '100%' }}
+                          popupRender={menu => (
+                            <div>
+                              {stageOptions.map(opt => (
+                                <div key={opt} style={{ display: 'flex', alignItems: 'center', padding: '4px 12px' }}>
+                                  <span style={{ flex: 1 }}>{opt}</span>
+                                  {!DEFAULT_STAGE_OPTIONS.includes(opt) && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-link btn-sm p-0 ms-1"
+                                      title="Edit Stage"
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        if (socket && companyId) {
+                                          socket.emit('stage:getAll', { companyId });
+                                          socket.once('stage:getAll-response', (res: any) => {
+                                            if (res.done && Array.isArray(res.data)) {
+                                              const found = res.data.find((s: any) => s.name === opt);
+                                              if (found) setStage(found.name);
+                                            }
+                                          });
+                                        }
+                                      }}
+                                      style={{ color: '#1890ff', background: 'none', border: 'none', cursor: 'pointer' }}
+                                    >
+                                      <i className="ti ti-edit" />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          options={stageOptions.map(opt => ({ label: opt, value: opt }))}
+                          showSearch
+                          filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                          placeholder="Select Stage"
+                        />
                       </div>
                     </div>
                     <div className="col-md-6">
@@ -332,7 +428,6 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
         </div>
       </div>
       {/* /Edit Pipeline */}
-
       {/* Add Stage Modal */}
       {showStageModal && (
         <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }} tabIndex={-1}>
