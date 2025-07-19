@@ -20,7 +20,6 @@ const DEFAULT_STAGE_OPTIONS = [
 
 const AddPipeline = () => {
   const socket = useSocket() as Socket | null;
-  // TODO: Replace with actual companyId source (e.g., from context or props)
   const companyId = window.localStorage.getItem('companyId') || 'demoCompanyId';
 
   // Form state
@@ -31,6 +30,7 @@ const AddPipeline = () => {
   const [noOfDeals, setNoOfDeals] = useState<number | ''>('');
   const [createdDate, setCreatedDate] = useState<Dayjs | null>(null);
   const [status, setStatus] = useState('Active');
+  const [showEditStagesModal, setShowEditStagesModal] = useState(false);
 
   // Fetch stages from backend on modal open and after stage is added
   useEffect(() => {
@@ -141,16 +141,26 @@ const AddPipeline = () => {
                         <label className="form-label">
                           Pipeline Stages <span className="text-danger"> *</span>
                         </label>
-                        <Link
-                          to="#"
-                          className="add-new text-primary"
-                          data-bs-toggle="modal"
-                          data-bs-target="#add_stage"
-                          onClick={e => { e.preventDefault(); }}
-                        >
-                          <i className="ti ti-plus text-primary me-1" />
-                          Add New
-                        </Link>
+                        <div>
+                          <Link
+                            to="#"
+                            className="add-new text-primary me-3"
+                            data-bs-toggle="modal"
+                            data-bs-target="#add_stage"
+                            onClick={e => { e.preventDefault(); }}
+                          >
+                            <i className="ti ti-plus text-primary me-1" />
+                            Add New
+                          </Link>
+                          <a
+                            href="#"
+                            className="add-new text-primary"
+                            onClick={e => { e.preventDefault(); setShowEditStagesModal(true); }}
+                          >
+                            <i className="ti ti-edit text-primary me-1" />
+                            Edit
+                          </a>
+                        </div>
                       </div>
                       <select
                         className="form-select"
@@ -221,8 +231,91 @@ const AddPipeline = () => {
       </div>
       {/* /Add Pipeline */}
       <AddStage />
+      {showEditStagesModal && (
+        <EditStagesModal
+          stages={stageOptions}
+          companyId={companyId}
+          onSave={updatedStages => {
+            if (socket) {
+              socket.emit('stage:overwrite', { companyId, stages: updatedStages });
+              socket.once('stage:overwrite-response', (res: any) => {
+                if (res.done && Array.isArray(res.data)) {
+                  const merged = [...DEFAULT_STAGE_OPTIONS, ...res.data.map((s: any) => s.name).filter((s: string) => !DEFAULT_STAGE_OPTIONS.includes(s))];
+                  setStageOptions(merged);
+                  if (!merged.includes(stage)) {
+                    setStage(merged[0] || '');
+                  }
+                }
+              });
+            }
+            setShowEditStagesModal(false);
+          }}
+          onClose={() => setShowEditStagesModal(false)}
+        />
+      )}
     </>
   );
 }
 
 export default AddPipeline;
+
+// Add EditStagesModal component
+const EditStagesModal = ({ stages, companyId, onSave, onClose }: { stages: string[]; companyId: string; onSave: (updatedStages: string[]) => void; onClose: () => void }) => {
+  const [localStages, setLocalStages] = useState<string[]>([...stages]);
+
+  const handleStageChange = (idx: number, value: string) => {
+    const updated = [...localStages];
+    updated[idx] = value;
+    setLocalStages(updated);
+  };
+
+  const handleDelete = (idx: number) => {
+    const updated = localStages.filter((_, i) => i !== idx);
+    setLocalStages(updated);
+  };
+
+  const handleSave = () => {
+    // Remove empty or duplicate names
+    const filtered = localStages.filter((s, i, arr) => s.trim() && arr.indexOf(s) === i);
+    onSave(filtered);
+    onClose();
+  };
+
+  return (
+    <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }} tabIndex={-1}>
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">Edit Pipeline Stages</h5>
+            <button type="button" className="btn-close" onClick={onClose} />
+          </div>
+          <div className="modal-body">
+            {localStages.map((stage, idx) => (
+              <div key={idx} className="d-flex align-items-center mb-2">
+                <input
+                  type="text"
+                  className="form-control me-2"
+                  value={stage}
+                  onChange={e => handleStageChange(idx, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-link text-danger p-0"
+                  title="Delete Stage"
+                  onClick={() => handleDelete(idx)}
+                >
+                  <i className="ti ti-trash" />
+                </button>
+              </div>
+            ))}
+            {localStages.length === 0 && <div className="text-muted">No stages. Add at least one stage.</div>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-light me-2" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={handleSave}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -474,3 +474,20 @@ export const updateStage = async (companyId, stageId, newName) => {
   }
 };
 
+export const overwriteStages = async (companyId, stages) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    // Remove all existing stages for this company
+    await collections.stages.deleteMany({ companyId });
+    // Insert the new list
+    if (Array.isArray(stages) && stages.length > 0) {
+      await collections.stages.insertMany(stages.map(name => ({ name, companyId })));
+    }
+    const updated = await collections.stages.find({ companyId }).toArray();
+    return { done: true, data: updated };
+  } catch (error) {
+    console.error('[StageService] Error in overwriteStages', { error: error.message });
+    return { done: false, error: error.message };
+  }
+};
+

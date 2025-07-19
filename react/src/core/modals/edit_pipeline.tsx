@@ -33,6 +33,11 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const companyId = window.localStorage.getItem('companyId') || 'demoCompanyId';
+  // Remove EditPipelineStagesModal and related state/handlers
+  // Remove Edit link next to the dropdown
+  // Only keep the dropdown for selecting a stage, and the Add New link/modal if present
+  const [localStages, setLocalStages] = useState<string[]>([...DEFAULT_STAGE_OPTIONS]);
+  const [showEditStagesModal, setShowEditStagesModal] = useState(false);
 
   // When pipeline changes, pre-fill form fields
   useEffect(() => {
@@ -48,7 +53,23 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
     }
   }, [pipeline]);
 
-  // Fetch stages from backend on modal open and after stage is updated
+  // When pipeline changes, initialize localStages
+  useEffect(() => {
+    if (pipeline) {
+      if (Array.isArray(pipeline.stages) && pipeline.stages.length > 0) {
+        setLocalStages([...pipeline.stages]);
+      } else {
+        // Use [pipeline.stage, ...DEFAULT_STAGE_OPTIONS], remove duplicates and falsy values
+        const allStages = [pipeline.stage, ...DEFAULT_STAGE_OPTIONS].filter(Boolean);
+        const uniqueStages = allStages.filter((s, i, arr) => arr.indexOf(s) === i);
+        setLocalStages(uniqueStages);
+      }
+    } else {
+      setLocalStages([...DEFAULT_STAGE_OPTIONS]);
+    }
+  }, [pipeline]);
+
+  // Fetch stages from backend on modal open
   useEffect(() => {
     const modal = document.getElementById('edit_pipeline');
     if (!modal) return;
@@ -67,10 +88,8 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
       }
     };
     modal.addEventListener('show.bs.modal', fetchStages);
-    window.addEventListener('stage-updated', fetchStages);
     return () => {
       modal.removeEventListener('show.bs.modal', fetchStages);
-      window.removeEventListener('stage-updated', fetchStages);
     };
   }, [socket, companyId]);
 
@@ -146,6 +165,7 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
       noOfDeals: noOfDeals === '' ? 0 : Number(noOfDeals),
       createdDate: createdDate ? createdDate.toISOString() : new Date().toISOString(),
       status,
+      stages: localStages, // Use localStages for the update payload
     };
     
     console.log('Emitting pipeline:update', { pipelineId: pipeline._id, update });
@@ -250,92 +270,24 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
                           <a
                             href="#"
                             className="add-new text-primary"
-                            onClick={e => { e.preventDefault(); setShowStageModal(true); }}
+                            onClick={e => { e.preventDefault(); setShowEditStagesModal(true); }}
                           >
-                            <i className="ti ti-plus text-primary me-1" />
-                            Add New
+                            <i className="ti ti-edit text-primary me-1" />
+                            Edit
                           </a>
                         </div>
-                        <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-                          {stageOptions.map(opt => (
-                            <div key={opt} className="d-flex align-items-center me-3">
-                              <span>{opt}</span>
-                              {!DEFAULT_STAGE_OPTIONS.includes(opt) && (
-                                <button
-                                  type="button"
-                                  className="btn btn-link btn-sm p-0 ms-1"
-                                  title="Edit Stage"
-                                  onClick={() => {
-                                    console.log('Edit stage icon clicked for:', opt);
-                                    // Find the stage object from backend data
-                                    if (socket && companyId) {
-                                      socket.emit('stage:getAll', { companyId });
-                                      socket.once('stage:getAll-response', (res: any) => {
-                                        console.log('Received stage:getAll-response:', res);
-                                        if (res.done && Array.isArray(res.data)) {
-                                          const found = res.data.find((s: any) => s.name === opt);
-                                          if (found) {
-                                            console.log('Found stage object:', found);
-                                            setStage(found.name); // Set the stage directly
-                                          } else {
-                                            console.warn('Stage object not found for:', opt);
-                                            alert('Could not find the stage object for editing.');
-                                          }
-                                        } else {
-                                          console.error('Failed to fetch stages for editing.');
-                                          alert('Failed to fetch stages for editing.');
-                                        }
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <i className="ti ti-edit" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <Select
+                        <select
                           className="form-select mt-2"
                           value={stage}
-                          onChange={value => setStage(value)}
-                          style={{ width: '100%' }}
-                          popupRender={menu => (
-                            <div>
-                              {stageOptions.map(opt => (
-                                <div key={opt} style={{ display: 'flex', alignItems: 'center', padding: '4px 12px' }}>
-                                  <span style={{ flex: 1 }}>{opt}</span>
-                                  {!DEFAULT_STAGE_OPTIONS.includes(opt) && (
-                                    <button
-                                      type="button"
-                                      className="btn btn-link btn-sm p-0 ms-1"
-                                      title="Edit Stage"
-                                      onClick={e => {
-                                        e.stopPropagation();
-                                        if (socket && companyId) {
-                                          socket.emit('stage:getAll', { companyId });
-                                          socket.once('stage:getAll-response', (res: any) => {
-                                            if (res.done && Array.isArray(res.data)) {
-                                              const found = res.data.find((s: any) => s.name === opt);
-                                              if (found) setStage(found.name);
-                                            }
-                                          });
-                                        }
-                                      }}
-                                      style={{ color: '#1890ff', background: 'none', border: 'none', cursor: 'pointer' }}
-                                    >
-                                      <i className="ti ti-edit" />
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          options={stageOptions.map(opt => ({ label: opt, value: opt }))}
-                          showSearch
-                          filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                          placeholder="Select Stage"
-                        />
+                          onChange={e => setStage(e.target.value)}
+                          required
+                          disabled={loading}
+                        >
+                          <option value="" disabled>Select Stage</option>
+                          {stageOptions.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                     <div className="col-md-6">
@@ -457,9 +409,107 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
           </div>
         </div>
       )}
+      {showEditStagesModal && (
+        <EditStagesModal
+          key={stageOptions.join(',')}
+          stages={stageOptions}
+          companyId={companyId}
+          onSave={updatedStages => {
+            if (socket) {
+              socket.emit('stage:overwrite', { companyId, stages: updatedStages });
+              socket.once('stage:overwrite-response', (res: any) => {
+                if (res.done && Array.isArray(res.data)) {
+                  const merged = [...DEFAULT_STAGE_OPTIONS, ...res.data.map((s: any) => s.name).filter((s: string) => !DEFAULT_STAGE_OPTIONS.includes(s))];
+                  setStageOptions(merged);
+                  if (!merged.includes(stage)) {
+                    setStage(merged[0] || '');
+                  }
+                }
+              });
+            }
+            setShowEditStagesModal(false);
+          }}
+          onClose={() => setShowEditStagesModal(false)}
+        />
+      )}
       {/* /Add Stage Modal */}
     </>
   );
 };
 
+// Add a new modal component for editing pipeline stages locally
+// Remove EditPipelineStagesModal and related state/handlers
+// Remove Edit link next to the dropdown
+// Only keep the dropdown for selecting a stage, and the Add New link/modal if present
+
 export default EditPipeline;
+
+// Add EditStagesModal component (same as in add_pipeline.tsx)
+const EditStagesModal = ({ stages, companyId, onSave, onClose }: { stages: string[]; companyId: string; onSave: (updatedStages: string[]) => void; onClose: () => void }) => {
+  const [localStages, setLocalStages] = useState<string[]>([...stages]);
+
+  // Sync localStages with stages prop
+  useEffect(() => {
+    setLocalStages([...stages]);
+  }, [stages]);
+
+  const handleStageChange = (idx: number, value: string) => {
+    const updated = [...localStages];
+    updated[idx] = value;
+    setLocalStages(updated);
+  };
+
+  const handleDelete = (idx: number) => {
+    const updated = localStages.filter((_, i) => i !== idx);
+    setLocalStages(updated);
+  };
+
+  const handleSave = () => {
+    // Remove empty or duplicate names
+    const filtered = localStages.filter((s, i, arr) => s.trim() && arr.indexOf(s) === i);
+    onSave(filtered);
+    onClose();
+  };
+
+  return (
+    <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }} tabIndex={-1}>
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">Edit Pipeline Stages</h5>
+            <button type="button" className="btn-close" onClick={onClose} />
+          </div>
+          <div className="modal-body">
+            {localStages.map((stage, idx) => (
+              <div key={idx} className="d-flex align-items-center mb-2">
+                <input
+                  type="text"
+                  className="form-control me-2"
+                  value={stage}
+                  onChange={e => {
+                    console.log('Input changed:', e.target.value, 'at index', idx);
+                    handleStageChange(idx, e.target.value);
+                  }}
+                  // Ensure not disabled or readOnly
+                />
+                <button
+                  type="button"
+                  className="btn btn-link text-danger p-0"
+                  title="Delete Stage"
+                  onClick={() => handleDelete(idx)}
+                >
+                  <i className="ti ti-trash" />
+                </button>
+              </div>
+            ))}
+            {localStages.length === 0 && <div className="text-muted">No stages. Add at least one stage.</div>}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-light me-2" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={handleSave}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
