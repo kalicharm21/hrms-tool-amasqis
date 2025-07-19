@@ -1,12 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { DatePicker } from 'antd';
+import React, { useEffect, useState } from 'react';
 import { useSocket } from '../../SocketContext';
 import { Socket } from 'socket.io-client';
-import { DatePicker } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
-
-interface EditPipelineProps {
-  pipelineId?: string | null;
-}
 
 const DEFAULT_STAGE_OPTIONS = [
   'Won',
@@ -15,12 +11,14 @@ const DEFAULT_STAGE_OPTIONS = [
   'Follow Up',
 ];
 
-const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
-  // All hooks must be called unconditionally
+interface EditPipelineProps {
+  pipeline?: any | null;
+  onPipelineUpdated?: () => void;
+}
+
+const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
   const socket = useSocket() as Socket | null;
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pipeline, setPipeline] = useState<any>(null);
+  // Form state
   const [pipelineName, setPipelineName] = useState('');
   const [stage, setStage] = useState('');
   const [stageOptions, setStageOptions] = useState<string[]>([...DEFAULT_STAGE_OPTIONS]);
@@ -30,50 +28,23 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
   const [noOfDeals, setNoOfDeals] = useState<number | ''>('');
   const [createdDate, setCreatedDate] = useState<Dayjs | null>(null);
   const [status, setStatus] = useState('Active');
-  const modalOpened = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  // Fetch pipeline data when pipelineId changes
+  // When pipeline changes, pre-fill form fields
   useEffect(() => {
-    if (!pipelineId || !socket) return;
-    setLoading(true);
-    setError(null);
-    socket.emit('pipeline:getAll');
-    const handler = (res: any) => {
-      if (res.done) {
-        const found = res.data.find((p: any) => p._id === pipelineId);
-        if (found) {
-          setPipeline(found);
-          setPipelineName(found.pipelineName || '');
-          setStage(found.stage || '');
-          setTotalDealValue(found.totalDealValue ?? '');
-          setNoOfDeals(found.noOfDeals ?? '');
-          setCreatedDate(found.createdDate ? dayjs(found.createdDate) : null);
-          setStatus(found.status || 'Active');
-          // Open the modal only after data is loaded
-          if (!modalOpened.current) {
-            const modal = document.getElementById('edit_pipeline');
-            if (modal) {
-              const bootstrapModal = (window as any).bootstrap?.Modal?.getOrCreateInstance(modal);
-              if (bootstrapModal) {
-                bootstrapModal.show();
-                modalOpened.current = true;
-              }
-            }
-          }
-        } else {
-          setError('Pipeline not found');
-        }
-      } else {
-        setError(res.error || 'Failed to fetch pipeline');
-      }
-      setLoading(false);
-    };
-    socket.on('pipeline:getAll-response', handler);
-    return () => {
-      socket.off('pipeline:getAll-response', handler);
-      modalOpened.current = false;
-    };
-  }, [pipelineId, socket]);
+    if (pipeline) {
+      setPipelineName(pipeline.pipelineName || '');
+      setStage(pipeline.stage || '');
+      setTotalDealValue(pipeline.totalDealValue ?? '');
+      setNoOfDeals(pipeline.noOfDeals ?? '');
+      setCreatedDate(pipeline.createdDate ? dayjs(pipeline.createdDate) : null);
+      setStatus(pipeline.status || 'Active');
+      setError(null);
+      setSuccess(false);
+    }
+  }, [pipeline]);
 
   // Handle add new stage
   const handleAddStage = (e: React.FormEvent) => {
@@ -91,7 +62,7 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
   const closeModal = () => {
     const modal = document.getElementById('edit_pipeline');
     if (modal) {
-      const bootstrapModal = (window as any).bootstrap?.Modal?.getOrCreateInstance(modal);
+      const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modal);
       if (bootstrapModal) {
         bootstrapModal.hide();
       } else {
@@ -111,21 +82,83 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
   // Handle form submit
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!socket || !pipelineId) return;
+    console.log('Edit pipeline form submitted');
+    console.log('Socket:', socket);
+    console.log('Pipeline:', pipeline);
+    
+    if (!pipeline || !pipeline._id) {
+      setError('No pipeline selected');
+      return;
+    }
+    
+    if (!socket) {
+      setError('No socket connection');
+      return;
+    }
+    
+    // Validate required fields
+    if (!pipelineName.trim()) {
+      setError('Pipeline name is required');
+      return;
+    }
+    
+    if (!stage.trim()) {
+      setError('Pipeline stage is required');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    
     const update = {
-      pipelineName,
-      stage,
-      totalDealValue: totalDealValue === '' ? 0 : totalDealValue,
-      noOfDeals: noOfDeals === '' ? 0 : noOfDeals,
+      pipelineName: pipelineName.trim(),
+      stage: stage.trim(),
+      totalDealValue: totalDealValue === '' ? 0 : Number(totalDealValue),
+      noOfDeals: noOfDeals === '' ? 0 : Number(noOfDeals),
       createdDate: createdDate ? createdDate.toISOString() : new Date().toISOString(),
       status,
     };
-    socket.emit('pipeline:update', { pipelineId, update });
+    
+    console.log('Emitting pipeline:update', { pipelineId: pipeline._id, update });
+    socket.emit('pipeline:update', { pipelineId: pipeline._id, update });
+    
     socket.once('pipeline:update-response', (res: any) => {
+      setLoading(false);
+      console.log('Pipeline update response:', res);
+      
       if (res.done) {
-        closeModal();
-        window.dispatchEvent(new CustomEvent('refresh-pipelines'));
+        setSuccess(true);
+        console.log('Pipeline updated successfully');
+        
+        // Show success message briefly before closing
+        setTimeout(() => {
+          // Close modal
+          closeModal();
+          
+          // Refresh pipeline list
+          if (onPipelineUpdated) {
+            console.log('Calling onPipelineUpdated callback');
+            onPipelineUpdated();
+          }
+          
+          // Also dispatch global event as backup
+          window.dispatchEvent(new CustomEvent('refresh-pipelines'));
+          
+          // Clear form state after modal closes
+          setTimeout(() => {
+            setPipelineName('');
+            setStage('');
+            setTotalDealValue('');
+            setNoOfDeals('');
+            setCreatedDate(null);
+            setStatus('Active');
+            setError(null);
+            setSuccess(false);
+          }, 300);
+        }, 1000); // Show success message for 1 second
       } else {
+        console.error('Pipeline update failed:', res.error);
         setError(res.error || 'Failed to update pipeline');
       }
     });
@@ -152,7 +185,17 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
             <form onSubmit={handleSubmit}>
               <div className="modal-body pb-0">
                 {error ? (
-                  <div className="p-4 text-danger text-center">{error}</div>
+                  <div className="alert alert-danger text-center mb-3">
+                    <i className="ti ti-alert-circle me-2"></i>
+                    {error}
+                  </div>
+                ) : success ? (
+                  <div className="alert alert-success text-center mb-3">
+                    <i className="ti ti-check-circle me-2"></i>
+                    Pipeline updated successfully!
+                  </div>
+                ) : !pipeline ? (
+                  <div className="p-4 text-muted text-center">No pipeline selected.</div>
                 ) : (
                   <div className="row">
                     <div className="col-md-12">
@@ -166,6 +209,7 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
                           value={pipelineName}
                           onChange={e => setPipelineName(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                     </div>
@@ -189,6 +233,7 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
                           value={stage}
                           onChange={e => setStage(e.target.value)}
                           required
+                          disabled={loading}
                         >
                           <option value="" disabled>Select Stage</option>
                           {stageOptions.map(opt => (
@@ -207,6 +252,7 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
                           onChange={e => setTotalDealValue(e.target.value === '' ? '' : Number(e.target.value))}
                           required
                           min={0}
+                          disabled={loading}
                         />
                       </div>
                     </div>
@@ -220,6 +266,7 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
                           onChange={e => setNoOfDeals(e.target.value === '' ? '' : Number(e.target.value))}
                           required
                           min={0}
+                          disabled={loading}
                         />
                       </div>
                     </div>
@@ -233,17 +280,19 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
                           format="YYYY-MM-DD"
                           required
                           picker="date"
+                          disabled={loading}
                         />
                       </div>
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
                         <label className="form-label">Status <span className="text-danger">*</span></label>
-                        <select
-                          className="form-select"
-                          value={status}
-                          onChange={e => setStatus(e.target.value)}
+                        <select 
+                          className="form-select" 
+                          value={status} 
+                          onChange={e => setStatus(e.target.value)} 
                           required
+                          disabled={loading}
                         >
                           <option value="Active">Active</option>
                           <option value="Inactive">Inactive</option>
@@ -259,11 +308,23 @@ const EditPipeline = ({ pipelineId }: EditPipelineProps) => {
                   className="btn btn-light me-2"
                   data-bs-dismiss="modal"
                   onClick={closeModal}
+                  disabled={loading}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  Save Changes
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  disabled={loading || !pipeline}
+                >
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
                 </button>
               </div>
             </form>

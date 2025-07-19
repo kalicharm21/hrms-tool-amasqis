@@ -9,19 +9,27 @@ import CrmsModal from '../../../core/modals/crms_modal';
 import { useSocket } from '../../../SocketContext';
 import { Socket } from "socket.io-client";
 import EditPipeline from '../../../core/modals/edit_pipeline';
+import DeletePipeline from '../../../core/modals/delete_pipeline';
+import { message } from "antd";
+import AddPipeline from "../../../core/modals/add_pipeline";
 
 const Pipeline = () => {
   const routes = all_routes;
   // const data = pipelineData; // Commented out static data
-  const [pipelines, setPipelines] = useState([]);
+  const [pipelines, setPipelines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const socket = useSocket() as Socket | null;
-  const [editPipelineId, setEditPipelineId] = useState<string | null>(null);
+  const [editPipeline, setEditPipeline] = useState<any | null>(null);
+  const [deletePipeline, setDeletePipeline] = useState<any | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  // Refetch pipelines function
+  // Refetch pipelines function (fetch all, no filters)
   const fetchPipelines = () => {
-    if (!socket) return;
+    if (!socket) {
+      console.error('No socket connection available for fetching pipelines');
+      return;
+    }
     setLoading(true);
     setError(null);
     socket.emit("pipeline:getAll");
@@ -31,39 +39,163 @@ const Pipeline = () => {
     if (!socket) return;
     fetchPipelines();
     const handler = (res: any) => {
+      console.log('Pipeline getAll response:', res);
       if (res.done) {
         setPipelines(res.data || []);
         setError(null);
+        console.log(`Loaded ${res.data?.length || 0} pipelines`);
       } else {
         setError(res.error || "Failed to fetch pipelines");
+        console.error('Failed to fetch pipelines:', res.error);
       }
       setLoading(false);
     };
     socket.on("pipeline:getAll-response", handler);
-    // Listen for refresh-pipelines event
-    const refreshHandler = () => fetchPipelines();
-    window.addEventListener('refresh-pipelines', refreshHandler);
     return () => {
       socket.off("pipeline:getAll-response", handler);
-      window.removeEventListener('refresh-pipelines', refreshHandler);
     };
   }, [socket]);
 
-  const handleEditClick = (pipelineId: string) => {
-    setEditPipelineId(pipelineId);
+  // Listen for global refresh events
+  useEffect(() => {
+    const handleRefreshPipelines = () => {
+      console.log('Global refresh event received, fetching pipelines...');
+      fetchPipelines();
+    };
+
+    window.addEventListener('refresh-pipelines', handleRefreshPipelines);
+    
+    return () => {
+      window.removeEventListener('refresh-pipelines', handleRefreshPipelines);
+    };
+  }, []);
+
+  // Handle edit click
+  const handleEditClick = (pipeline: any) => {
+    console.log('Edit pipeline clicked:', pipeline);
+    setEditPipeline(pipeline);
     // Open the modal
-    const modal = document.getElementById('edit_pipeline');
+    const modal = document.getElementById('edit-pipeline-modal');
     if (modal) {
-      const bootstrapModal = (window as any).bootstrap?.Modal?.getOrCreateInstance(modal);
-      if (bootstrapModal) {
-        bootstrapModal.show();
-      } else {
-        modal.style.display = 'block';
-        modal.classList.add('show');
-        modal.setAttribute('aria-modal', 'true');
-        modal.removeAttribute('aria-hidden');
-        document.body.classList.add('modal-open');
-      }
+      const bootstrapModal = new (window as any).bootstrap.Modal(modal);
+      bootstrapModal.show();
+    }
+  };
+
+  // Handle delete click
+  const handleDeleteClick = (pipeline: any) => {
+    console.log('Delete pipeline clicked:', pipeline);
+    setDeletePipeline(pipeline);
+    // Open the modal
+    const modal = document.getElementById('delete-pipeline-modal');
+    if (modal) {
+      const bootstrapModal = new (window as any).bootstrap.Modal(modal);
+      bootstrapModal.show();
+    }
+  };
+
+  // Handle pipeline updated
+  const handlePipelineUpdated = () => {
+    console.log('Pipeline updated, refreshing list...');
+    fetchPipelines();
+    // Also dispatch global event for other components
+    window.dispatchEvent(new Event('refresh-pipelines'));
+  };
+
+  // Handle pipeline deleted
+  const handlePipelineDeleted = () => {
+    console.log('Pipeline deleted, refreshing list...');
+    fetchPipelines();
+    // Also dispatch global event for other components
+    window.dispatchEvent(new Event('refresh-pipelines'));
+  };
+
+  // Export functions
+  const handleExportPDF = async () => {
+    if (!socket) {
+      message.error("Socket connection not available");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      console.log("Starting PDF export...");
+      
+      // Emit socket event to generate PDF
+      socket.emit("pipeline/export-pdf");
+
+      // Listen for response
+      const handlePDFResponse = (response: any) => {
+        if (response.done) {
+          console.log("PDF generated successfully:", response.data.pdfUrl);
+          
+          // Create a temporary link and trigger download
+          const link = document.createElement('a');
+          link.href = response.data.pdfUrl;
+          link.download = `pipelines_${Date.now()}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          message.success("PDF exported successfully!");
+        } else {
+          console.error("PDF export failed:", response.error);
+          message.error(`PDF export failed: ${response.error}`);
+        }
+        setExporting(false);
+        socket.off("pipeline/export-pdf-response", handlePDFResponse);
+      };
+
+      socket.on("pipeline/export-pdf-response", handlePDFResponse);
+
+    } catch (error) {
+      console.error("Error exporting PDF:", error);
+      message.error("Failed to export PDF");
+      setExporting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!socket) {
+      message.error("Socket connection not available");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      console.log("Starting Excel export...");
+      
+      // Emit socket event to generate Excel
+      socket.emit("pipeline/export-excel");
+
+      // Listen for response
+      const handleExcelResponse = (response: any) => {
+        if (response.done) {
+          console.log("Excel generated successfully:", response.data.excelUrl);
+          
+          // Create a temporary link and trigger download
+          const link = document.createElement('a');
+          link.href = response.data.excelUrl;
+          link.download = `pipelines_${Date.now()}.xlsx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          message.success("Excel exported successfully!");
+        } else {
+          console.error("Excel export failed:", response.error);
+          message.error(`Excel export failed: ${response.error}`);
+        }
+        setExporting(false);
+        socket.off("pipeline/export-excel-response", handleExcelResponse);
+      };
+
+      socket.on("pipeline/export-excel-response", handleExcelResponse);
+
+    } catch (error) {
+      console.error("Error exporting Excel:", error);
+      message.error("Failed to export Excel");
+      setExporting(false);
     }
   };
 
@@ -147,7 +279,7 @@ const Pipeline = () => {
             data-bs-target="#edit_pipeline"
             onClick={e => {
               e.preventDefault();
-              handleEditClick(record._id);
+              handleEditClick(record);
             }}
           >
             <i className="ti ti-edit" />
@@ -155,7 +287,11 @@ const Pipeline = () => {
           <Link
             to="#"
             data-bs-toggle="modal"
-            data-bs-target="#delete_modal"
+            data-bs-target="#delete_pipeline"
+            onClick={e => {
+              e.preventDefault();
+              handleDeleteClick(record);
+            }}
           >
             <i className="ti ti-trash" />
           </Link>
@@ -187,52 +323,63 @@ const Pipeline = () => {
                 </ol>
               </nav>
             </div>
-            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap ">
-              <div className="me-2 mb-2">
-                <div className="dropdown">
+            <div className="col-auto float-end ms-auto">
+              <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+                {/* Export Dropdown */}
+                <div className="me-2 mb-2">
+                  <div className="dropdown">
+                    <Link
+                      to="#"
+                      className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                      data-bs-toggle="dropdown"
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      <i className="ti ti-file-export me-1" />
+                      {exporting ? "Exporting..." : "Export"}
+                    </Link>
+                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleExportPDF();
+                          }}
+                        >
+                          <i className="ti ti-file-type-pdf me-1" />
+                          Export as PDF
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleExportExcel();
+                          }}
+                        >
+                          <i className="ti ti-file-type-xls me-1" />
+                          Export as Excel
+                        </Link>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                
+                {/* Add Pipeline Button */}
+                <div className="mb-2">
                   <Link
                     to="#"
-                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
-                    data-bs-toggle="dropdown"
+                    data-bs-toggle="modal"
+                    data-bs-target="#add_pipeline"
+                    className="btn btn-primary d-flex align-items-center"
                   >
-                    <i className="ti ti-file-export me-1" />
-                    Export
+                    <i className="ti ti-circle-plus me-2" />
+                    Add Pipeline
                   </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        <i className="ti ti-file-type-pdf me-1" />
-                        Export as PDF
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        to="#"
-                        className="dropdown-item rounded-1"
-                      >
-                        <i className="ti ti-file-type-xls me-1" />
-                        Export as Excel{" "}
-                      </Link>
-                    </li>
-                  </ul>
                 </div>
-              </div>
-              <div className="mb-2">
-                <Link
-                  to="#"
-                  data-bs-toggle="modal"
-                  data-bs-target="#add_pipeline"
-                  className="btn btn-primary d-flex align-items-center"
-                >
-                  <i className="ti ti-circle-plus me-2" />
-                  Add Pipeline
-                </Link>
-              </div>
-              <div className="head-icons ms-2">
-                <CollapseHeader/>
               </div>
             </div>
           </div>
@@ -242,6 +389,7 @@ const Pipeline = () => {
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
               <h5>Pipeline List</h5>
               <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                {/* Date Range Filter */}
                 <div className="me-3">
                   <div className="input-icon-end position-relative">
                    <PredefinedDateRanges/>
@@ -250,6 +398,8 @@ const Pipeline = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Stage Filter */}
                 <div className="dropdown me-3">
                   <Link
                     to="#"
@@ -258,7 +408,7 @@ const Pipeline = () => {
                   >
                     Stage
                   </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
                       <Link
                         to="#"
@@ -293,6 +443,8 @@ const Pipeline = () => {
                     </li>
                   </ul>
                 </div>
+
+                {/* Deal Value Range Filter */}
                 <div className="dropdown me-3">
                   <Link
                     to="#"
@@ -301,7 +453,7 @@ const Pipeline = () => {
                   >
                     $0.00 - $0.00
                   </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
                       <Link
                         to="#"
@@ -328,6 +480,8 @@ const Pipeline = () => {
                     </li>
                   </ul>
                 </div>
+
+                {/* Status Filter */}
                 <div className="dropdown me-3">
                   <Link
                     to="#"
@@ -336,7 +490,7 @@ const Pipeline = () => {
                   >
                     Select Status
                   </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
                       <Link
                         to="#"
@@ -350,12 +504,14 @@ const Pipeline = () => {
                         to="#"
                         className="dropdown-item rounded-1"
                       >
-                        InActive
+                        Inactive
                       </Link>
                     </li>
                   </ul>
                 </div>
-                <div className="dropdown">
+
+                {/* Sort Options */}
+                <div className="dropdown me-3">
                   <Link
                     to="#"
                     className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
@@ -363,7 +519,7 @@ const Pipeline = () => {
                   >
                     Sort By : Last 7 Days
                   </Link>
-                  <ul className="dropdown-menu  dropdown-menu-end p-3">
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
                     <li>
                       <Link
                         to="#"
@@ -414,7 +570,10 @@ const Pipeline = () => {
               ) : error ? (
                 <div className="p-4 text-danger text-center">{error}</div>
               ) : (
-                <Table dataSource={pipelines} columns={columns} Selection={true} />
+                <>
+                  {/* Filter Summary */}
+                  <Table dataSource={pipelines} columns={columns} Selection={true} />
+                </>
               )}
             </div>
           </div>
@@ -432,7 +591,9 @@ const Pipeline = () => {
       </div>
       {/* /Page Wrapper */}
       <CrmsModal/>
-      <EditPipeline pipelineId={editPipelineId} />
+      <AddPipeline />
+      <EditPipeline pipeline={editPipeline} onPipelineUpdated={handlePipelineUpdated} />
+      <DeletePipeline pipeline={deletePipeline} onPipelineDeleted={handlePipelineDeleted} />
     </>
   );
 }

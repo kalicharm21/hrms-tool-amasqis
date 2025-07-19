@@ -28,7 +28,8 @@ const pipelineController = (socket, io) => {
       console.log("[Pipeline] pipeline:create event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, data });
       if (!isAdmin) throw new Error("Unauthorized: Admins only");
       const companyId = validateCompanyAccess(socket);
-      const result = await pipelineService.createPipeline(companyId, data);
+      // Always include companyId in the pipeline data
+      const result = await pipelineService.createPipeline(companyId, { ...data, companyId });
       if (!result.done) {
         console.error("[Pipeline] Failed to create pipeline", { error: result.error });
       }
@@ -86,6 +87,92 @@ const pipelineController = (socket, io) => {
     } catch (error) {
       console.error("[Pipeline] Error in pipeline:delete", { error: error.message });
       socket.emit("pipeline:delete-response", { done: false, error: error.message });
+    }
+  });
+
+  // Export pipelines as PDF
+  socket.on("pipeline/export-pdf", async () => {
+    try {
+      console.log("Received export-pdf request");
+      
+      if (!socket.companyId) {
+        throw new Error("Company ID not found in user metadata");
+      }
+
+      console.log("Generating PDF...");
+      const result = await pipelineService.exportPipelinesPDF(socket.companyId);
+      console.log("PDF generation result:", result);
+      
+      if (result.done) {
+        console.log("Sending PDF URL to client:", result.data.pdfUrl);
+        socket.emit("pipeline/export-pdf-response", {
+          done: true,
+          data: {
+            pdfUrl: result.data.pdfUrl
+          }
+        });
+        
+        // Schedule cleanup after 1 hour
+        setTimeout(() => {
+          console.log("Cleaning up PDF file:", result.data.pdfPath);
+          // Note: We could add a cleanup function similar to subscriptions if needed
+        }, 60 * 60 * 1000);
+      } else {
+        console.error("PDF generation failed:", result.error);
+        socket.emit("pipeline/export-pdf-response", {
+          done: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error("Error in export-pdf handler:", error);
+      socket.emit("pipeline/export-pdf-response", {
+        done: false,
+        error: error.message
+      });
+    }
+  });
+
+  // Export pipelines as Excel
+  socket.on("pipeline/export-excel", async () => {
+    try {
+      console.log("Received export-excel request");
+      
+      if (!socket.companyId) {
+        throw new Error("Company ID not found in user metadata");
+      }
+
+      console.log("Generating Excel...");
+      const result = await pipelineService.exportPipelinesExcel(socket.companyId);
+      console.log("Excel generation result:", result);
+      
+      if (result.done) {
+        console.log("Sending Excel URL to client:", result.data.excelUrl);
+        socket.emit("pipeline/export-excel-response", {
+          done: true,
+          data: {
+            excelUrl: result.data.excelUrl
+          }
+        });
+        
+        // Schedule cleanup after 1 hour
+        setTimeout(() => {
+          console.log("Cleaning up Excel file:", result.data.excelPath);
+          // Note: We could add a cleanup function similar to subscriptions if needed
+        }, 60 * 60 * 1000);
+      } else {
+        console.error("Excel generation failed:", result.error);
+        socket.emit("pipeline/export-excel-response", {
+          done: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error("Error in export-excel handler:", error);
+      socket.emit("pipeline/export-excel-response", {
+        done: false,
+        error: error.message
+      });
     }
   });
 };
