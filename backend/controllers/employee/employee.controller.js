@@ -6,7 +6,7 @@ const employeeDashboardController = (socket, io) => {
         process.env.NODE_ENV === "development";
 
     const validateEmployeeAccess = (socket) => {
-        if (!socket.user || !socket.user.companyId || !socket.user.employeeId) {
+        if (!socket || !socket.companyId || !socket.employeeId) {
             throw new Error("Company ID or Employee ID not found in user metadata");
         }
         const companyIdRegex = /^[a-zA-Z0-9_-]{3,50}$/;
@@ -29,6 +29,8 @@ const employeeDashboardController = (socket, io) => {
             );
             throw new Error("Unauthorized: Employee ID mismatch");
         }
+        console.log("worked");
+
         return {
             companyId: socket.companyId,
             employeeId: socket.employeeId,
@@ -51,37 +53,56 @@ const employeeDashboardController = (socket, io) => {
             return handler(...args);
         };
     };
-
-    socket.on("employee/dashboard/get-details-stats", async () => {
+    //////////testing
+    socket.on("employee/dashboard/get-employee-details-all", async () => {
+        try {
+            const { companyId } = validateEmployeeAccess(socket);
+            const result = await employeeService.getEmployeeDetailsAll(companyId);
+            socket.emit("employee/dashboard/get-employee-details-all-response", result);
+        } catch (error) {
+            socket.emit("employee/dashboard/get-employee-details-all-response", {
+                done: false,
+                error: error.message
+            })
+        }
+    });
+    ///// for testing
+    socket.on("employee/dashboard/get-employee-details", async () => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
             const result = await employeeService.getEmployeeDetails(companyId, employeeId);
-            socket.emit("superadmin/dashboard/get-details-stats-response", result);
+            socket.emit("employee/dashboard/get-employee-details-response", result);
         } catch (error) {
-            socket.emit("superadmin/dashboard/get-stats-response", {
+            socket.emit("employee/dashboard/get-employee-details-response", {
                 done: false,
                 error: error.message
             })
         }
     });
 
-    socket.on("employee/dashboard/get-attendance-stats", async () => {
+    socket.on("employee/dashboard/get-attendance-stats", async (payload) => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-            const result = await employeeService.getAttendanceStats(companyId, employeeId);
-            socket.emit("employee/dashboard/get-attendance-stats", result);
+            const year = typeof payload.year === "number" && !isNaN(payload.year)
+                ? payload.year
+                : new Date().getFullYear();
+            const result = await employeeService.getAttendanceStats(companyId, employeeId, year);
+            socket.emit("employee/dashboard/get-attendance-stats-response", result);
         } catch (error) {
             socket.emit("employee/dashboard/get-attendance-stats-response", {
                 done: false,
                 error: error.message,
-            })
+            });
         }
-    })
+    });
 
-    socket.on("employee/dashboard/get-leave-stats", async () => {
+    socket.on("employee/dashboard/get-leave-stats", async (payload) => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-            const result = await employeeService.getLeaveStats(companyId, employeeId);
+            const year = typeof payload.year === "number" && !isNaN(payload.year)
+                ? payload.year
+                : new Date().getFullYear();
+            const result = await employeeService.getLeaveStats(companyId, employeeId,year);
             socket.emit("employee/dashboard/get-leave-stats-response", result);
         } catch (error) {
             socket.emit("employee/dashboard/get-leave-stats-response", {
@@ -91,82 +112,72 @@ const employeeDashboardController = (socket, io) => {
         }
     })
 
-    socket.on("employee/leave/add", withRateLimit(async (leaveData) => {
+    socket.on("employee/dashboard/add-leave", withRateLimit(async (leaveRequest) => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-            if (!leaveData || typeof leaveData !== "object") {
+
+            if (!leaveRequest || typeof leaveRequest !== "object") {
                 throw new Error("Invalid leave data format.");
             }
-            const empName = typeof leaveData.empName === "string"
-                ? leaveData.empName.trim().substring(0, 100)
+            console.log(typeof leaveRequest.empName);
+
+            const empName = typeof leaveRequest.empName === "string"
+                ? leaveRequest.empName.trim().substring(0, 100)
                 : null;
 
             if (!empName) {
                 throw new Error("Employee name is required.");
             }
 
-            const rawLeaveType = typeof leaveData.leaveType === "string"
-                ? leaveData.leaveType.trim().toLowerCase()
+            const rawLeaveType = typeof leaveRequest.leaveType === "string"
+                ? leaveRequest.leaveType.trim().toLowerCase()
                 : "";
 
-            const allowedLeaveTypes = ["casual", "sick", "earned", "unpaid"];
+            const allowedLeaveTypes = ["casual", "sick"];
             const leaveType = allowedLeaveTypes.includes(rawLeaveType)
                 ? rawLeaveType
                 : "casual";
 
-            const startDate = leaveData.startDate && !isNaN(Date.parse(leaveData.startDate))
-                ? new Date(leaveData.startDate)
+            const startDate = leaveRequest.startDate && !isNaN(Date.parse(leaveRequest.startDate))
+                ? new Date(leaveRequest.startDate)
                 : null;
 
-            const endDate = leaveData.endDate && !isNaN(Date.parse(leaveData.endDate))
-                ? new Date(leaveData.endDate)
+            const endDate = leaveRequest.endDate && !isNaN(Date.parse(leaveRequest.endDate))
+                ? new Date(leaveRequest.endDate)
                 : null;
 
             if (!startDate || !endDate || startDate > endDate) {
                 throw new Error("Leave dates are invalid or out of range.");
             }
 
-            const reason = typeof leaveData.reason === "string"
-                ? leaveData.reason.trim().substring(0, 1000)
+            const reason = typeof leaveRequest.reason === "string"
+                ? leaveRequest.reason.trim().substring(0, 1000)
                 : "";
 
-            const noOfDays = typeof leaveData.noOfDays === "number" && leaveData.noOfDays > 0
-                ? leaveData.noOfDays
+            const noOfDays = typeof leaveRequest.noOfDays === "number" && leaveRequest.noOfDays > 0
+                ? leaveRequest.noOfDays
                 : null;
 
             if (!noOfDays) {
                 throw new Error("Valid number of leave days is required.");
             }
-
-            const year = typeof leaveData.year === "number" && String(leaveData.year).length === 4
-                ? leaveData.year
-                : new Date().getFullYear();
-
-            const leaveRequest = {
+            const leaveData = {
                 empName,
                 leaveType,
                 reason,
                 noOfDays,
                 startDate,
                 endDate,
-                year,
-                employeeId,
                 status: "pending",
-                createdAt: new Date(),
             };
-
-            const collections = getTenantCollections(companyId);
-            const result = await collections.leaveRequests.insertOne(leaveRequest);
-
-            socket.emit("employee/leave/add-response", {
+            const result = await employeeService.addLeaveRequest(companyId, employeeId, leaveData);
+            socket.emit("employee/dashboard/add-leave-response", {
                 done: true,
-                data: { ...leaveRequest, _id: result.insertedId }
+                data: result
             });
-
-            io.to(`manager_room_${companyId}`).emit("admin/leave/refresh");
-
+            // io.to(`leads_room_${companyId}`).emit("leads/leave/refresh",result);
         } catch (err) {
-            socket.emit("employee/leave/add-response", {
+            socket.emit("employee/dashboard/add-leave-response", {
                 done: false,
                 error: err.message || "Something went wrong while submitting leave.",
             });
@@ -199,19 +210,6 @@ const employeeDashboardController = (socket, io) => {
         }
     })
 
-    socket.on("employee/dashboard/punch-out", async () => {
-        try {
-            const { companyId, employeeId } = validateEmployeeAccess(socket);
-            const result = await employeeService.punchOut(companyId, employeeId);
-            socket.emit("employee/dashboard/punch-out-response", result);
-        } catch (error) {
-            socket.emit("employee/dashboard/punch-out-response", {
-                done: false,
-                error: error.message,
-            })
-        }
-    });
-
     socket.on("employee/dashboard/start-break", async () => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
@@ -238,43 +236,18 @@ const employeeDashboardController = (socket, io) => {
         }
     })
 
-    socket.on('employee/dashboard/get-working-hours', async (payload) => {
+    socket.on('employee/dashboard/working-hours-stats', async () => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-            const duration = payload?.duration;
-            if (!duration || typeof duration !== 'object') {
-                return socket.emit('employee/get-working-hours-response', {
-                    done: false,
-                    error: 'Invalid or missing duration object.',
-                });
-            }
-            let { periodType, startDate, endDate } = duration;
-            periodType = typeof periodType === 'string' ? periodType.trim().toLowerCase() : '';
-            const allowedPeriodTypes = ['thisweek', 'lastweek', 'thismonth', 'lastmonth'];
-            if (!allowedPeriodTypes.includes(periodType)) {
-                return socket.emit('employee/get-working-hours-response', {
-                    done: false,
-                    error: 'Invalid periodType. Allowed: thisWeek, lastWeek, thisMonth, lastMonth.',
-                });
-            }
-            const sanitizedStartDate =
-                startDate && !isNaN(Date.parse(startDate)) ? new Date(startDate) : null;
-            const sanitizedEndDate =
-                endDate && !isNaN(Date.parse(endDate)) ? new Date(endDate) : null;
-            const result = await employeeService.getWorkingHoursByPeriod(companyId, employeeId, {
-                periodType,
-                startDate: sanitizedStartDate,
-                endDate: sanitizedEndDate,
-            });
-            socket.emit('employee/get-working-hours-response', result);
+            const result = await employeeService.getWorkingHoursStats(companyId, employeeId);
+            socket.emit('employee/dashboard/working-hours-stats-response', result);
         } catch (error) {
-            socket.emit('employee/get-working-hours-response', {
+            socket.emit('employee/dashboard/working-hours-stats-response', {
                 done: false,
-                error: error.message || 'Unexpected error fetching working hours.',
+                error: error.message || 'Failed to retrieve working hours summary'
             });
         }
     });
-
 
     socket.on('employee/dashboard/get-projects', async (payload) => {
         try {
@@ -308,9 +281,9 @@ const employeeDashboardController = (socket, io) => {
             filter = typeof filter === 'string' ? filter.trim().toLowerCase() : 'all';
 
             const allowedFilters = ['all', 'ongoing'];
-            if (!allowedFilters.includes(filterType)) filter = 'all';
+            if (!allowedFilters.includes(filter)) filter = 'all';
 
-            const result = await employeeService.getTasks({ companyId, employeeId, filter });
+            const result = await employeeService.getTasks(companyId, employeeId, filter);
 
             socket.emit('employee/dashboard/get-tasks-response', result);
         } catch (error) {
@@ -328,7 +301,6 @@ const employeeDashboardController = (socket, io) => {
             if (!payload || typeof payload !== "object") {
                 throw new Error("Invalid task data.");
             }
-
             const { projectId, title, description, status, dueDate, checked, starred } = payload;
 
             if (!projectId || typeof projectId !== "string" || !ObjectId.isValid(projectId)) {
@@ -390,7 +362,6 @@ const employeeDashboardController = (socket, io) => {
     socket.on("employee/dashboard/update-task", withRateLimit(async (payload) => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-
             if (
                 !payload ||
                 typeof payload !== "object" ||
@@ -402,23 +373,31 @@ const employeeDashboardController = (socket, io) => {
                     error: "Invalid or missing task ID."
                 });
             }
-
-            if (!payload.updateData || typeof payload.updateData !== "object") {
+            const updateData = payload.updateData;
+            if (!updateData || typeof updateData !== "object") {
                 return socket.emit("employee/dashboard/update-task-response", {
                     done: false,
                     error: "Invalid or missing update data."
                 });
             }
-
+            const allowedKeys = ["status", "starred", "checked"];
+            const hasValidField = allowedKeys.some(
+                key => Object.prototype.hasOwnProperty.call(updateData, key)
+            );
+            if (!hasValidField) {
+                return socket.emit("employee/dashboard/update-task-response", {
+                    done: false,
+                    error: "Update must include at least one of: status, starred, or checked."
+                });
+            }
             const result = await employeeService.updateTask({
                 companyId,
                 employeeId,
                 taskData: {
-                    taskId: payload.taskId,
-                    updateData: payload.updateData
+                    taskId: new ObjectId(payload.taskId),
+                    updateData
                 }
             });
-
             socket.emit("employee/dashboard/update-task-response", result);
         } catch (err) {
             socket.emit("employee/dashboard/update-task-response", {
@@ -428,15 +407,15 @@ const employeeDashboardController = (socket, io) => {
         }
     }));
 
-    socket.on("employee/dashboard/get-salary-monthly-breakdown", async (payload) => {
+    socket.on("employee/dashboard/get-performance", async (payload) => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
             let year = payload?.year;
             year = typeof year === "number" && String(year).length === 4 ? year : new Date().getFullYear();
-            const result = await employeeService.getMonthlySalaryForYear(companyId, employeeId, year);
-            socket.emit("employee/dashboard/get-salary-monthly-breakdown-response", result);
+            const result = await employeeService.getPerformance(companyId, employeeId, year);
+            socket.emit("employee/dashboard/get-performance-response", result);
         } catch (err) {
-            socket.emit("employee/dashboard/get-salary-monthly-breakdown-response", {
+            socket.emit("employee/dashboard/get-performance-response", {
                 done: false,
                 error: err.message || "Failed to fetch salary breakdown."
             });
@@ -450,7 +429,7 @@ const employeeDashboardController = (socket, io) => {
             year = typeof year === "number" && String(year).length === 4
                 ? year
                 : new Date().getFullYear();
-            const result = await employeeService.getSkillsByYear(companyId, employeeId, year);
+            const result = await employeeService.getSkills(companyId, employeeId, year);
             socket.emit("employee/dashboard/get-skills-response", result);
         } catch (err) {
             socket.emit("employee/dashboard/get-skills-response", {
@@ -489,17 +468,17 @@ const employeeDashboardController = (socket, io) => {
     socket.on("employee/dashboard/get-meetings", async (payload) => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-            const tag = typeof payload?.tag === "string"
-                ? payload.tag.trim().toLowerCase()
+            const filter = typeof payload?.filter === "string"
+                ? payload.filter.trim().toLowerCase()
                 : null;
-            const validTags = ["today", "this month", "this year"];
-            if (!tag || !validTags.includes(tag)) {
+            const validFilters = ["today", "month", "year"];
+            if (!filter || !validFilters.includes(filter)) {
                 return socket.emit("employee/dashboard/get-meetings-response", {
                     done: false,
                     error: "Invalid or missing tag. Allowed values: today, this month, this year."
                 });
             }
-            const result = await employeeService.getMeetings(companyId, employeeId, tag);
+            const result = await employeeService.getMeetings(companyId, employeeId, filter);
             socket.emit("employee/dashboard/get-meetings-response", result);
         } catch (error) {
             socket.emit("employee/dashboard/get-meetings-response", {
@@ -508,9 +487,78 @@ const employeeDashboardController = (socket, io) => {
             });
         }
     });
+    
+    socket.on("employee/dashboard/get-birthdays", async () => {
+  try {
+    const { companyId, employeeId } = validateEmployeeAccess(socket);
+    const result = await employeeService.getTodaysBirthday(companyId, employeeId);
+    socket.emit("employee/dashboard/get-birthdays-response", result);
+  } catch (error) {
+    socket.emit("employee/dashboard/get-birthdays-response", {
+      done: false,
+      error: error.message || "Failed to fetch birthday team members."
+    });
+  }
+});
 
+    // get all data
+    socket.on("employee/dashboard/get-all-data", async (data = {}) => {
+        try {
+            const { companyId, employeeId } = validateEmployeeAccess(socket);
+            const year = data.year || new Date().getFullYear();
 
-    socket.on()
+            const [
+                employeeDetails,
+                attendanceStats,
+                leaveStats,
+                workingHoursStats,
+                projects,
+                tasks,
+                performance,
+                skills,
+                teamMembers,
+                notifications,
+                meetings,
+                birthdays,
+            ] = await Promise.all([
+                employeeService.getEmployeeDetails(companyId, employeeId),
+                employeeService.getAttendanceStats(companyId, employeeId, year),
+                employeeService.getLeaveStats(companyId, employeeId, year),
+                employeeService.getWorkingHoursStats(companyId, employeeId),
+                employeeService.getProjects(companyId, employeeId, "ongoing"),
+                employeeService.getTasks(companyId, employeeId, "ongoing"),
+                employeeService.getPerformance(companyId, employeeId, year),
+                employeeService.getSkills(companyId, employeeId, year),
+                employeeService.getTeamMembers(companyId, employeeId),
+                employeeService.getTodaysNotifications(companyId, employeeId),
+                employeeService.getMeetings(companyId, employeeId, "today"),
+                employeeService.getTodaysBirthday(companyId,employeeId),
+            ])
+            socket.emit("employee/dashboard/get-all-data-response", {
+                done: true,
+                data: {
+                    employeeDetails: employeeDetails.data,
+                    attendanceStats: attendanceStats.data,
+                    leaveStats: leaveStats.data,
+                    workingHoursStats: workingHoursStats.data,
+                    projects: projects.data,
+                    tasks: tasks.data,
+                    performance: performance.data,
+                    skills: skills.data,
+                    teamMembers: teamMembers.data,
+                    notifications: notifications.data,
+                    meetings: meetings.data,
+                    birthdays: birthdays.data,
+                }
+            })
+        } catch (error) {
+            socket.emit("employee/dashboard/get-all-data-response", {
+                done: false,
+                error: error.message,
+            });
+        }
+
+    })
 }
 
 export default employeeDashboardController;

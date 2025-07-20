@@ -64,6 +64,7 @@ const allowedOrigins = [
   "http://dummy.localhost:3000",
   "https://hrms-tool-amasqis.onrender.com",
   process.env.FRONTEND_URL,
+  "*",
 ];
 
 const authorizedParties = [
@@ -89,6 +90,7 @@ export const socketHandler = (httpServer) => {
   io.use(async (socket, next) => {
     console.log("Socket connection attempt...");
     const token = socket.handshake.auth.token;
+    console.log(token);
     if (!token) {
       console.error("No token provided");
       return next(new Error("Authentication error: No token provided"));
@@ -225,15 +227,29 @@ export const socketHandler = (httpServer) => {
 
   io.on("connection", (socket) => {
     console.log(
-      `Client connected: ${socket.id}, Role: ${socket.role}, Company: ${
-        socket.companyId || "None"
+      `Client connected: ${socket.id}, Role: ${socket.role}, Company: ${socket.companyId || "None"
       }`
     );
+    // ONLY FOR TESTING PURPOSE
+    if (socket.role === "public") {
+      socket.companyId = "68443081dcdfe43152aebf80";  // <-- fake companyId injected
+      socket.role = "employee";  // optionally override role to admin
+      socket.companyId = "68443081dcdfe43152aebf80";
+      socket.employeeId = "6879df8337412a2eb7454d46";
+      socket.userMetadata = {
+        companyId: "68443081dcdfe43152aebf80",
+        employeeId: "6879df8337412a2eb7454d46",
+        isEmployeeVerified: true,
+        role: "employee"
+      };
+      console.log("🔧 Injected test companyId and role:", "68443081dcdfe43152aebf80");
+    }
+    /////////////////////////////////
     const role = socket.role || "guest";
-    router(socket, io, role);
+  router(socket, io, role);
 
-    socket.on("disconnect", () => {
-      console.log(`Client disconnected: ${socket.id}`);
-    });
+  socket.on("disconnect", () => {
+    console.log(`Client disconnected: ${socket.id}`);
   });
+});
 };

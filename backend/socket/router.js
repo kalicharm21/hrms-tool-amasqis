@@ -19,7 +19,7 @@ const router = (socket, io, role) => {
       console.log("HR controller not implemented yet");
       break;
     case "employee":
-      console.log("Attaching employee controller...");
+      console.log("Attaching employee controller...");       
       employeeDashboardController(socket, io);
       break;
     default:

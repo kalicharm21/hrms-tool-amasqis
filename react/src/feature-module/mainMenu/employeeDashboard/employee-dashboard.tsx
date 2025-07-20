@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { all_routes } from "../../router/all_routes";
@@ -11,58 +11,542 @@ import { Calendar } from "primereact/calendar";
 import { DatePicker } from "antd";
 import CommonSelect from "../../../core/common/commonSelect";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
+import { useAuth, useUser } from "@clerk/clerk-react";
+import { attendance } from "../../../core/common/selectoption/selectoption";
+import io from "socket.io-client";
+import { ApexOptions } from "apexcharts";
+import RequestModals from "../../../core/modals/requestModal";
+import CryptoJS from "crypto-js";
 
+interface DashboardData {
+  employeeDetails?: {
+    _id: string
+    name: string;
+    designation: string;
+    role: string;
+    avatar: string;
+    phoneNumber: string;
+    email: string;
+    reportOffice: string;
+    joinedOn: string;
+  },
+  attendanceStats?: {
+    absent: number,
+    late: number,
+    onTime: number,
+    workFromHome: number,
+    workedDays: number,
+    workingDays: number,
+    punchIn: string,
+    punchOut: string,
+  }
+  leaveStats?: {
+    lossOfPay: number,
+    requestedLeaves: number,
+    sickLeaves: number,
+    takenLeaves: number,
+    totalLeavesAllowed: number,
+  }
+  workingHoursStats?: {
+    today: {
+      breakHours: number,
+      expectedHours: number,
+      overtimeHours: number,
+      workedHours: number,
+    }
+    thisWeek: {
+      expectedHours: number,
+      workedHours: number,
+    }
+    thisMonth: {
+      expectedHours: number,
+      workedHours: number,
+      expectedOvertimeHours: number,
+      overtimeHours: number,
+    }
+  }
+  projects?: Array<{
+    projectId: string
+    projectTitle: string,
+    dueDate: string,
+    totalTasks: number,
+    completedTasks: number,
+    projectLeadAvatar: string | null;
+    leadName: string | null;
+    membersAvatars: string[];
+  }>
+  tasks?: Array<{
+    _id: string,
+    title: string,
+    starred: boolean,
+    checked: boolean,
+    status: string,
+    avatars: Array<{ _id: string, avatar: string }>;
+  }>
+  skills?: Array<{
+    name: string,
+    updatedAt: string,
+    proficiency: number,
+  }>
+  teamMembers?: Array<{
+    _id: string;
+    name: string;
+    avatar: string;
+    role: string;
+  }>,
+  notifications?: Array<{
+    _id: string,
+    title: string,
+    createdAt: string,
+    avatar: string,
+  }>
+  meetings?: Array<{
+    _id: string
+    title: string,
+    description: string,
+    startTime: string,
+    tag: string
+  }>
+  performance?: {
+    months: string[];
+    salaries: number[];
+  }
+  birthdays?: Array<{
+    _id: string;
+    name: string;
+    avatarUrl?: string;
+    role?: string;
+  }>
+}
+const ENCRYPTION_KEY = 'your-strong-encryption-key';
+const leaveType = [
+  { value: "Select", label: "Select" },
+  { value: "Sick Leave", label: "Medical Leave" },
+  { value: "Casual Leave", label: "Casual Leave" },
+  { label: "Loss of Pay", value: "lossOfPay" }
+];
 const EmployeeDashboard = () => {
   const routes = all_routes;
+  const { getToken } = useAuth();
+  const { user, isLoaded, isSignedIn } = useUser();
+  const [socket, setSocket] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [date, setDate] = useState(new Date());
 
-  const [date, setDate] = useState(new Date("2024"));
+  const [filters, setFilters] = useState({
+    attendanceStats: year,
+    projects: 'ongoing',
+    tasks: 'ongoing',
+    performance: year,
+    skills: year,
+    meetings: "today",
+  });
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 3 }, (_, i) => (currentYear - i).toString());
+
+  const handleYearChangeAll = (newDate: Date) => {
+    console.log(`[YEAR FILTER] Year changed to: ${newDate.getFullYear()}`);
+    setDate(newDate);
+
+    if (socket) {
+      const year = newDate.getFullYear();
+      socket.emit("admin/dashboard/get-all-data", { year });
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    let currentSocket: any = null;
+
+    const initSocket = async () => {
+      try {
+        console.log("Initializing socket connection...");
+        const token = await getToken();
+        console.log("Token obtained, creating socket...");
+
+        if (!isMounted) return;
+
+        currentSocket = io("http://localhost:5000", {
+          auth: { token },
+          timeout: 20000,
+        });
+
+        const timeoutId = setTimeout(() => {
+          if (loading && isMounted) {
+            console.warn("Dashboard loading timeout - showing fallback");
+            setError("Dashboard loading timed out. Please refresh the page.");
+            setLoading(false);
+          }
+        }, 30000);
+
+        currentSocket.on("connect", () => {
+          console.log("Connected to admin dashboard");
+          console.log("Requesting dashboard data...");
+          currentSocket.emit("employee/dashboard/get-all-data");
+        });
+
+        currentSocket.on("employee/dashboard/get-all-data-response", (response: any) => {
+          console.log("Received dashboard data response:", response);
+          clearTimeout(timeoutId);
+          if (!isMounted) return;
+          if (response.done) {
+            console.log("Dashboard data loaded successfully");
+            setDashboardData(response.data);
+            setLoading(false);
+          } else {
+            console.error("Dashboard data error:", response.error);
+            setError(response.error || "Failed to fetch dashboard data");
+            setLoading(false);
+          }
+        });
+
+        currentSocket.on("employee/dashboard/get-attendance-stats-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              attendanceStats: response.data,
+            }));
+          }
+        });
+
+        currentSocket.on("employee/dashboard/get-leave-stats-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              leaveStats: response.data,
+            }));
+          }
+        });
+
+        currentSocket.on('employee/dashboard/get-projects-response', (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            console.log(response);
+            setDashboardData(prev => ({
+              ...prev,
+              projects: response.data
+            }));
+          }
+        });
+
+        currentSocket.on('employee/dashboard/get-tasks-response', (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              tasks: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("employee/dashboard/get-skills-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              skills: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("employee/dashboard/get-meetings-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              meetings: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("employee/dashboard/get-performance-response", (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            console.log(response);
+            setDashboardData(prev => ({
+              ...(prev ?? {}),
+              performance: response.data
+            }));
+          }
+        });
+
+        currentSocket.on("connect_error", (err: any) => {
+          console.error("Socket connection error:", err);
+          clearTimeout(timeoutId);
+          if (!isMounted) return;
+
+          setError("Failed to connect to server");
+          setLoading(false);
+        });
+
+        currentSocket.on("disconnect", (reason: any) => {
+          console.log("Socket disconnected:", reason);
+          clearTimeout(timeoutId);
+        });
+
+        if (isMounted) {
+          setSocket(currentSocket);
+        }
+      } catch (err) {
+        console.error("Failed to initialize socket:", err);
+        if (isMounted) {
+          setError("Failed to authenticate");
+          setLoading(false);
+        }
+      }
+    };
+
+    if (!socket)
+      initSocket();
+
+    return () => {
+      isMounted = false;
+      if (currentSocket) {
+        console.log("Cleaning up socket connection...");
+        currentSocket.removeAllListeners();
+        currentSocket.disconnect();
+      }
+    };
+
+  }, []);
+
+  // helper functions
+
+  function encryptValue(value: string): string {
+    return CryptoJS.AES.encrypt(value, ENCRYPTION_KEY).toString();
+  }
+
+  function decryptValue(encrypted: string): string | null {
+    try {
+      const bytes = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY);
+      const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+      return decrypted;
+    } catch {
+      return null;
+    }
+  }
+  let overallTimerInterval: ReturnType<typeof setInterval> | null = null;
+  let productionTimerInterval: ReturnType<typeof setInterval> | null = null;
+
+  function handlePunchIn(employeeId : String): void {
+    const checkInTime = Date.now();
+    const encryptedCheckIn = encryptValue(checkInTime.toString());
+    localStorage.setItem('encryptedCheckIn', encryptedCheckIn);
+    socket.emit("employee/dashboard/punch-in");
+    console.log(` Punched in at ${new Date(checkInTime).toLocaleString()}`);
+    startOverallTimer(checkInTime);
+    startProductionTimer(checkInTime);
+  }
+  function startOverallTimer(checkInTime: number) {
+    clearInterval(overallTimerInterval!);
+
+    overallTimerInterval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - checkInTime;
+
+      const formatted = formatMsToTime(elapsed);
+      console.log("🕒 Overall Time:", formatted);
+
+      // Optionally update UI state here
+    }, 1000);
+  }
+
+  function startProductionTimer(startTime: number) {
+    clearInterval(productionTimerInterval!);
+    productionTimerInterval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - startTime;
+      const formatted = formatMsToTime(elapsed);
+      console.log("🔧 Production Time:", formatted);
+      // Optionally update UI state here
+    }, 1000);
+  }
+
+  function formatMsToTime(ms: number): string {
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms / (1000 * 60)) % 60);
+    const seconds = Math.floor((ms / 1000) % 60);
+    return [hours, minutes, seconds].map(pad).join(':');
+  }
+
+  function pad(value: number): string {
+    return value.toString().padStart(2, '0');
+  }
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'badge-soft-success';
+      case 'pending':
+        return 'badge-secondary-transparent';
+      case 'inprogress':
+        return 'bg-transparent-purple';
+      case 'onhold':
+        return 'bg-soft-pink';
+      default:
+        return 'bg-light';
+    }
+  };
+
+  function formatDateProject(dateString: string): string {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "Invalid date";
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  function convertHoursDecimalToHoursMinutes(decimalHours: number): string {
+    if (decimalHours === undefined || decimalHours === null) return '0h 0m';
+    const totalMinutes = Math.round(decimalHours * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}m`;
+  }
+
+  const formatCurrentDateTime = () => {
+    const date = new Date();
+
+    const time = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).replace(/^0/, '');
+
+    const day = date.toLocaleDateString('en-US', { day: '2-digit' });
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+
+    return `${time}, ${day} ${month} ${year}`;
+  };
+  function parseHourDecimal(hourDecimal: number | undefined): number {
+    if (hourDecimal == null) return 0;
+    const hours = Math.floor(hourDecimal);
+    const minutes = Math.round((hourDecimal - hours) * 100);
+    return hours + minutes / 60;
+  }
+
+  function calculateTimePercentages(
+    totalWorkingHours?: number,
+    productiveHours?: number,
+    overtimeHours?: number,
+    breakTime?: number,
+  ) {
+    const total = parseHourDecimal(totalWorkingHours);
+    const productive = parseHourDecimal(productiveHours);
+    const overtime = parseHourDecimal(overtimeHours);
+    const brk = parseHourDecimal(breakTime);
+
+    if (total === 0) {
+      return {
+        productivePercent: 0,
+        overtimePercent: 0,
+        breakPercent: 0,
+      };
+    }
+
+    return {
+      productivePercent: (productive / total) * 100,
+      overtimePercent: (overtime / total) * 100,
+      breakPercent: (brk / total) * 100,
+    };
+  };
+
+  const {
+    productivePercent,
+    overtimePercent,
+    breakPercent,
+  } = calculateTimePercentages(
+    dashboardData?.workingHoursStats?.today?.expectedHours,
+    dashboardData?.workingHoursStats?.today?.workedHours,
+    dashboardData?.workingHoursStats?.today?.overtimeHours,
+    dashboardData?.workingHoursStats?.today?.breakHours,
+  );
+
+  function fillMissingMonths(performanceData: { months: string[]; salaries: number[] }) {
+    const allMonths = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
+      "Sep", "Oct", "Nov", "Dec"
+    ];
+    const currentMonthIndex = new Date().getMonth();
+    const monthsToUse = allMonths.slice(0, currentMonthIndex + 1);
+
+    const salaryMap = new Map<string, number>();
+    performanceData.months.forEach((month, idx) => {
+      salaryMap.set(month.toLowerCase(), performanceData.salaries[idx]);
+    });
+
+    let lastSalary: number | null = null;
+    const filledSalaries = monthsToUse.map(month => {
+      const salary = salaryMap.get(month.toLowerCase());
+      if (salary !== undefined) {
+        lastSalary = salary;
+        return salary;
+      }
+      return lastSalary === null ? 0 : lastSalary;
+    });
+
+    return {
+      months: monthsToUse,
+      salaries: filledSalaries,
+    };
+  }
+  // const processedPerformance = fillMissingMonths(
+  //   dashboardData.performanceData ?? { months: [], salaries: [] }
+  // );
 
   //New Chart
-  const [leavesChart] = useState<any>({
+  const leavesChart_series = [
+    dashboardData?.attendanceStats?.onTime || 0,
+    dashboardData?.attendanceStats?.late || 0,
+    dashboardData?.attendanceStats?.workFromHome || 0,
+    dashboardData?.attendanceStats?.absent || 0,
+    dashboardData?.leaveStats?.sickLeaves || 0,
+  ];
+  const leavesChart_options: ApexOptions = {
     chart: {
       height: 165,
       type: "donut",
-      toolbar: {
-        show: false,
-      },
+      toolbar: { show: false },
     },
+    labels: ["On Time", "Late", "Work From Home", "Absent", "Sick Leaves"],
     plotOptions: {
       bar: {
         horizontal: false,
         columnWidth: "50%",
       },
     },
-    dataLabels: {
-      enabled: false,
-    },
-
-    series: [15, 10, 5, 10, 60],
-    colors: ["#F26522", "#FFC107", "#E70D0D", "#03C95A", "#0C4B5E"],
-    responsive: [
-      {
-        breakpoint: 480,
-        options: {
-          chart: {
-            width: 200,
-          },
-          legend: {
-            show: false,
-          },
-        },
-      },
-    ],
-    legend: {
-      show: false,
-    },
-  });
-
-  const [performance_chart2] = useState<any>({
+    dataLabels: { enabled: false },
     series: [
-      {
-        name: "performance",
-        data: [20, 20, 35, 35, 40, 60, 60],
-      },
+      dashboardData?.attendanceStats?.onTime || 0,
+      dashboardData?.attendanceStats?.late || 0,
+      dashboardData?.attendanceStats?.workFromHome || 0,
+      dashboardData?.attendanceStats?.absent || 0,
+      dashboardData?.leaveStats?.sickLeaves || 0,
     ],
+    colors: ["#0C4B5E", "#03C95A", "#F26522", "#E70D0D", "#FFC107",],
+    responsive: [{
+      breakpoint: 480,
+      options: {
+        chart: { width: 200 },
+        legend: { show: false },
+      },
+    }],
+    legend: { show: false },
+  };
+
+  const performance_chart2_series = dashboardData?.performance?.salaries ?? [];
+  const months = dashboardData?.performance?.months ?? [];
+
+
+  const performance_chart2_options: ApexOptions = {
     chart: {
       height: 288,
       type: "area",
@@ -70,7 +554,7 @@ const EmployeeDashboard = () => {
         enabled: false,
       },
     },
-    colors: ["#03C95A"],
+    colors: ["#00C853"],
     dataLabels: {
       enabled: false,
     },
@@ -78,27 +562,20 @@ const EmployeeDashboard = () => {
       curve: "straight",
     },
     title: {
-      text: "",
+      text: "Performance Over Time",
       align: "left",
     },
     xaxis: {
-      categories: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"],
+      categories: months,
     },
     yaxis: {
-      min: 10,
-      max: 60,
-      tickAmount: 5,
-      labels: {
-        formatter: (val: number) => {
-          return val / 1 + "K";
-        },
-      },
+
     },
     legend: {
       position: "top",
-      horizontalAlign: "left",
     },
-  });
+  };
+
 
   const employeename = [
     { value: "Select", label: "Select" },
@@ -106,18 +583,64 @@ const EmployeeDashboard = () => {
     { value: "Brian Villalobos", label: "Brian Villalobos" },
     { value: "Harvey Smith", label: "Harvey Smith" },
   ];
-  const leaveType = [
-    { value: "Select", label: "Select" },
-    { value: "Medical Leave", label: "Medical Leave" },
-    { value: "Casual Leave", label: "Casual Leave" },
-    { value: "Annual Leave", label: "Annual Leave" },
-  ];
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
 
   const getModalContainer = () => {
     const modalElement = document.getElementById("modal-datepicker");
     return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
   };
 
+  const handleMeetingFilterChange = (filter: "today" | "month" | "year") => {
+    setFilters(prev => ({ ...prev, meetings: filter }));
+    socket.emit('employee/dashboard/get-meetings', { filter: filter });
+  }
+
+  const handleProjectFilterChange = (filter: "all" | "ongoing") => {
+    setFilters(prev => ({ ...prev, projects: filter }));
+    socket.emit('employee/dashboard/get-projects', { filter: filter });
+  }
+
+  const handleTaskChange = (filter: "all" | "ongoing") => {
+    setFilters(prev => ({ ...prev, tasks: filter }));
+    socket.emit('employee/dashboard/get-tasks', { filter: filter });
+  }
+  const handleYearChange = (widget: string, year: string) => {
+    console.log(`[YEAR FILTER] ${widget}: ${year}`);
+    setFilters(prev => ({
+      ...prev,
+      [widget]: year
+    }));
+    if (socket) {
+      const payload = { year: Number(year) };
+      if (widget === 'attendanceStats') {
+        console.log('[SOCKET EMIT] Payload:', payload);
+        socket.emit("employee/dashboard/get-attendance-stats", payload);
+        socket.emit("employee/dashboard/get-leave-stats", payload);
+      }
+      if (widget === 'performance') {
+        socket.emit("employee/dashboard/get-performance", payload);
+      }
+      if (widget === 'skills') {
+        socket.emit("employee/dashboard/get-skills", payload);
+      }
+    }
+  };
   return (
     <>
       {/* Page Wrapper */}
@@ -187,7 +710,7 @@ const EmployeeDashboard = () => {
           </div>
           {/* /Breadcrumb */}
           <div className="alert bg-secondary-transparent alert-dismissible fade show mb-4">
-            Your Leave Request on“24th April 2024”has been Approved!!!
+            {/* Your Leave Request on“24th April 2024”has been Approved!!! */}
             <button
               type="button"
               className="btn-close fs-14"
@@ -204,20 +727,20 @@ const EmployeeDashboard = () => {
                   <div className="d-flex align-items-center">
                     <span className="avatar avatar-lg avatar-rounded border border-white border-2 flex-shrink-0 me-2">
                       <ImageWithBasePath
-                        src="assets/img/users/user-01.jpg"
+                        src={dashboardData?.employeeDetails?.avatar || "assets/img/users/user-01.jpg"}
                         alt="Img"
                       />
                     </span>
                     <div>
-                      <h5 className="text-white mb-1">Stephan Peralt</h5>
+                      <h5 className="text-white mb-1">{dashboardData?.employeeDetails?.name}</h5>
                       <div className="d-flex align-items-center">
                         <p className="text-white fs-12 mb-0">
-                          Senior Product Designer
+                          {dashboardData?.employeeDetails?.designation}
                         </p>
                         <span className="mx-1">
                           <i className="ti ti-point-filled text-primary" />
                         </span>
-                        <p className="fs-12">UI/UX Design</p>
+                        <p className="fs-12">{dashboardData?.employeeDetails?.role}</p>
                       </div>
                     </div>
                   </div>
@@ -231,19 +754,19 @@ const EmployeeDashboard = () => {
                 <div className="card-body">
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Phone Number</span>
-                    <p className="text-gray-9">+1 324 3453 545</p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.phoneNumber}</p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Email Address</span>
-                    <p className="text-gray-9">Steperde124@example.com</p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.email}</p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Report Office</span>
-                    <p className="text-gray-9">Doglas Martini</p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.reportOffice}</p>
                   </div>
                   <div>
                     <span className="d-block mb-1 fs-13">Joined on</span>
-                    <p className="text-gray-9">15 Jan 2024</p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.joinedOn}</p>
                   </div>
                 </div>
               </div>
@@ -260,24 +783,20 @@ const EmployeeDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        2024
+                        {filters.attendanceStats}
                       </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2024
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2023
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2022
-                          </Link>
-                        </li>
+                      <ul className="dropdown-menu dropdown-menu-end p-3">
+                        {yearOptions.map((year) => (
+                          <li key={year}>
+                            <Link
+                              to="#"
+                              className="dropdown-item rounded-1"
+                              onClick={() => handleYearChange('attendanceStats', year)}
+                            >
+                              {year}
+                            </Link>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   </div>
@@ -290,7 +809,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-dark me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              1254
+                              {dashboardData?.attendanceStats?.onTime}
                             </span>
                             on time
                           </p>
@@ -299,7 +818,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-success me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              32
+                              {dashboardData?.attendanceStats?.late}
                             </span>
                             Late Attendance
                           </p>
@@ -308,7 +827,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-primary me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              658
+                              {dashboardData?.attendanceStats?.workFromHome}
                             </span>
                             Work From Home
                           </p>
@@ -317,7 +836,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-danger me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              14
+                              {dashboardData?.attendanceStats?.absent}
                             </span>
                             Absent
                           </p>
@@ -326,7 +845,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-warning me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              68
+                              {dashboardData?.leaveStats?.sickLeaves}
                             </span>
                             Sick Leave
                           </p>
@@ -334,14 +853,17 @@ const EmployeeDashboard = () => {
                       </div>
                     </div>
                     <div className="col-md-6">
-                      <div className="mb-4 d-flex justify-content-md-end">
-                        <ReactApexChart
-                          id="leaves_chart"
-                          options={leavesChart}
-                          series={leavesChart.series}
-                          type="donut"
-                          height={165}
-                        />
+                      <div className="d-flex justify-content-md-end" style={{ width: '100%' }}>
+                        <div style={{ width: 200, height: 165 }}>
+                          <ReactApexChart
+                            id="leaves_chart"
+                            options={leavesChart_options}
+                            series={leavesChart_series}
+                            type="donut"
+                            height={165}
+                            width={200}
+                          />
+                        </div>
                       </div>
                     </div>
                     <div className="col-md-12">
@@ -373,24 +895,20 @@ const EmployeeDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        2024
+                        {filters.attendanceStats}
                       </Link>
-                      <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2024
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2023
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2022
-                          </Link>
-                        </li>
+                      <ul className="dropdown-menu dropdown-menu-end p-3">
+                        {yearOptions.map((year) => (
+                          <li key={year}>
+                            <Link
+                              to="#"
+                              className="dropdown-item rounded-1"
+                              onClick={() => handleYearChange('attendanceStats', year)}
+                            >
+                              {year}
+                            </Link>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   </div>
@@ -400,37 +918,37 @@ const EmployeeDashboard = () => {
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Total Leaves</span>
-                        <h4>16</h4>
+                        <h4>{dashboardData?.leaveStats?.totalLeavesAllowed}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
-                        <span className="d-block mb-1">Taken</span>
-                        <h4>10</h4>
+                        <span className="d-block mb-1">taken</span>
+                        <h4>{dashboardData?.leaveStats?.takenLeaves}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Absent</span>
-                        <h4>2</h4>
+                        <h4>{dashboardData?.attendanceStats?.absent}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Request</span>
-                        <h4>0</h4>
+                        <h4>{dashboardData?.leaveStats?.requestedLeaves}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Worked Days</span>
-                        <h4>240</h4>
+                        <h4>{dashboardData?.attendanceStats?.workedDays}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Loss of Pay</span>
-                        <h4>2</h4>
+                        <h4>{dashboardData?.leaveStats?.lossOfPay}</h4>
                       </div>
                     </div>
                     <div className="col-sm-12">
@@ -457,16 +975,16 @@ const EmployeeDashboard = () => {
                 <div className="card-body">
                   <div className="mb-4 text-center">
                     <h6 className="fw-medium text-gray-5 mb-1">Attendance</h6>
-                    <h4>08:35 AM, 11 Mar 2025</h4>
+                    <h4>{formatCurrentDateTime()}</h4>
                   </div>
-                  <CircleProgress working_hour={8} time={9} />
+                  <CircleProgress working_hour={dashboardData?.workingHoursStats?.today?.expectedHours ?? 0} time={9} />
                   <div className="text-center">
                     <div className="badge badge-dark badge-md mb-3">
                       Production : 3.45 hrs
                     </div>
                     <h6 className="fw-medium d-flex align-items-center justify-content-center mb-4">
                       <i className="ti ti-fingerprint text-primary me-1" />
-                      Punch In at 10.00 AM
+                      Punch In at {dashboardData?.attendanceStats?.punchIn}
                     </h6>
                     <Link to="#" className="btn btn-primary w-100">
                       Punch Out
@@ -485,7 +1003,7 @@ const EmployeeDashboard = () => {
                           <i className="ti ti-clock-stop" />
                         </span>
                         <h2 className="mb-2">
-                          8.36 / <span className="fs-20 text-gray-5"> 9</span>
+                          {dashboardData?.workingHoursStats?.today?.workedHours} / <span className="fs-20 text-gray-5">{dashboardData?.workingHoursStats?.today?.expectedHours}</span>
                         </h2>
                         <p className="fw-medium text-truncate">
                           Total Hours Today
@@ -510,7 +1028,7 @@ const EmployeeDashboard = () => {
                           <i className="ti ti-clock-up" />
                         </span>
                         <h2 className="mb-2">
-                          10 / <span className="fs-20 text-gray-5"> 40</span>
+                          {dashboardData?.workingHoursStats?.thisWeek?.workedHours} / <span className="fs-20 text-gray-5"> {dashboardData?.workingHoursStats?.thisWeek?.expectedHours}</span>
                         </h2>
                         <p className="fw-medium text-truncate">
                           Total Hours Week
@@ -535,7 +1053,7 @@ const EmployeeDashboard = () => {
                           <i className="ti ti-calendar-up" />
                         </span>
                         <h2 className="mb-2">
-                          75 / <span className="fs-20 text-gray-5"> 98</span>
+                          {dashboardData?.workingHoursStats?.thisMonth?.workedHours} / <span className="fs-20 text-gray-5"> {dashboardData?.workingHoursStats?.thisMonth?.expectedHours}</span>
                         </h2>
                         <p className="fw-medium text-truncate">
                           Total Hours Month
@@ -560,7 +1078,7 @@ const EmployeeDashboard = () => {
                           <i className="ti ti-calendar-star" />
                         </span>
                         <h2 className="mb-2">
-                          16 / <span className="fs-20 text-gray-5"> 28</span>
+                          {dashboardData?.workingHoursStats?.thisMonth?.overtimeHours} / <span className="fs-20 text-gray-5"> {dashboardData?.workingHoursStats?.thisMonth?.overtimeHours}</span>
                         </h2>
                         <p className="fw-medium text-truncate">
                           Overtime this Month
@@ -587,7 +1105,7 @@ const EmployeeDashboard = () => {
                               <i className="ti ti-point-filled text-dark-transparent me-1" />
                               Total Working hours
                             </p>
-                            <h3>12h 36m</h3>
+                            <h3>{convertHoursDecimalToHoursMinutes(dashboardData?.workingHoursStats?.today?.expectedHours ?? 0)}</h3>
                           </div>
                         </div>
                         <div className="col-xl-3">
@@ -596,7 +1114,7 @@ const EmployeeDashboard = () => {
                               <i className="ti ti-point-filled text-success me-1" />
                               Productive Hours
                             </p>
-                            <h3>08h 36m</h3>
+                            <h3>{convertHoursDecimalToHoursMinutes(dashboardData?.workingHoursStats?.today?.workedHours ?? 0)}</h3>
                           </div>
                         </div>
                         <div className="col-xl-3">
@@ -605,7 +1123,7 @@ const EmployeeDashboard = () => {
                               <i className="ti ti-point-filled text-warning me-1" />
                               Break hours
                             </p>
-                            <h3>22m 15s</h3>
+                            <h3>{convertHoursDecimalToHoursMinutes(dashboardData?.workingHoursStats?.today?.breakHours ?? 0)}</h3>
                           </div>
                         </div>
                         <div className="col-xl-3">
@@ -614,7 +1132,7 @@ const EmployeeDashboard = () => {
                               <i className="ti ti-point-filled text-info me-1" />
                               Overtime
                             </p>
-                            <h3>02h 15m</h3>
+                            <h3>{convertHoursDecimalToHoursMinutes(dashboardData?.workingHoursStats?.today?.overtimeHours ?? 0)}</h3>
                           </div>
                         </div>
                       </div>
@@ -717,16 +1235,18 @@ const EmployeeDashboard = () => {
                         className="btn btn-white border-0 dropdown-toggle border btn-sm d-inline-flex align-items-center"
                         data-bs-toggle="dropdown"
                       >
-                        Ongoing Projects
+                        {filters.projects}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleProjectFilterChange("all")}>
                             All Projects
                           </Link>
                         </li>
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleProjectFilterChange("ongoing")}>
                             Ongoing Projects
                           </Link>
                         </li>
@@ -735,256 +1255,109 @@ const EmployeeDashboard = () => {
                   </div>
                 </div>
                 <div className="card-body">
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="card mb-4 shadow-none mb-md-0">
-                        <div className="card-body">
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <h6>Office Management</h6>
-                            <div className="dropdown">
-                              <Link
-                                to="#"
-                                className="d-inline-flex align-items-center"
-                                data-bs-toggle="dropdown"
-                              >
-                                <i className="ti ti-dots-vertical" />
-                              </Link>
-                              <ul className="dropdown-menu dropdown-menu-end p-3">
-                                <li>
+                  {dashboardData?.projects?.length === 0 ? (
+                    <p className="text-center text-gray-500 text-lg">No available projects</p>
+                  ) : (
+                    <div className="row">
+                      {dashboardData?.projects?.map((project) => (
+                        <div key={project.projectId} className="col-md-6 mb-4">
+                          <div className="card shadow-none h-100">
+                            <div className="card-body">
+                              <div className="d-flex align-items-center justify-content-between mb-3">
+                                <h6>{project.projectTitle}</h6>
+                                <div className="dropdown">
                                   <Link
                                     to="#"
-                                    className="dropdown-item rounded-1"
-                                    data-bs-toggle="modal"
-                                    data-inert={true}
-                                    data-bs-target="#edit_task"
+                                    className="d-inline-flex align-items-center"
+                                    data-bs-toggle="dropdown"
                                   >
-                                    <i className="ti ti-edit me-2" />
-                                    Edit
+                                    <i className="ti ti-dots-vertical" />
                                   </Link>
-                                </li>
-                                <li>
-                                  <Link
-                                    to="#"
-                                    className="dropdown-item rounded-1"
-                                    data-bs-toggle="modal"
-                                    data-inert={true}
-                                    data-bs-target="#delete_modal"
-                                  >
-                                    <i className="ti ti-trash me-2" />
-                                    Delete
-                                  </Link>
-                                </li>
-                              </ul>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="d-flex align-items-center mb-3">
-                              <Link to="#" className="avatar">
-                                <ImageWithBasePath
-                                  src="assets/img/users/user-32.jpg"
-                                  className="img-fluid rounded-circle"
-                                  alt="img"
-                                />
-                              </Link>
-                              <div className="ms-2">
-                                <h6 className="fw-normal">
-                                  <Link to="#">Anthony Lewis</Link>
-                                </h6>
-                                <span className="fs-13 d-block">
-                                  Project Leader
-                                </span>
+                                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#edit_task"
+                                      >
+                                        <i className="ti ti-edit me-2" /> Edit
+                                      </Link>
+                                    </li>
+                                    <li>
+                                      <Link
+                                        to="#"
+                                        className="dropdown-item rounded-1"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#delete_modal"
+                                      >
+                                        <i className="ti ti-trash me-2" /> Delete
+                                      </Link>
+                                    </li>
+                                  </ul>
+                                </div>
                               </div>
-                            </div>
-                            <div className="d-flex align-items-center mb-3">
-                              <Link
-                                to="#"
-                                className="avatar bg-soft-primary rounded-circle"
-                              >
-                                <i className="ti ti-calendar text-primary fs-16" />
-                              </Link>
-                              <div className="ms-2">
-                                <h6 className="fw-normal">14/01/2024</h6>
-                                <span className="fs-13 d-block">Deadline</span>
-                              </div>
-                            </div>
-                            <div className="d-flex align-items-center justify-content-between bg-transparent-light border border-dashed rounded p-2 mb-3">
-                              <div className="d-flex align-items-center">
-                                <span className="avatar avatar-sm bg-success-transparent rounded-circle me-1">
-                                  <i className="ti ti-checklist fs-16" />
-                                </span>
-                                <p>
-                                  Tasks :{" "}
-                                  <span className="text-gray-9">6 </span> /10
-                                </p>
-                              </div>
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-06.jpg"
-                                    alt="img"
+
+                              {/* Leader */}
+                              <div className="d-flex align-items-center mb-3">
+                                <Link to="#" className="avatar">
+                                  <img
+                                    src={project.projectLeadAvatar || 'assets/img/users/user-placeholder.jpg'}
+                                    className="img-fluid rounded-circle"
+                                    alt="lead"
                                   />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-07.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-08.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <Link
-                                  className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium"
-                                  to="#"
-                                >
-                                  +2
                                 </Link>
+                                <div className="ms-2">
+                                  <h6 className="fw-normal">
+                                    <Link to="#">{project.leadName || 'N/A'}</Link>
+                                  </h6>
+                                  <span className="fs-13 d-block">Project Leader</span>
+                                </div>
                               </div>
-                            </div>
-                            <div className="bg-soft-secondary p-2 rounded d-flex align-items-center justify-content-between">
-                              <p className="text-secondary mb-0 text-truncate">
-                                Time Spent
-                              </p>
-                              <h5 className="text-secondary text-truncate">
-                                65/120{" "}
-                                <span className="fs-14 fw-normal">Hrs</span>
-                              </h5>
+
+                              {/* Deadline */}
+                              <div className="d-flex align-items-center mb-3">
+                                <Link to="#" className="avatar bg-soft-primary rounded-circle">
+                                  <i className="ti ti-calendar text-primary fs-16" />
+                                </Link>
+                                <div className="ms-2">
+                                  <h6 className="fw-normal">{formatDateProject(project.dueDate)}</h6>
+                                  <span className="fs-13 d-block">Deadline</span>
+                                </div>
+                              </div>
+
+                              {/* Tasks + Avatars */}
+                              <div className="d-flex align-items-center justify-content-between bg-transparent-light border rounded p-2 ">
+                                <div className="d-flex align-items-center">
+                                  <span className="avatar avatar-sm bg-success-transparent rounded-circle me-1">
+                                    <i className="ti ti-checklist fs-16" />
+                                  </span>
+                                  <p>
+                                    Tasks : <span className="text-gray-9">{project.completedTasks}</span> / {project.totalTasks}
+                                  </p>
+                                </div>
+                                <div className="avatar-list-stacked avatar-group-sm">
+                                  {project.membersAvatars.slice(0, 3).map((avatarUrl, idx) => (
+                                    <span key={idx} className="avatar avatar-rounded">
+                                      <img className="border border-white" src={avatarUrl || "assets/img/profiles/avatar-31.jpg"} alt="member" />
+                                    </span>
+                                  ))}
+                                  {project.membersAvatars.length > 3 && (
+                                    <Link
+                                      className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium"
+                                      to="#"
+                                    >
+                                      +{project.membersAvatars.length - 3}
+                                    </Link>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                    <div className="col-md-6">
-                      <div className="card shadow-none mb-0">
-                        <div className="card-body">
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <h6>Office Management</h6>
-                            <div className="dropdown">
-                              <Link
-                                to="#"
-                                className="d-inline-flex align-items-center"
-                                data-bs-toggle="dropdown"
-                              >
-                                <i className="ti ti-dots-vertical" />
-                              </Link>
-                              <ul className="dropdown-menu dropdown-menu-end p-3">
-                                <li>
-                                  <Link
-                                    to="#"
-                                    className="dropdown-item rounded-1"
-                                    data-bs-toggle="modal"
-                                    data-inert={true}
-                                    data-bs-target="#edit_task"
-                                  >
-                                    <i className="ti ti-edit me-2" />
-                                    Edit
-                                  </Link>
-                                </li>
-                                <li>
-                                  <Link
-                                    to="#"
-                                    className="dropdown-item rounded-1"
-                                    data-bs-toggle="modal"
-                                    data-inert={true}
-                                    data-bs-target="#delete_modal"
-                                  >
-                                    <i className="ti ti-trash me-2" />
-                                    Delete
-                                  </Link>
-                                </li>
-                              </ul>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="d-flex align-items-center mb-3">
-                              <Link to="#" className="avatar">
-                                <ImageWithBasePath
-                                  src="assets/img/users/user-33.jpg"
-                                  className="img-fluid rounded-circle"
-                                  alt="img"
-                                />
-                              </Link>
-                              <div className="ms-2">
-                                <h6 className="fw-normal">
-                                  <Link to="#">Anthony Lewis</Link>
-                                </h6>
-                                <span className="fs-13 d-block">
-                                  Project Leader
-                                </span>
-                              </div>
-                            </div>
-                            <div className="d-flex align-items-center mb-3">
-                              <Link
-                                to="#"
-                                className="avatar bg-soft-primary rounded-circle"
-                              >
-                                <i className="ti ti-calendar text-primary fs-16" />
-                              </Link>
-                              <div className="ms-2">
-                                <h6 className="fw-normal">14/01/2024</h6>
-                                <span className="fs-13 d-block">Deadline</span>
-                              </div>
-                            </div>
-                            <div className="d-flex align-items-center justify-content-between bg-transparent-light border border-dashed rounded p-2 mb-3">
-                              <div className="d-flex align-items-center">
-                                <span className="avatar avatar-sm bg-success-transparent rounded-circle me-1">
-                                  <i className="ti ti-checklist fs-16" />
-                                </span>
-                                <p>
-                                  Tasks :{" "}
-                                  <span className="text-gray-9">6 </span> /10
-                                </p>
-                              </div>
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-06.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-07.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-08.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <Link
-                                  className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium"
-                                  to="#"
-                                >
-                                  +2
-                                </Link>
-                              </div>
-                            </div>
-                            <div className="bg-soft-secondary p-2 rounded d-flex align-items-center justify-content-between">
-                              <p className="text-secondary mb-0 text-truncate">
-                                Time Spent
-                              </p>
-                              <h5 className="text-secondary text-truncate">
-                                65/120{" "}
-                                <span className="fs-14 fw-normal">Hrs</span>
-                              </h5>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1003,12 +1376,14 @@ const EmployeeDashboard = () => {
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleTaskChange("all")}>
                             All Projects
                           </Link>
                         </li>
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleTaskChange("ongoing")}>
                             Ongoing Projects
                           </Link>
                         </li>
@@ -1018,285 +1393,59 @@ const EmployeeDashboard = () => {
                 </div>
                 <div className="card-body">
                   <div className="list-group list-group-flush">
-                    <div className="list-group-item border rounded mb-3 p-2">
-                      <div className="row align-items-center row-gap-3">
-                        <div className="col-md-8">
-                          <div className="todo-inbox-check d-flex align-items-center">
-                            <span>
-                              <i className="ti ti-grid-dots me-2" />
-                            </span>
-                            <div className="form-check">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                              />
-                            </div>
-                            <span className="me-2 d-flex align-items-center rating-select">
-                              <i className="ti ti-star-filled filled" />
-                            </span>
-                            <div className="strike-info">
-                              <h4 className="fs-14 text-truncate">
-                                Patient appointment booking
-                              </h4>
+                    {dashboardData?.tasks?.map((task) => (
+                      <div key={task._id} className="list-group-item border rounded mb-3 p-2">
+                        <div className="row align-items-center row-gap-3">
+                          <div className="col-md-8">
+                            <div className="todo-inbox-check d-flex align-items-center">
+                              <span><i className="ti ti-grid-dots me-2" /></span>
+                              <div className="form-check">
+                                <input
+                                  className="form-check-input"
+                                  type="checkbox"
+                                  defaultChecked={task.checked}
+                                />
+                              </div>
+                              <span className="me-2 d-flex align-items-center rating-select">
+                                <i className={`ti ${task.starred ? 'ti-star-filled filled' : 'ti-star'}`} />
+                              </span>
+                              <div className="strike-info">
+                                <h4 className="fs-14 text-truncate">{task.title}</h4>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="col-md-4">
-                          <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                            <span className="badge bg-soft-pink d-inline-flex align-items-center me-2">
-                              <i className="fas fa-circle fs-6 me-1" />
-                              Onhold
-                            </span>
-                            <div className="d-flex align-items-center">
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-13.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-14.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-15.jpg"
-                                    alt="img"
-                                  />
-                                </span>
+                          <div className="col-md-4">
+                            <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
+                              <span className={`badge d-inline-flex align-items-center me-2 ${getStatusBadgeClass(task.status)}`}>
+                                <i className="fas fa-circle fs-6 me-1" />
+                                {task.status}
+                              </span>
+                              <div className="d-flex align-items-center">
+                                <div className="avatar-list-stacked avatar-group-sm">
+                                  {task.avatars.slice(0, 3).map((member) => (
+                                    <span key={member._id} className="avatar avatar-rounded">
+                                      {member.avatar ? (
+                                        <img className="border border-white" src={member.avatar || "assets/img/profiles/avatar-31.jpg"} alt="member" />
+                                      ) : (
+                                        <span className="avatar bg-secondary avatar-rounded text-white">U</span>
+                                      )}
+                                    </span>
+                                  ))}
+                                  {task.avatars.length > 3 && (
+                                    <span className="avatar bg-primary avatar-rounded text-fixed-white fs-12 fw-medium">
+                                      +{task.avatars.length - 3}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="list-group-item border rounded mb-3 p-2">
-                      <div className="row align-items-center row-gap-3">
-                        <div className="col-md-8">
-                          <div className="todo-inbox-check d-flex align-items-center">
-                            <span>
-                              <i className="ti ti-grid-dots me-2" />
-                            </span>
-                            <div className="form-check">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                              />
-                            </div>
-                            <span className="me-2 rating-select d-flex align-items-center">
-                              <i className="ti ti-star" />
-                            </span>
-                            <div className="strike-info">
-                              <h4 className="fs-14 text-truncate">
-                                Appointment booking with payment
-                              </h4>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-4">
-                          <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                            <span className="badge bg-transparent-purple d-flex align-items-center me-2">
-                              <i className="fas fa-circle fs-6 me-1" />
-                              Inprogress
-                            </span>
-                            <div className="d-flex align-items-center">
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-20.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-21.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="list-group-item border rounded mb-3 p-2">
-                      <div className="row align-items-center row-gap-3">
-                        <div className="col-md-8">
-                          <div className="todo-inbox-check d-flex align-items-center">
-                            <span>
-                              <i className="ti ti-grid-dots me-2" />
-                            </span>
-                            <div className="form-check">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                              />
-                            </div>
-                            <span className="me-2 rating-select d-flex align-items-center">
-                              <i className="ti ti-star" />
-                            </span>
-                            <div className="strike-info">
-                              <h4 className="fs-14 text-truncate">
-                                Patient and Doctor video conferencing
-                              </h4>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-4">
-                          <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                            <span className="badge badge-soft-success align-items-center me-2">
-                              <i className="fas fa-circle fs-6 me-1" />
-                              Completed
-                            </span>
-                            <div className="d-flex align-items-center">
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-28.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-29.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-24.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="list-group-item border rounded mb-3 p-2">
-                      <div className="row align-items-center row-gap-3">
-                        <div className="col-md-8">
-                          <div className="todo-inbox-check d-flex align-items-center todo-strike-content">
-                            <span>
-                              <i className="ti ti-grid-dots me-2" />
-                            </span>
-                            <div className="form-check">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                                // defaultChecked=""
-                              />
-                            </div>
-                            <span className="me-2 rating-select d-flex align-items-center">
-                              <i className="ti ti-star" />
-                            </span>
-                            <div className="strike-info">
-                              <h4 className="fs-14 text-truncate">
-                                Private chat module
-                              </h4>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-4">
-                          <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                            <span className="badge badge-secondary-transparent d-flex align-items-center me-2">
-                              <i className="fas fa-circle fs-6 me-1" />
-                              Pending
-                            </span>
-                            <div className="d-flex align-items-center">
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-23.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-24.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-25.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="list-group-item border rounded p-2">
-                      <div className="row align-items-center row-gap-3">
-                        <div className="col-md-8">
-                          <div className="todo-inbox-check d-flex align-items-center">
-                            <span>
-                              <i className="ti ti-grid-dots me-2" />
-                            </span>
-                            <div className="form-check">
-                              <input
-                                className="form-check-input"
-                                type="checkbox"
-                              />
-                            </div>
-                            <span className="me-2 rating-select d-flex align-items-center">
-                              <i className="ti ti-star" />
-                            </span>
-                            <div className="strike-info">
-                              <h4 className="fs-14 text-truncate">
-                                Go-Live and Post-Implementation Support
-                              </h4>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="col-md-4">
-                          <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                            <span className="badge bg-transparent-purple d-flex align-items-center me-2">
-                              <i className="fas fa-circle fs-6 me-1" />
-                              Inprogress
-                            </span>
-                            <div className="d-flex align-items-center">
-                              <div className="avatar-list-stacked avatar-group-sm">
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-28.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                                <span className="avatar avatar-rounded">
-                                  <ImageWithBasePath
-                                    className="border border-white"
-                                    src="assets/img/profiles/avatar-29.jpg"
-                                    alt="img"
-                                  />
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
@@ -1313,24 +1462,20 @@ const EmployeeDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        2024
+                        {filters.performance}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2024
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2023
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2022
-                          </Link>
-                        </li>
+                        {yearOptions.map((year) => (
+                          <li key={year}>
+                            <Link
+                              to="#"
+                              className="dropdown-item rounded-1"
+                              onClick={() => handleYearChange('performance', year)}
+                            >
+                              {year}
+                            </Link>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   </div>
@@ -1344,13 +1489,20 @@ const EmployeeDashboard = () => {
                       </span>
                       <span>vs last years</span>
                     </div>
-                    <ReactApexChart
-                      id="performance_chart2"
-                      options={performance_chart2}
-                      series={performance_chart2.series}
-                      type="area"
-                      height={288}
-                    />
+                    {performance_chart2_series.length === months.length && performance_chart2_series.length > 0 ? (
+                      <ReactApexChart
+                        options={{
+                          ...performance_chart2_options,
+                          xaxis: { ...performance_chart2_options.xaxis, categories: months }
+                        }}
+                        series={[{ name: "Monthly Salary", data: performance_chart2_series }]}
+                        type="area"
+                        height={288}
+                      />
+                    ) : (
+                      <div>Loading performance...</div>
+                    )}
+
                   </div>
                 </div>
               </div>
@@ -1367,90 +1519,64 @@ const EmployeeDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        2024
+                        {filters.skills}
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2024
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2023
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="#" className="dropdown-item rounded-1">
-                            2022
-                          </Link>
-                        </li>
+                        {yearOptions.map((year) => (
+                          <li key={year}>
+                            <Link
+                              to="#"
+                              className="dropdown-item rounded-1"
+                              onClick={() => handleYearChange('skills', year)}
+                            >
+                              {year}
+                            </Link>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   </div>
                 </div>
                 <div className="card-body">
                   <div>
-                    <div className="border border-dashed bg-transparent-light rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <span className="d-block border border-2 h-12 border-primary rounded-5 me-2" />
-                          <div>
-                            <h6 className="fw-medium mb-1">Figma</h6>
-                            <p>Updated : 15 May 2025</p>
+                    {dashboardData?.skills?.length === 0 && (
+                      <div className="text-muted text-center">No skills available.</div>
+                    )}
+                    {dashboardData?.skills?.map((skill, idx) => {
+                      const borderColors = [
+                        "border-primary",
+                        "border-success",
+                        "border-purple",
+                        "border-info",
+                        "border-dark",
+                      ];
+                      const colorClass = borderColors[idx % borderColors.length];
+                      const dateObj = new Date(skill.updatedAt);
+                      const formattedDate =
+                        dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+                      return (
+                        <div
+                          key={skill.name}
+                          className="border border-dashed bg-transparent-light rounded p-2 mb-2"
+                        >
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center">
+                              <span
+                                className={`d-block border border-2 h-12 ${colorClass} border-red rounded-5 me-2`}
+                                style={{ width: 2, minWidth: 2, height: 10 }}
+                              />
+                              <div>
+                                <h6 className="fw-medium mb-1">{skill.name}</h6>
+                                <p>
+                                  Updated : {formattedDate}
+                                </p>
+                              </div>
+                            </div>
+                            <CircleProgressSmall value={skill.proficiency} />
                           </div>
                         </div>
-                        <CircleProgressSmall value={95} />
-                      </div>
-                    </div>
-                    <div className="border border-dashed bg-transparent-light rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <span className="d-block border border-2 h-12 border-success rounded-5 me-2" />
-                          <div>
-                            <h6 className="fw-medium mb-1">HTML</h6>
-                            <p>Updated : 12 May 2025</p>
-                          </div>
-                        </div>
-                        <CircleProgressSmall value={85} />
-                      </div>
-                    </div>
-                    <div className="border border-dashed bg-transparent-light rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <span className="d-block border border-2 h-12 border-purple rounded-5 me-2" />
-                          <div>
-                            <h6 className="fw-medium mb-1">CSS</h6>
-                            <p>Updated : 12 May 2025</p>
-                          </div>
-                        </div>
-                        <CircleProgressSmall value={70} />
-                      </div>
-                    </div>
-                    <div className="border border-dashed bg-transparent-light rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <span className="d-block border border-2 h-12 border-info rounded-5 me-2" />
-                          <div>
-                            <h6 className="fw-medium mb-1">Wordpress</h6>
-                            <p>Updated : 15 May 2025</p>
-                          </div>
-                        </div>
-                        <CircleProgressSmall value={61} />
-                      </div>
-                    </div>
-                    <div className="border border-dashed bg-transparent-light rounded p-2">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center">
-                          <span className="d-block border border-2 h-12 border-dark rounded-5 me-2" />
-                          <div>
-                            <h6 className="fw-medium mb-1">Javascript</h6>
-                            <p>Updated : 13 May 2025</p>
-                          </div>
-                        </div>
-                        <CircleProgressSmall value={58} />
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1461,21 +1587,29 @@ const EmployeeDashboard = () => {
                   <div className="card-body">
                     <div className="text-center">
                       <h5 className="text-white mb-4">Team Birthday</h5>
-                      <span className="avatar avatar-xl avatar-rounded mb-2">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-35.jpg"
-                          alt="Img"
-                        />
-                      </span>
-                      <div className="mb-3">
-                        <h6 className="text-white fw-medium mb-1">
-                          Andrew Jermia
-                        </h6>
-                        <p>IOS Developer</p>
-                      </div>
-                      <Link to="#" className="btn btn-sm btn-primary">
-                        Send Wishes
-                      </Link>
+                      {dashboardData?.birthdays && dashboardData?.birthdays.length > 0 ? (
+                        dashboardData?.birthdays.map(birthday => (
+                          <div key={birthday._id} className="mb-4">
+                            <span className="avatar avatar-xl avatar-rounded mb-2">
+                              <ImageWithBasePath
+                                src={birthday.avatarUrl || "assets/img/users/default-avatar.jpg"}
+                                alt={birthday.name}
+                              />
+                            </span>
+                            <div className="mb-3">
+                              <h6 className="text-white fw-medium mb-1">
+                                {birthday.name}
+                              </h6>
+                              <p>{birthday.role || "—"}</p>
+                            </div>
+                            <Link to="#" className="btn btn-sm btn-primary">
+                              Send Wishes
+                            </Link>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-white-50">No team birthdays today.</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1521,210 +1655,55 @@ const EmployeeDashboard = () => {
                   </div>
                 </div>
                 <div className="card-body">
-                  <div className="d-flex align-items-center justify-content-between mb-4">
-                    <div className="d-flex align-items-center">
-                      <Link to="#" className="avatar flex-shrink-0">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-27.jpg"
-                          className="rounded-circle border border-2"
-                          alt="img"
-                        />
-                      </Link>
-                      <div className="ms-2">
-                        <h6 className="fs-14 fw-medium text-truncate mb-1">
-                          <Link to="#">Alexander Jermai</Link>
-                        </h6>
-                        <p className="fs-13">UI/UX Designer</p>
+                  {dashboardData?.teamMembers?.length === 0 && (
+                    <p className="text-muted text-center">No team members available.</p>
+                  )}
+
+                  {dashboardData?.teamMembers?.map((member) => (
+                    <div
+                      className="d-flex align-items-center justify-content-between mb-4"
+                      key={member._id}
+                    >
+                      <div className="d-flex align-items-center">
+                        <Link to="#" className="avatar flex-shrink-0">
+                          <ImageWithBasePath
+                            src={member.avatar || "assets/img/profiles/avatar-31.jpg"}
+                            className="rounded-circle border border-2"
+                            alt={`${member.name}'s avatar`}
+                          />
+                        </Link>
+                        <div className="ms-2">
+                          <h6 className="fs-14 fw-medium text-truncate mb-1">
+                            <Link to="#">{member.name}</Link>
+                          </h6>
+                          <p className="fs-13">{member.role}</p>
+                        </div>
+                      </div>
+                      <div className="d-flex align-items-center">
+                        <Link
+                          to="#"
+                          className="btn btn-light btn-icon btn-sm me-2"
+                          title="Call"
+                        >
+                          <i className="ti ti-phone fs-16" />
+                        </Link>
+                        <Link
+                          to="#"
+                          className="btn btn-light btn-icon btn-sm me-2"
+                          title="Mail"
+                        >
+                          <i className="ti ti-mail-bolt fs-16" />
+                        </Link>
+                        <Link
+                          to="#"
+                          className="btn btn-light btn-icon btn-sm"
+                          title="Chat"
+                        >
+                          <i className="ti ti-brand-hipchat fs-16" />
+                        </Link>
                       </div>
                     </div>
-                    <div className="d-flex align-items-center">
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-phone fs-16" />
-                      </Link>
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-mail-bolt fs-16" />
-                      </Link>
-                      <Link to="#" className="btn btn-light btn-icon btn-sm">
-                        <i className="ti ti-brand-hipchat fs-16" />
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mb-4">
-                    <div className="d-flex align-items-center">
-                      <Link to="#" className="avatar flex-shrink-0">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-42.jpg"
-                          className="rounded-circle border border-2"
-                          alt="img"
-                        />
-                      </Link>
-                      <div className="ms-2">
-                        <h6 className="fs-14 fw-medium text-truncate mb-1">
-                          <Link to="#">Doglas Martini</Link>
-                        </h6>
-                        <p className="fs-13">Product Designer</p>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center">
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-phone fs-16" />
-                      </Link>
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-mail-bolt fs-16" />
-                      </Link>
-                      <Link to="#" className="btn btn-light btn-icon btn-sm">
-                        <i className="ti ti-brand-hipchat fs-16" />
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mb-4">
-                    <div className="d-flex align-items-center">
-                      <Link to="#" className="avatar flex-shrink-0">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-43.jpg"
-                          className="rounded-circle border border-2"
-                          alt="img"
-                        />
-                      </Link>
-                      <div className="ms-2">
-                        <h6 className="fs-14 fw-medium text-truncate mb-1">
-                          <Link to="#">Daniel Esbella</Link>
-                        </h6>
-                        <p className="fs-13">Project Manager</p>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center">
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-phone fs-16" />
-                      </Link>
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-mail-bolt fs-16" />
-                      </Link>
-                      <Link to="#" className="btn btn-light btn-icon btn-sm">
-                        <i className="ti ti-brand-hipchat fs-16" />
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mb-4">
-                    <div className="d-flex align-items-center">
-                      <Link to="#" className="avatar flex-shrink-0">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-11.jpg"
-                          className="rounded-circle border border-2"
-                          alt="img"
-                        />
-                      </Link>
-                      <div className="ms-2">
-                        <h6 className="fs-14 fw-medium text-truncate mb-1">
-                          <Link to="#">Daniel Esbella</Link>
-                        </h6>
-                        <p className="fs-13">Team Lead</p>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center">
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-phone fs-16" />
-                      </Link>
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-mail-bolt fs-16" />
-                      </Link>
-                      <Link to="#" className="btn btn-light btn-icon btn-sm">
-                        <i className="ti ti-brand-hipchat fs-16" />
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between mb-4">
-                    <div className="d-flex align-items-center">
-                      <Link to="#" className="avatar flex-shrink-0">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-44.jpg"
-                          className="rounded-circle border border-2"
-                          alt="img"
-                        />
-                      </Link>
-                      <div className="ms-2">
-                        <h6 className="fs-14 fw-medium text-truncate mb-1">
-                          <Link to="#">Stephan Peralt</Link>
-                        </h6>
-                        <p className="fs-13">Team Lead</p>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center">
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-phone fs-16" />
-                      </Link>
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-mail-bolt fs-16" />
-                      </Link>
-                      <Link to="#" className="btn btn-light btn-icon btn-sm">
-                        <i className="ti ti-brand-hipchat fs-16" />
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <Link to="#" className="avatar flex-shrink-0">
-                        <ImageWithBasePath
-                          src="assets/img/users/user-54.jpg"
-                          className="rounded-circle border border-2"
-                          alt="img"
-                        />
-                      </Link>
-                      <div className="ms-2">
-                        <h6 className="fs-14 fw-medium text-truncate mb-1">
-                          <Link to="#">Andrew Jermia</Link>
-                        </h6>
-                        <p className="fs-13">Project Lead</p>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center">
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-phone fs-16" />
-                      </Link>
-                      <Link
-                        to="#"
-                        className="btn btn-light btn-icon btn-sm me-2"
-                      >
-                        <i className="ti ti-mail-bolt fs-16" />
-                      </Link>
-                      <Link to="#" className="btn btn-light btn-icon btn-sm">
-                        <i className="ti ti-brand-hipchat fs-16" />
-                      </Link>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1741,104 +1720,34 @@ const EmployeeDashboard = () => {
                   </div>
                 </div>
                 <div className="card-body">
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-27.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-2">Today at 9:42 AM</p>
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="avatar avatar-sm border flex-shrink-0 me-2"
-                        >
-                          <ImageWithBasePath
-                            src="assets/img/social/pdf-icon.svg"
-                            className="w-auto h-auto"
-                            alt="Img"
-                          />
-                        </Link>
-                        <h6 className="fw-normal">
-                          <Link to="#">EY_review.pdf</Link>
+                  {dashboardData?.notifications?.length === 0 && (
+                    <p className="text-muted text-center">No new notifications</p>
+                  )}
+                  {dashboardData?.notifications?.map((notification) => (
+                    <div className="d-flex align-items-start mb-4" key={notification._id}>
+                      <Link to="#" className="avatar flex-shrink-0">
+                        <ImageWithBasePath
+                          src={notification.avatar || "assets/img/profiles/avatar-31.jpg"}
+                          className="rounded-circle border border-2"
+                          alt="Avatar"
+                        />
+                      </Link>
+                      <div className="ms-2">
+                        <h6 className="fs-14 fw-medium text-truncate mb-1">
+                          {notification.title}
                         </h6>
+                        <p className="fs-13 mb-0">
+                          {new Date(notification.createdAt).toLocaleString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                            day: "2-digit",
+                            month: "short",
+                          })}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-28.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-0">Today at 10:00 AM</p>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-29.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-2">Today at 10:50 AM</p>
-                      <div className="d-flex align-items-center">
-                        <Link to="#" className="btn btn-primary btn-sm me-2">
-                          Approve
-                        </Link>
-                        <Link to="#" className="btn btn-outline-primary btn-sm">
-                          Decline
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-30.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-0">Today at 12:00 PM</p>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-33.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-0">Today at 05:00 PM</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1854,21 +1763,31 @@ const EmployeeDashboard = () => {
                         data-bs-toggle="dropdown"
                       >
                         <i className="ti ti-calendar me-1" />
-                        Today
+                        <span>
+                          {filters.meetings === "today"
+                            ? "Today"
+                            : filters.meetings === "month"
+                              ? "This Month"
+                              : "This Year"}
+                        </span>
+
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleMeetingFilterChange("today")}>
                             Today
                           </Link>
                         </li>
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleMeetingFilterChange("month")}>
                             This Month
                           </Link>
                         </li>
                         <li>
-                          <Link to="#" className="dropdown-item rounded-1">
+                          <Link to="#" className="dropdown-item rounded-1"
+                            onClick={() => handleMeetingFilterChange("year")}>
                             This Year
                           </Link>
                         </li>
@@ -1877,70 +1796,43 @@ const EmployeeDashboard = () => {
                   </div>
                 </div>
                 <div className="card-body schedule-timeline">
-                  <div className="d-flex align-items-start">
-                    <div className="d-flex align-items-center active-time">
-                      <span>09:25 AM</span>
-                      <span>
-                        <i className="ti ti-point-filled text-primary fs-20" />
-                      </span>
-                    </div>
-                    <div className="flex-fill ps-3 pb-4 timeline-flow">
-                      <div className="bg-light p-2 rounded">
-                        <p className="fw-medium text-gray-9 mb-1">
-                          Marketing Strategy Presentation
-                        </p>
-                        <span>Marketing</span>
+                  {dashboardData?.meetings?.length === 0 && (
+                    <div className="text-muted text-center">No meetings scheduled.</div>
+                  )}
+                  {dashboardData?.meetings?.map((meeting) => {
+                    let colorClass = "text-primary";
+                    switch ((meeting.tag || "").toLowerCase()) {
+                      case "review":
+                        colorClass = "text-secondary"; break;
+                      case "celebration":
+                        colorClass = "text-warning"; break;
+                      case "development":
+                        colorClass = "text-success"; break;
+                      default:
+                        colorClass = "text-primary";
+                    }
+                    return (
+                      <div className="d-flex align-items-start" key={meeting._id}>
+                        <div className="d-flex align-items-center active-time">
+                          <span>
+                            {new Date(meeting.startTime).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <span>
+                            <i className={`ti ti-point-filled ${colorClass} fs-20`} />
+                          </span>
+                        </div>
+                        <div className="flex-fill ps-3 pb-4 timeline-flow">
+                          <div className="bg-light p-2 rounded">
+                            <p className="fw-medium text-gray-9 mb-1">{meeting.title}</p>
+                            <span>{meeting.tag}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <div className="d-flex align-items-center active-time">
-                      <span>09:20 AM</span>
-                      <span>
-                        <i className="ti ti-point-filled text-secondary fs-20" />
-                      </span>
-                    </div>
-                    <div className="flex-fill ps-3 pb-4 timeline-flow">
-                      <div className="bg-light p-2 rounded">
-                        <p className="fw-medium text-gray-9 mb-1">
-                          Design Review Hospital, doctors Management Project
-                        </p>
-                        <span>Review</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <div className="d-flex align-items-center active-time">
-                      <span>09:18 AM</span>
-                      <span>
-                        <i className="ti ti-point-filled text-warning fs-20" />
-                      </span>
-                    </div>
-                    <div className="flex-fill ps-3 pb-4 timeline-flow">
-                      <div className="bg-light p-2 rounded">
-                        <p className="fw-medium text-gray-9 mb-1">
-                          Birthday Celebration of Employee
-                        </p>
-                        <span>Celebration</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <div className="d-flex align-items-center active-time">
-                      <span>09:10 AM</span>
-                      <span>
-                        <i className="ti ti-point-filled text-success fs-20" />
-                      </span>
-                    </div>
-                    <div className="flex-fill ps-3 timeline-flow">
-                      <div className="bg-light p-2 rounded">
-                        <p className="fw-medium text-gray-9 mb-1">
-                          Update of Project Flow
-                        </p>
-                        <span>Development</span>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1957,125 +1849,12 @@ const EmployeeDashboard = () => {
         </div>
       </div>
       {/* /Page Wrapper */}
-      <>
-        {/* Add Leaves */}
-        <div className="modal fade" id="add_leaves">
-          <div className="modal-dialog modal-dialog-centered modal-md">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h4 className="modal-title">Add Leave</h4>
-                <button
-                  type="button"
-                  className="btn-close custom-btn-close"
-                  data-bs-dismiss="modal"
-                  aria-label="Close"
-                >
-                  <i className="ti ti-x" />
-                </button>
-              </div>
-              <form>
-                <div className="modal-body pb-0">
-                  <div className="row">
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Employee Name</label>
-                        <CommonSelect
-                          className="select"
-                          options={employeename}
-                          defaultValue={employeename[0]}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Leave Type</label>
-                        <CommonSelect
-                          className="select"
-                          options={leaveType}
-                          defaultValue={leaveType[0]}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">From </label>
-                        <div className="input-icon-end position-relative">
-                          <DatePicker
-                            className="form-control datetimepicker"
-                            format={{
-                              format: "DD-MM-YYYY",
-                              type: "mask",
-                            }}
-                            getPopupContainer={getModalContainer}
-                            placeholder="DD-MM-YYYY"
-                          />
-                          <span className="input-icon-addon">
-                            <i className="ti ti-calendar text-gray-7" />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">To </label>
-                        <div className="input-icon-end position-relative">
-                          <DatePicker
-                            className="form-control datetimepicker"
-                            format={{
-                              format: "DD-MM-YYYY",
-                              type: "mask",
-                            }}
-                            getPopupContainer={getModalContainer}
-                            placeholder="DD-MM-YYYY"
-                          />
-                          <span className="input-icon-addon">
-                            <i className="ti ti-calendar text-gray-7" />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">No of Days</label>
-                        <input type="text" className="form-control" />
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Remaining Days</label>
-                        <input type="text" className="form-control" />
-                      </div>
-                    </div>
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Reason</label>
-                        <textarea
-                          className="form-control"
-                          rows={3}
-                          defaultValue={""}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-light me-2"
-                    data-bs-dismiss="modal"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Add Leaves
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-        {/* /Add Leaves */}
-      </>
+      <RequestModals socket={socket} onLeaveRequestCreated={() => {
+        // Refresh dashboard data when a leave request is created
+        if (socket) {
+          socket.emit("employee/dashboard/get-all-data");
+        }
+      }} />
     </>
   );
 };
