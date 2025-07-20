@@ -30,6 +30,8 @@ const Pipeline = () => {
   const routes = all_routes;
   // const data = pipelineData; // Commented out static data
   const [pipelines, setPipelines] = useState<any[]>([]);
+  const [filteredPipelines, setFilteredPipelines] = useState<any[]>([]);
+  const [availableStages, setAvailableStages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const socket = useSocket() as Socket | null;
@@ -37,7 +39,13 @@ const Pipeline = () => {
   const [deletePipeline, setDeletePipeline] = useState<any | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{
+    dateRange: { start: string; end: string } | null;
+    stage: string;
+    status: string;
+    dealValue: string;
+    sort: string;
+  }>({
     dateRange: null,
     stage: '',
     status: '',
@@ -50,24 +58,56 @@ const Pipeline = () => {
   };
 
   const handleClearFilters = () => {
-    setFilters({ dateRange: null, stage: '', status: '', dealValue: '', sort: '' });
-    fetchPipelines({ dateRange: null, stage: '', status: '', dealValue: '', sort: '' });
+    console.log("[Pipeline] Clearing filters");
+    const clearedFilters = { dateRange: null, stage: '', status: '', dealValue: '', sort: '' };
+    setFilters(clearedFilters);
   };
 
-  const fetchPipelines = (filterObj = filters) => {
+  const fetchPipelines = () => {
     if (!socket) return;
     setLoading(true);
     setError(null);
-    socket.emit('pipeline:getAll', filterObj);
+    
+    console.log("[Pipeline] Fetching all pipelines from backend");
+    socket.emit('pipeline:getAll', {});
+  };
+
+  const fetchStages = () => {
+    if (!socket) return;
+    console.log("[Pipeline] Fetching stages from backend");
+    socket.emit('stage:getAll');
+  };
+
+  const updateAvailableStages = (pipelinesData: any[]) => {
+    // Get unique stages from pipelines
+    const pipelineStages = Array.from(new Set(pipelinesData.map(p => p.stage).filter(Boolean)));
+    console.log("[Pipeline] Unique stages from pipelines:", pipelineStages);
+    
+    // Set pipeline stages as initial available stages
+    // Custom stages will be added by the stages handler
+    setAvailableStages(pipelineStages);
   };
 
   useEffect(() => {
     if (!socket) return;
     fetchPipelines();
-    const handler = (res: any) => {
+    fetchStages(); // Also fetch stages
+    
+    const pipelineHandler = (res: any) => {
       console.log('Pipeline getAll response:', res);
       if (res.done) {
+        // Log the first pipeline to see the date format
+        if (res.data && res.data.length > 0) {
+          console.log('Sample pipeline data:', {
+            id: res.data[0]._id,
+            createdDate: res.data[0].createdDate,
+            createdDateType: typeof res.data[0].createdDate,
+            createdDateConstructor: res.data[0].createdDate?.constructor?.name
+          });
+        }
         setPipelines(res.data || []);
+        setFilteredPipelines(res.data || []); // Initialize filtered pipelines with all data
+        updateAvailableStages(res.data || []); // Update available stages
         setError(null);
         console.log(`Loaded ${res.data?.length || 0} pipelines`);
       } else {
@@ -76,23 +116,123 @@ const Pipeline = () => {
       }
       setLoading(false);
     };
-    socket.on("pipeline:getAll-response", handler);
+
+    const stagesHandler = (res: any) => {
+      console.log('Stages getAll response:', res);
+      if (res.done && res.data) {
+        const customStages = res.data.map((stage: any) => stage.name);
+        console.log('Custom stages from backend:', customStages);
+        
+        // Combine with existing pipeline stages
+        setAvailableStages(prev => {
+          const combined = Array.from(new Set([...prev, ...customStages]));
+          console.log('Combined available stages:', combined);
+          return combined;
+        });
+      }
+    };
+
+    socket.on("pipeline:getAll-response", pipelineHandler);
+    socket.on("stage:getAll-response", stagesHandler);
+    
     return () => {
-      socket.off("pipeline:getAll-response", handler);
+      socket.off("pipeline:getAll-response", pipelineHandler);
+      socket.off("stage:getAll-response", stagesHandler);
     };
   }, [socket]);
 
-  // Update useEffect to fetch pipelines on filter change
+  // Frontend filtering logic - similar to packages and companies modules
   useEffect(() => {
-    fetchPipelines();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+    if (pipelines && filters) {
+      console.log("[Pipeline] Applying frontend filters:", filters);
+      console.log("[Pipeline] Total pipelines before filtering:", pipelines.length);
+      
+      let result = [...pipelines]; // Always start from the original pipelines
+
+      // Stage filter
+      if (filters.stage) {
+        result = result.filter((pipeline) => pipeline.stage === filters.stage);
+      }
+
+      // Status filter
+      if (filters.status) {
+        result = result.filter((pipeline) => pipeline.status === filters.status);
+      }
+
+      // Deal value filter
+      if (filters.dealValue) {
+        const ranges: Record<string, [number, number]> = {
+          '$0 - $1,000': [0, 1000],
+          '$1,000 - $5,000': [1000, 5000],
+          '$5,000 - $10,000': [5000, 10000],
+          '$10,000+': [10000, Infinity],
+        };
+        const range = ranges[filters.dealValue];
+        if (range) {
+          result = result.filter((pipeline) => {
+            const value = pipeline.totalDealValue || 0;
+            return value >= range[0] && (range[1] === Infinity ? true : value <= range[1]);
+          });
+        }
+      }
+
+      // Date range filter
+      if (filters.dateRange?.start || filters.dateRange?.end) {
+        result = result.filter((pipeline) => {
+          if (!pipeline.createdDate) return false;
+          
+          const pipelineDate = new Date(pipeline.createdDate);
+          if (isNaN(pipelineDate.getTime())) return false;
+          
+          let start = filters.dateRange?.start ? new Date(filters.dateRange.start) : null;
+          let end = filters.dateRange?.end ? new Date(filters.dateRange.end) : null;
+
+          // Check if this is "All Time" (very old start date)
+          const allTimeStart = new Date('1970-01-01T00:00:00.000Z');
+          if (start && start.getTime() === allTimeStart.getTime()) {
+            start = null; // Don't filter by start date for "All Time"
+          }
+
+          if (start) start.setHours(0, 0, 0, 0);
+          if (end) end.setHours(23, 59, 59, 999);
+
+          return (!start || pipelineDate >= start) && (!end || pipelineDate <= end);
+        });
+      }
+
+      // Sort
+      if (filters.sort) {
+        result.sort((a, b) => {
+          const dateA = new Date(a.createdDate);
+          const dateB = new Date(b.createdDate);
+          
+          switch (filters.sort) {
+            case 'asc':
+              return dateA.getTime() - dateB.getTime();
+            case 'desc':
+              return dateB.getTime() - dateA.getTime();
+            case 'recent':
+              return dateB.getTime() - dateA.getTime();
+            case 'last7days':
+              // For last 7 days, still sort by date descending
+              return dateB.getTime() - dateA.getTime();
+            default:
+              return 0;
+          }
+        });
+      }
+
+      console.log("[Pipeline] Filtered pipelines count:", result.length);
+      setFilteredPipelines(result);
+    }
+  }, [filters, pipelines]);
 
   // Listen for global refresh events
   useEffect(() => {
     const handleRefreshPipelines = () => {
       console.log('Global refresh event received, fetching pipelines...');
       fetchPipelines();
+      fetchStages(); // Also refresh stages
     };
 
     window.addEventListener('refresh-pipelines', handleRefreshPipelines);
@@ -279,8 +419,27 @@ const Pipeline = () => {
     {
       title: "Created Date",
       dataIndex: "createdDate",
-      render: (date: string) => new Date(date).toLocaleDateString(),
-      sorter: (a: any, b: any) => new Date(a.createdDate).getTime() - new Date(b.createdDate).getTime(),
+      render: (date: any) => {
+        try {
+          if (!date) return 'N/A';
+          const dateObj = date instanceof Date ? date : new Date(date);
+          if (isNaN(dateObj.getTime())) return 'N/A';
+          return dateObj.toLocaleDateString();
+        } catch (error) {
+          console.error('Error formatting date:', error, 'date value:', date);
+          return 'N/A';
+        }
+      },
+      sorter: (a: any, b: any) => {
+        try {
+          const dateA = a.createdDate instanceof Date ? a.createdDate : new Date(a.createdDate);
+          const dateB = b.createdDate instanceof Date ? b.createdDate : new Date(b.createdDate);
+          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+          return dateA.getTime() - dateB.getTime();
+        } catch (error) {
+          return 0;
+        }
+      },
     },
     {
       title: "Status",
@@ -425,8 +584,11 @@ const Pipeline = () => {
                 <div className="me-3">
                   <div className="input-icon-end position-relative">
                    <PredefinedDateRanges
-                    value={filters.dateRange === null ? undefined : filters.dateRange}
-                    onChange={range => handleFilterChange('dateRange', range)}
+                    value={filters.dateRange || undefined}
+                    onChange={range => {
+                      console.log("[Pipeline] Date range changed:", range);
+                      handleFilterChange('dateRange', range);
+                    }}
                   />
                     <span className="input-icon-addon">
                       <i className="ti ti-chevron-down" />
@@ -442,11 +604,9 @@ const Pipeline = () => {
                     onChange={e => handleFilterChange('stage', e.target.value)}
                   >
                     <option value="">All Stages</option>
-                    <option value="Won">Won</option>
-                    <option value="In Pipeline">In Pipeline</option>
-                    <option value="Conversation">Conversation</option>
-                    <option value="Follow Up">Follow Up</option>
-                    <option value="Schedule servise">Schedule servise</option>
+                    {availableStages.map(stage => (
+                      <option key={stage} value={stage}>{stage}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -502,7 +662,7 @@ const Pipeline = () => {
               ) : (
                 <>
                   {/* Filter Summary */}
-                  <Table dataSource={pipelines} columns={columns} Selection={true} />
+                  <Table dataSource={filteredPipelines} columns={columns} Selection={true} />
                 </>
               )}
             </div>

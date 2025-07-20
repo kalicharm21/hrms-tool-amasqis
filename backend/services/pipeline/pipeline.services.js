@@ -32,52 +32,34 @@ export const createPipeline = async (companyId, pipelineData) => {
 export const getPipelines = async (companyId, filters = {}) => {
   try {
     const collections = getTenantCollections(companyId);
-    console.log("[PipelineService] getPipelines", { companyId, filters });
+    console.log("[PipelineService] getPipelines", { companyId });
     const query = { companyId };
 
-    // Date range filter
-    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
-      query.createdDate = {
-        $gte: new Date(filters.dateRange.start),
-        $lte: new Date(filters.dateRange.end)
-      };
-    }
-    // Stage filter
-    if (filters.stage) {
-      query.stage = filters.stage;
-    }
-    // Status filter
-    if (filters.status) {
-      query.status = filters.status;
-    }
-    // Deal value filter
-    if (filters.dealValue) {
-      // Map label to range
-      const ranges = {
-        '$0 - $1,000': [0, 1000],
-        '$1,000 - $5,000': [1000, 5000],
-        '$5,000 - $10,000': [5000, 10000],
-        '$10,000+': [10000, Infinity],
-      };
-      const range = ranges[filters.dealValue];
-      if (range) {
-        query.totalDealValue = { $gte: range[0] };
-        if (range[1] !== Infinity) query.totalDealValue.$lte = range[1];
-      }
-    }
+    // Sort by createdDate descending (most recent first)
+    const sort = { createdDate: -1 };
 
-    // Sort
-    let sort = { createdDate: -1 };
-    if (filters.sort) {
-      if (filters.sort === 'asc') sort = { createdDate: 1 };
-      else if (filters.sort === 'desc') sort = { createdDate: -1 };
-      else if (filters.sort === 'recent') sort = { createdDate: -1 };
-      else if (filters.sort === 'last7days') sort = { createdDate: -1 };
-    }
-
+    console.log("[PipelineService] Final query", { query, sort });
     const pipelines = await collections.pipelines.find(query).sort(sort).toArray();
     console.log("[PipelineService] found pipelines", { count: pipelines.length });
-    return { done: true, data: pipelines };
+    
+    // Ensure dates are properly converted to Date objects
+    const processedPipelines = pipelines.map(pipeline => ({
+      ...pipeline,
+      createdDate: pipeline.createdDate ? new Date(pipeline.createdDate) : null
+    }));
+    
+    // Debug: Log first few pipelines to see date format
+    if (processedPipelines.length > 0) {
+      console.log("[PipelineService] Sample pipeline dates after processing:", processedPipelines.slice(0, 3).map(p => ({
+        id: p._id,
+        createdDate: p.createdDate,
+        createdDateType: typeof p.createdDate,
+        createdDateConstructor: p.createdDate?.constructor?.name,
+        createdDateISO: p.createdDate ? (p.createdDate instanceof Date ? p.createdDate.toISOString() : 'Not a Date object') : null
+      })));
+    }
+    
+    return { done: true, data: processedPipelines };
   } catch (error) {
     console.error("[PipelineService] Error in getPipelines", { error: error.message });
     return { done: false, error: error.message };
@@ -466,8 +448,11 @@ export const exportPipelinesExcel = async (companyId) => {
 // --- Stage Management ---
 export const getStages = async (companyId) => {
   try {
+    console.log('[StageService] getStages called with companyId:', companyId);
     const collections = getTenantCollections(companyId);
+    console.log('[StageService] Using database for companyId:', companyId);
     const stages = await collections.stages.find({ companyId }).toArray();
+    console.log('[StageService] Found stages:', stages.length, 'for companyId:', companyId);
     return { done: true, data: stages };
   } catch (error) {
     console.error('[StageService] Error in getStages', { error: error.message });
@@ -477,15 +462,19 @@ export const getStages = async (companyId) => {
 
 export const addStage = async (companyId, name) => {
   try {
+    console.log('[StageService] addStage called with companyId:', companyId, 'name:', name);
     const collections = getTenantCollections(companyId);
+    console.log('[StageService] Using database for companyId:', companyId);
     // Prevent duplicate stage names for the same company
     const existing = await collections.stages.findOne({ name, companyId });
     if (existing) {
       return { done: false, error: 'Stage already exists' };
     }
     const result = await collections.stages.insertOne({ name, companyId });
+    console.log('[StageService] Stage inserted with result:', result);
     if (result.insertedId) {
       const stages = await collections.stages.find({ companyId }).toArray();
+      console.log('[StageService] Total stages after adding:', stages.length);
       return { done: true, data: stages };
     } else {
       return { done: false, error: 'Failed to add stage' };
@@ -519,14 +508,58 @@ export const updateStage = async (companyId, stageId, newName) => {
 export const overwriteStages = async (companyId, stages) => {
   try {
     const collections = getTenantCollections(companyId);
+    
+    // Get current stages before deletion to identify which ones are being removed
+    const currentStages = await collections.stages.find({ companyId }).toArray();
+    const currentStageNames = currentStages.map(s => s.name);
+    const newStageNames = Array.isArray(stages) ? stages : [];
+    
+    // Find stages that are being deleted
+    const deletedStageNames = currentStageNames.filter(stageName => !newStageNames.includes(stageName));
+    
+    console.log('[StageService] overwriteStages - Current stages:', currentStageNames);
+    console.log('[StageService] overwriteStages - New stages:', newStageNames);
+    console.log('[StageService] overwriteStages - Stages being deleted:', deletedStageNames);
+    
     // Remove all existing stages for this company
     await collections.stages.deleteMany({ companyId });
+    
     // Insert the new list
     if (Array.isArray(stages) && stages.length > 0) {
       await collections.stages.insertMany(stages.map(name => ({ name, companyId })));
     }
+    
+    let updatedPipelinesCount = 0;
+    let defaultStage = '';
+    
+    // Update pipelines that use deleted stages
+    if (deletedStageNames.length > 0 && newStageNames.length > 0) {
+      defaultStage = newStageNames[0]; // Use first stage as default
+      console.log('[StageService] overwriteStages - Updating pipelines to use default stage:', defaultStage);
+      
+      // Find and update pipelines that use any of the deleted stages
+      const updateResult = await collections.pipelines.updateMany(
+        { 
+          companyId, 
+          stage: { $in: deletedStageNames } 
+        },
+        { 
+          $set: { stage: defaultStage } 
+        }
+      );
+      
+      updatedPipelinesCount = updateResult.modifiedCount;
+      console.log('[StageService] overwriteStages - Updated pipelines:', updatedPipelinesCount);
+    }
+    
     const updated = await collections.stages.find({ companyId }).toArray();
-    return { done: true, data: updated };
+    return { 
+      done: true, 
+      data: updated,
+      updatedPipelinesCount,
+      defaultStage,
+      deletedStages: deletedStageNames
+    };
   } catch (error) {
     console.error('[StageService] Error in overwriteStages', { error: error.message });
     return { done: false, error: error.message };

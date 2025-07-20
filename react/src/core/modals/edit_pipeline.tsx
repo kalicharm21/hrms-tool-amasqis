@@ -4,6 +4,7 @@ import { useSocket } from '../../SocketContext';
 import { Socket } from 'socket.io-client';
 import dayjs, { Dayjs } from 'dayjs';
 import { Select } from 'antd';
+import { toast } from 'react-toastify';
 
 const DEFAULT_STAGE_OPTIONS = [
   'Won',
@@ -75,7 +76,7 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
     if (!modal) return;
     const fetchStages = () => {
       if (socket && companyId) {
-        socket.emit('stage:getAll', { companyId });
+        socket.emit('stage:getAll');
         socket.once('stage:getAll-response', (res: any) => {
           if (res.done && Array.isArray(res.data)) {
             const customStages = res.data.map((s: any) => s.name);
@@ -416,7 +417,7 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
           companyId={companyId}
           onSave={updatedStages => {
             if (socket) {
-              socket.emit('stage:overwrite', { companyId, stages: updatedStages });
+              socket.emit('stage:overwrite', { stages: updatedStages });
               socket.once('stage:overwrite-response', (res: any) => {
                 if (res.done && Array.isArray(res.data)) {
                   const merged = [...DEFAULT_STAGE_OPTIONS, ...res.data.map((s: any) => s.name).filter((s: string) => !DEFAULT_STAGE_OPTIONS.includes(s))];
@@ -424,6 +425,16 @@ const EditPipeline = ({ pipeline, onPipelineUpdated }: EditPipelineProps) => {
                   if (!merged.includes(stage)) {
                     setStage(merged[0] || '');
                   }
+                  
+                  // Show detailed success message about stage update
+                  if (res.updatedPipelinesCount > 0) {
+                    toast.success(`Stages updated successfully! ${res.updatedPipelinesCount} pipeline(s) using deleted stages have been automatically updated to use "${res.defaultStage}".`);
+                  } else {
+                    toast.success('Stages updated successfully!');
+                  }
+                  
+                  // Dispatch refresh event to update pipeline list
+                  window.dispatchEvent(new CustomEvent('refresh-pipelines'));
                 }
               });
             }

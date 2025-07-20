@@ -1,13 +1,14 @@
+import React, { useEffect, useState } from 'react';
+import { useSocket } from '../../SocketContext';
+import { Socket } from 'socket.io-client';
 import { DatePicker } from 'antd';
-import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import CommonSelect from '../common/commonSelect';
 import { beforeuse, company, contacts, deals, guests, owner, owners, status } from '../common/selectoption/selectoption';
 import { label } from 'yet-another-react-lightbox/*';
 import CommonTagsInput from '../common/Taginput';
 import ImageWithBasePath from '../common/imageWithBasePath';
-import { useSocket } from '../../SocketContext';
-import { Socket } from 'socket.io-client';
 import dayjs, { Dayjs } from 'dayjs';
 import AddStage from './add_stage';
 
@@ -38,7 +39,7 @@ const AddPipeline = () => {
     if (!modal) return;
     const fetchStages = () => {
       if (socket && companyId) {
-        socket.emit('stage:getAll', { companyId });
+        socket.emit('stage:getAll');
         socket.once('stage:getAll-response', (res: any) => {
           if (res.done && Array.isArray(res.data)) {
             const customStages = res.data.map((s: any) => s.name);
@@ -237,7 +238,7 @@ const AddPipeline = () => {
           companyId={companyId}
           onSave={updatedStages => {
             if (socket) {
-              socket.emit('stage:overwrite', { companyId, stages: updatedStages });
+              socket.emit('stage:overwrite', { stages: updatedStages });
               socket.once('stage:overwrite-response', (res: any) => {
                 if (res.done && Array.isArray(res.data)) {
                   const merged = [...DEFAULT_STAGE_OPTIONS, ...res.data.map((s: any) => s.name).filter((s: string) => !DEFAULT_STAGE_OPTIONS.includes(s))];
@@ -245,6 +246,16 @@ const AddPipeline = () => {
                   if (!merged.includes(stage)) {
                     setStage(merged[0] || '');
                   }
+                  
+                  // Show detailed success message about stage update
+                  if (res.updatedPipelinesCount > 0) {
+                    toast.success(`Stages updated successfully! ${res.updatedPipelinesCount} pipeline(s) using deleted stages have been automatically updated to use "${res.defaultStage}".`);
+                  } else {
+                    toast.success('Stages updated successfully!');
+                  }
+                  
+                  // Dispatch refresh event to update pipeline list
+                  window.dispatchEvent(new CustomEvent('refresh-pipelines'));
                 }
               });
             }

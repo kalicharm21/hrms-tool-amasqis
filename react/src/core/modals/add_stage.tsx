@@ -27,7 +27,7 @@ const AddStage = () => {
     }
     setError('');
     if (socket && companyId) {
-      socket.emit('stage:add', { companyId, name: trimmed });
+      socket.emit('stage:add', { name: trimmed });
       socket.once('stage:add-response', (res: any) => {
         if (res.done) {
           setStageName('');

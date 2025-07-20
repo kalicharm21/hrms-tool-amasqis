@@ -178,27 +178,70 @@ const pipelineController = (socket, io) => {
   });
 
   // Get all stages for the company
-  socket.on('stage:getAll', async ({ companyId }) => {
-    const result = await getStages(companyId);
-    socket.emit('stage:getAll-response', result);
+  socket.on('stage:getAll', async () => {
+    try {
+      console.log("[Pipeline] stage:getAll event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId });
+      const companyId = validateCompanyAccess(socket);
+      const result = await getStages(companyId);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to get stages", { error: result.error });
+      }
+      socket.emit('stage:getAll-response', result);
+    } catch (error) {
+      console.error("[Pipeline] Error in stage:getAll", { error: error.message });
+      socket.emit('stage:getAll-response', { done: false, error: error.message });
+    }
   });
 
   // Add a new stage for the company
-  socket.on('stage:add', async ({ companyId, name }) => {
-    const result = await addStage(companyId, name);
-    socket.emit('stage:add-response', result);
+  socket.on('stage:add', async ({ name }) => {
+    try {
+      console.log("[Pipeline] stage:add event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, name });
+      if (!isAdmin) throw new Error("Unauthorized: Admins only");
+      const companyId = validateCompanyAccess(socket);
+      const result = await addStage(companyId, name);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to add stage", { error: result.error });
+      }
+      socket.emit('stage:add-response', result);
+    } catch (error) {
+      console.error("[Pipeline] Error in stage:add", { error: error.message });
+      socket.emit('stage:add-response', { done: false, error: error.message });
+    }
   });
 
   // Update a stage for the company
-  socket.on('stage:update', async ({ companyId, stageId, newName }) => {
-    const result = await updateStage(companyId, stageId, newName);
-    socket.emit('stage:update-response', result);
+  socket.on('stage:update', async ({ stageId, newName }) => {
+    try {
+      console.log("[Pipeline] stage:update event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, stageId, newName });
+      if (!isAdmin) throw new Error("Unauthorized: Admins only");
+      const companyId = validateCompanyAccess(socket);
+      const result = await updateStage(companyId, stageId, newName);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to update stage", { error: result.error });
+      }
+      socket.emit('stage:update-response', result);
+    } catch (error) {
+      console.error("[Pipeline] Error in stage:update", { error: error.message });
+      socket.emit('stage:update-response', { done: false, error: error.message });
+    }
   });
 
   // Overwrite all stages for the company
-  socket.on('stage:overwrite', async ({ companyId, stages }) => {
-    const result = await overwriteStages(companyId, stages);
-    socket.emit('stage:overwrite-response', result);
+  socket.on('stage:overwrite', async ({ stages }) => {
+    try {
+      console.log("[Pipeline] stage:overwrite event", { user: socket.user?.sub, role: socket.userMetadata?.role, companyId: socket.companyId, stages });
+      if (!isAdmin) throw new Error("Unauthorized: Admins only");
+      const companyId = validateCompanyAccess(socket);
+      const result = await overwriteStages(companyId, stages);
+      if (!result.done) {
+        console.error("[Pipeline] Failed to overwrite stages", { error: result.error });
+      }
+      socket.emit('stage:overwrite-response', result);
+    } catch (error) {
+      console.error("[Pipeline] Error in stage:overwrite", { error: error.message });
+      socket.emit('stage:overwrite-response', { done: false, error: error.message });
+    }
   });
 };
 
