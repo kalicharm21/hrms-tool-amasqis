@@ -5,13 +5,15 @@ import Select from "react-select";
 import ImageWithBasePath from "../common/imageWithBasePath";
 import CommonSelect from "../common/commonSelect";
 import CommonTextEditor from "../common/textEditor";
+import { useSocket } from "../../SocketContext";
+import { Socket } from "socket.io-client";
 
 interface TodoModalProps {
-  socket?: any;
   onTodoAdded?: () => void;
 }
 
-const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
+const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
+  const socket = useSocket() as Socket | null;
   const [isLoading, setIsLoading] = useState(false);
   const [tags, setTags] = useState([
     { value: "Internal", label: "Internal" },
@@ -50,28 +52,35 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
 
 
   useEffect(() => {
-    if (socket) {
-      socket.emit("admin/dashboard/get-todo-tags");
+    if (!socket) return;
 
-      socket.on("admin/dashboard/get-todo-tags-response", (response: any) => {
-        if (response.done) {
-          setTags(response.data);
-        }
-      });
+    const handleTagsResponse = (response: any) => {
+      if (response.done) {
+        setTags(response.data);
+      }
+    };
 
-      socket.emit("admin/dashboard/get-todo-assignees");
+    const handleAssigneesResponse = (response: any) => {
+      if (response.done) {
+        setAssignees(response.data);
+      }
+    };
 
-      socket.on("admin/dashboard/get-todo-assignees-response", (response: any) => {
-        if (response.done) {
-          setAssignees(response.data);
-        }
-      });
+    // Add event listeners
+    socket.on("admin/dashboard/get-todo-tags-response", handleTagsResponse);
+    socket.on("admin/dashboard/get-todo-assignees-response", handleAssigneesResponse);
 
-      return () => {
-        socket.off("admin/dashboard/get-todo-tags-response");
-        socket.off("admin/dashboard/get-todo-assignees-response");
-      };
-    }
+    // Request initial data
+    socket.emit("admin/dashboard/get-todo-tags");
+    socket.emit("admin/dashboard/get-todo-assignees");
+
+    // Cleanup event listeners
+    return () => {
+      if (socket) {
+        socket.off("admin/dashboard/get-todo-tags-response", handleTagsResponse);
+        socket.off("admin/dashboard/get-todo-assignees-response", handleAssigneesResponse);
+      }
+    };
   }, [socket]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +113,11 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
       return;
     }
 
+    if (!socket) {
+      alert('No connection available. Please refresh the page.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -116,52 +130,72 @@ const TodoModal: React.FC<TodoModalProps> = ({ socket, onTodoAdded }) => {
         status: formData.status || 'Pending',
       };
 
-      if (socket) {
-        const handleResponse = (response: any) => {
-          setIsLoading(false);
-          if (response.done) {
-            resetForm();
+      const handleResponse = (response: any) => {
+        setIsLoading(false);
+        if (response.done) {
+          resetForm();
 
-            const modal = document.getElementById('add_todo');
-            if (modal) {
-              const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modal);
-              if (bootstrapModal) {
-                bootstrapModal.hide();
+          const modal = document.getElementById('add_todo');
+          if (modal) {
+            try {
+              const bootstrap = (window as any).bootstrap;
+              if (bootstrap && bootstrap.Modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                  modalInstance.hide();
+                } else {
+                  // If no instance exists, create one and hide it
+                  const newModalInstance = new bootstrap.Modal(modal);
+                  newModalInstance.hide();
+                }
               } else {
+                throw new Error('Bootstrap not available');
+              }
+            } catch (error) {
+              console.warn('Bootstrap Modal API not available, using fallback method');
+              // Fallback: manually trigger the modal close
+              const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+              if (closeButton) {
+                closeButton.click();
+              } else {
+                // Manual modal close
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden', 'true');
                 modal.classList.remove('show');
+                modal.removeAttribute('aria-modal');
+
+                // Remove backdrop
                 const backdrops = document.querySelectorAll('.modal-backdrop');
                 backdrops.forEach(backdrop => backdrop.remove());
+
+                // Restore body
                 document.body.classList.remove('modal-open');
                 document.body.style.overflow = '';
                 document.body.style.paddingRight = '';
               }
             }
-
-            setTimeout(() => {
-              const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
-              remainingBackdrops.forEach(backdrop => backdrop.remove());
-              document.body.classList.remove('modal-open');
-              document.body.style.overflow = '';
-              document.body.style.paddingRight = '';
-              if (onTodoAdded) {
-                onTodoAdded();
-              }
-            }, 200);
-          } else {
-            alert('Failed to add todo: ' + response.error);
           }
 
-          socket.off("admin/dashboard/add-todo-response", handleResponse);
-        };
+          setTimeout(() => {
+            const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
+            remainingBackdrops.forEach(backdrop => backdrop.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            if (onTodoAdded) {
+              onTodoAdded();
+            }
+          }, 200);
+        } else {
+          alert('Failed to add todo: ' + response.error);
+        }
 
-        socket.on("admin/dashboard/add-todo-response", handleResponse);
-        socket.emit("admin/dashboard/add-todo", todoData);
-      } else {
-        alert('No connection available. Please refresh the page.');
-        setIsLoading(false);
-      }
+        // Remove the specific listener after handling the response
+        socket.off("admin/dashboard/add-todo-response", handleResponse);
+      };
+
+      socket.on("admin/dashboard/add-todo-response", handleResponse);
+      socket.emit("admin/dashboard/add-todo", todoData);
     } catch (error) {
       console.error('Error adding todo:', error);
       alert('An error occurred while adding the todo');
