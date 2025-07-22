@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import CommonSelect from "../common/commonSelect";
+import Select from "react-select";
 import { DatePicker, TimePicker } from "antd";
 import CommonTextEditor from "../common/textEditor";
 import CommonTagsInput from "../common/Taginput";
-import { useAuth } from "@clerk/clerk-react";
-import io from "socket.io-client";
+import { useSocket } from "../../SocketContext";
+import { Socket } from "socket.io-client";
 import { toast, ToastContainer } from "react-toastify";
 
 interface ProjectModalData {
@@ -38,17 +39,20 @@ interface ProjectFormData {
   totalWorkingHours: string;
   extraTime: string;
   description: string;
-  teamMembers: string[];
-  teamLeader: string[];
-  projectManager: string[];
+  teamMembers: Array<{ value: string; label: string }>;
+  teamLeader: { value: string; label: string } | null;
+  projectManager: { value: string; label: string } | null;
   status: string;
   tags: string[];
   logo?: string;
 }
 
-const ProjectModals = () => {
-  const { getToken } = useAuth();
-  const [socket, setSocket] = useState<any>(null);
+interface ProjectModalsProps {
+  onProjectCreated?: () => void;
+}
+
+const ProjectModals: React.FC<ProjectModalsProps> = ({ onProjectCreated }) => {
+  const socket = useSocket() as Socket | null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -74,8 +78,8 @@ const ProjectModals = () => {
     extraTime: "",
     description: "",
     teamMembers: [],
-    teamLeader: [],
-    projectManager: [],
+    teamLeader: null,
+    projectManager: null,
     status: "Active",
     tags: [],
   });
@@ -169,96 +173,112 @@ const ProjectModals = () => {
     }
   };
 
-  // Initialize socket connection
   useEffect(() => {
-    const initSocket = async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
+    if (!socket) return;
 
-        const newSocket = io("http://localhost:5000", {
-          auth: { token },
-          timeout: 20000,
+    const handleModalDataResponse = (response: any) => {
+      if (response.done) {
+        setModalData(response.data);
+      } else {
+        setError(response.error || "Failed to load project data");
+      }
+      setLoading(false);
+    };
+
+    const handleAddProjectResponse = (response: any) => {
+      if (response.done) {
+        setFormData({
+          name: "",
+          clientId: "",
+          startDate: "",
+          endDate: "",
+          priority: "",
+          projectValue: "",
+          totalWorkingHours: "",
+          extraTime: "",
+          description: "",
+          teamMembers: [],
+          teamLeader: null,
+          projectManager: null,
+          status: "Active",
+          tags: [],
         });
+        setCurrentStep(1);
+        setLogo(null);
+        removeLogo();
 
-        newSocket.on("connect", () => {
-          console.log("Connected to project modal socket");
-        });
-
-        newSocket.on("admin/project/get-modal-data-response", (response) => {
-          if (response.done) {
-            setModalData(response.data);
-          } else {
-            setError(response.error || "Failed to load project data");
-          }
-          setLoading(false);
-        });
-
-        newSocket.on("admin/project/add-response", (response) => {
-          if (response.done) {
-            // Reset form
-            setFormData({
-              name: "",
-              clientId: "",
-              startDate: "",
-              endDate: "",
-              priority: "",
-              projectValue: "",
-              totalWorkingHours: "",
-              extraTime: "",
-              description: "",
-              teamMembers: [],
-              teamLeader: [],
-              projectManager: [],
-              status: "Active",
-              tags: [],
-            });
-            setCurrentStep(1);
-            setLogo(null);
-            removeLogo();
-            // Close modal
-            const modal = document.getElementById("add_project") as any;
-            if (modal) {
-              const bootstrap = (window as any).bootstrap;
+        // Close modal using multiple approaches for better compatibility
+        const modal = document.getElementById('add_project');
+        if (modal) {
+          try {
+            const bootstrap = (window as any).bootstrap;
+            if (bootstrap && bootstrap.Modal) {
               const modalInstance = bootstrap.Modal.getInstance(modal);
               if (modalInstance) {
                 modalInstance.hide();
+              } else {
+                const newModalInstance = new bootstrap.Modal(modal);
+                newModalInstance.hide();
               }
+            } else {
+              throw new Error('Bootstrap not available');
             }
-            toast.success("Project created successfully!", {
-              position: "top-right",
-              autoClose: 3000,
-              hideProgressBar: true,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
-            });
-          } else {
-            setError(response.error || "Failed to create project");
+          } catch (error) {
+            console.warn('Bootstrap Modal API not available, using fallback method');
+            // Fallback: manually trigger the modal close
+            const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+            if (closeButton) {
+              closeButton.click();
+            } else {
+              // Manual modal close
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+              modal.setAttribute('aria-hidden', 'true');
+              modal.removeAttribute('aria-modal');
+
+              // Remove backdrop
+              const backdrop = document.querySelector('.modal-backdrop');
+              if (backdrop) {
+                backdrop.remove();
+              }
+
+              // Restore body
+              document.body.classList.remove('modal-open');
+              document.body.style.overflow = '';
+              document.body.style.paddingRight = '';
+            }
           }
-          setIsSubmitting(false);
+        }
+        toast.success("Project created successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: true,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
         });
 
-        newSocket.on("connect_error", (err) => {
-          console.error("Socket connection error:", err);
-          setError("Failed to connect to server");
-          setLoading(false);
-        });
-
-        setSocket(newSocket);
-
-        return () => {
-          newSocket.disconnect();
-        };
-      } catch (err) {
-        console.error("Failed to initialize socket:", err);
-        setError("Failed to initialize connection");
-        setLoading(false);
+        if (onProjectCreated) {
+          onProjectCreated();
+        }
+      } else {
+        setError(response.error || "Failed to create project");
       }
+      setIsSubmitting(false);
     };
 
-    initSocket();
-  }, [getToken]);
+    socket.on("admin/project/get-modal-data-response", handleModalDataResponse);
+    socket.on("admin/project/add-response", handleAddProjectResponse);
+
+    // Cleanup event listeners when component unmounts or socket changes
+    return () => {
+      if (socket) {
+        socket.off("admin/project/get-modal-data-response", handleModalDataResponse);
+        socket.off("admin/project/add-response", handleAddProjectResponse);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   // Load modal data when modal opens
   const handleModalOpen = () => {
@@ -313,11 +333,11 @@ const ProjectModals = () => {
       setError("At least one team member is required");
       return;
     }
-    if (!formData.teamLeader.length) {
+    if (!formData.teamLeader) {
       setError("Team leader is required");
       return;
     }
-    if (!formData.projectManager.length) {
+    if (!formData.projectManager) {
       setError("Project manager is required");
       return;
     }
@@ -327,20 +347,11 @@ const ProjectModals = () => {
 
     const projectData = {
       ...formData,
-      // Convert string arrays to actual IDs where needed
-      teamMembers: formData.teamMembers.map((member) => {
-        const emp = modalData.employees.find((e) => e.label === member);
-        return emp ? emp.value : member;
-      }),
-      teamLeader: formData.teamLeader.map((leader) => {
-        const emp = modalData.employees.find((e) => e.label === leader);
-        return emp ? emp.value : leader;
-      }),
-      projectManager: formData.projectManager.map((manager) => {
-        const emp = modalData.employees.find((e) => e.label === manager);
-        return emp ? emp.value : manager;
-      }),
-      projectValue: parseFloat(formData.projectValue.replace("$", "")) || 0,
+      // Extract just the IDs since we're already working with proper objects
+      teamMembers: formData.teamMembers.map(member => member.value),
+      teamLeader: [formData.teamLeader.value],
+      projectManager: [formData.projectManager.value],
+      projectValue: parseFloat(formData.projectValue.replace('$', '')) || 0,
       logo: logo,
     };
 
@@ -385,8 +396,8 @@ const ProjectModals = () => {
           extraTime: "",
           description: "",
           teamMembers: [],
-          teamLeader: [],
-          projectManager: [],
+          teamLeader: null,
+          projectManager: null,
           status: "Active",
           tags: [],
         });
@@ -732,54 +743,54 @@ const ProjectModals = () => {
                       <div className="row">
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label me-2">
-                              Team Members{" "}
-                              <span className="text-danger">*</span>
-                            </label>
-                            <CommonTagsInput
+                            <label className="form-label me-2">Team Members <span className="text-danger">*</span></label>
+                            <Select
+                              isMulti
+                              options={modalData.employees}
                               value={formData.teamMembers}
-                              onChange={(tags) =>
-                                handleInputChange("teamMembers", tags)
-                              }
-                              placeholder="Add team members"
-                              className="custom-input-class"
+                              onChange={(selectedOptions: any) => handleInputChange("teamMembers", selectedOptions || [])}
+                              placeholder="Select team members"
+                              className="basic-multi-select"
+                              classNamePrefix="select"
+                              getOptionLabel={(option: any) => `${option.label} - ${option.position}`}
+                              getOptionValue={(option: any) => option.value}
                             />
                             <small className="form-text text-muted">
-                              Available employees:{" "}
-                              {modalData.employees
-                                .map((emp) => emp.label)
-                                .join(", ")}
+                              Select multiple employees for the project team
                             </small>
                           </div>
                         </div>
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label me-2">
-                              Team Leader <span className="text-danger">*</span>
-                            </label>
-                            <CommonTagsInput
-                              value={formData.teamLeader}
-                              onChange={(tags) =>
-                                handleInputChange("teamLeader", tags)
-                              }
-                              placeholder="Add team leader"
-                              className="custom-input-class"
+                            <label className="form-label me-2">Team Leader <span className="text-danger">*</span></label>
+                            <CommonSelect
+                              className="select"
+                              options={modalData.employees.map(emp => ({
+                                value: emp.value,
+                                label: `${emp.label} - ${emp.position}`
+                              }))}
+                              defaultValue={formData.teamLeader ? {
+                                value: formData.teamLeader.value,
+                                label: formData.teamLeader.label
+                              } : undefined}
+                              onChange={(selectedOption) => handleInputChange("teamLeader", selectedOption)}
                             />
                           </div>
                         </div>
                         <div className="col-md-12">
                           <div className="mb-3">
-                            <label className="form-label me-2">
-                              Project Manager{" "}
-                              <span className="text-danger">*</span>
-                            </label>
-                            <CommonTagsInput
-                              value={formData.projectManager}
-                              onChange={(tags) =>
-                                handleInputChange("projectManager", tags)
-                              }
-                              placeholder="Add project manager"
-                              className="custom-input-class"
+                            <label className="form-label me-2">Project Manager <span className="text-danger">*</span></label>
+                            <CommonSelect
+                              className="select"
+                              options={modalData.employees.map(emp => ({
+                                value: emp.value,
+                                label: `${emp.label} - ${emp.position}`
+                              }))}
+                              defaultValue={formData.projectManager ? {
+                                value: formData.projectManager.value,
+                                label: formData.projectManager.label
+                              } : undefined}
+                              onChange={(selectedOption) => handleInputChange("projectManager", selectedOption)}
                             />
                           </div>
                         </div>

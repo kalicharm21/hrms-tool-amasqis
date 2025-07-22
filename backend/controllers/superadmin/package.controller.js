@@ -4,6 +4,15 @@ const packageController = (socket, io) => {
   // Add Plan Event
   // Read Function
 
+  // Broadcaster
+  const Broadcast = async (io, socket) => {
+    const res = await packageService.getplanStats(socket);
+    io.to("superadmin_room").emit(
+      "superadmin/packages/plan-details-response",
+      res
+    );
+  };
+
   socket.on("superadmin/packages/plan-details", async () => {
     try {
       console.log("Plan det");
@@ -58,6 +67,7 @@ const packageController = (socket, io) => {
         "superadmin/packages/planlist-response",
         updatedPlans
       );
+      Broadcast(io, socket);
     }
   });
 
@@ -81,6 +91,7 @@ const packageController = (socket, io) => {
           "superadmin/packages/planlist-response",
           updatedPlans
         );
+        Broadcast(io, socket);
       }
     } catch (error) {
       console.log("Error in update", error);
@@ -102,6 +113,7 @@ const packageController = (socket, io) => {
           "superadmin/packages/planlist-response",
           updatedPlans
         );
+        Broadcast(io, socket);
       }
     } catch (error) {
       socket.emit("superadmin/packages/delete-plan-response", error);

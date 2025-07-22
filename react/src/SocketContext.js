@@ -19,7 +19,9 @@ export const SocketProvider = ({ children }) => {
       }
 
       const token = await getToken();
-      const newSocket = io("http://localhost:5000", {
+      const backend_url =
+        process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+      const newSocket = io(backend_url, {
         auth: { token },
         timeout: 20000,
       });
@@ -43,6 +45,7 @@ export const SocketProvider = ({ children }) => {
       socketRef.current = null;
       setSocketState(null);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
   return (
