@@ -4,7 +4,7 @@ import { all_routes } from "../../router/all_routes";
 import ImageWithBasePath from "../../../core/common/imageWithBasePath";
 import { useAuth, useSignIn } from "@clerk/clerk-react";
 import { InputOtp } from "primereact/inputotp";
-import { P } from "@clerk/clerk-react/dist/useAuth-y8kzNBhq";
+//import { P } from "@clerk/clerk-react/dist/useAuth-y8kzNBhq";
 
 const ForgotPassword = () => {
   const [token, setTokens] = useState<any>();
