@@ -1,6 +1,10 @@
 import superAdminController from "../controllers/superadmin/superadmin.controller.js";
 import adminController from "../controllers/admin/admin.controller.js";
+
 import employeeDashboardController from "../controllers/employee/employee.controller.js";
+
+import pipelineController from "../controllers/pipeline/pipeline.controllers.js";
+
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -14,6 +18,7 @@ const router = (socket, io, role) => {
     case "admin":
       console.log("Attaching admin controller...");
       adminController(socket, io);
+      pipelineController(socket, io);
       break;
     case "hr":
       console.log("HR controller not implemented yet");
