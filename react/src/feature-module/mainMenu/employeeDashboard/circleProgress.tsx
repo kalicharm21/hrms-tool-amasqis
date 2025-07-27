@@ -1,9 +1,8 @@
-import { min } from "moment";
 import React, { useEffect, useRef, useState } from "react";
 
 interface CircleProgressProps {
   working_hour: number;
-  time: any; // Corrected from String to string
+  time: any;
 }
 
 const CircleProgress: React.FC<CircleProgressProps> = ({
@@ -11,47 +10,40 @@ const CircleProgress: React.FC<CircleProgressProps> = ({
   time,
 }) => {
   const { c_time, hrs, mins, secs } = time;
-  console.log("hrs -> ", hrs);
-  console.log("mins -> ", mins);
-  console.log("secs -> ", secs); // Convert working hours to seconds
-  const elapsed_seconds = Number(hrs) * 3600 + Number(mins) * 60 + Number(secs); // Convert elapsed time to seconds
-  let value: number;
-  console.log("elapsed -> ", elapsed_seconds);
-  console.log("working -> ", working_hour);
-  if (elapsed_seconds < working_hour) {
-    value = working_hour - elapsed_seconds;
-    value = (elapsed_seconds / working_hour) * 100;
-  } else {
-    value = 100;
-  }
+  const elapsed_seconds = Number(hrs) * 3600 + Number(mins) * 60 + Number(secs);
+  
+  // Calculate percentage with rounding to prevent floating point issues
+  let value = Math.min(100, 
+    Math.round((elapsed_seconds / working_hour) * 100 * 100) / 100
+  );
 
-  console.log(value);
   const [progressClass, setProgressClass] = useState<string>("");
   const circleRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLSpanElement>(null);
   const rightRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (circleRef.current && leftRef.current && rightRef.current) {
-      const percentageToDegrees = (percentage: number): number =>
-        (percentage / 100) * 360;
+    if (!circleRef.current || !leftRef.current || !rightRef.current) return;
 
-      if (value > 0) {
-        if (value <= 50) {
-          rightRef.current.style.transform = `rotate(${percentageToDegrees(
-            value
-          )}deg)`;
-        } else {
-          rightRef.current.style.transform = "rotate(180deg)";
-          leftRef.current.style.transform = `rotate(${percentageToDegrees(
-            value - 50
-          )}deg)`;
-        }
+    const percentageToDegrees = (percentage: number) => (percentage / 100) * 360;
+
+    // Reset rotations first
+    rightRef.current.style.transform = 'rotate(0deg)';
+    leftRef.current.style.transform = 'rotate(0deg)';
+
+    if (value > 0) {
+      if (value <= 50) {
+        rightRef.current.style.transform = `rotate(${percentageToDegrees(value)}deg)`;
+      } else {
+        rightRef.current.style.transform = "rotate(180deg)";
+        leftRef.current.style.transform = `rotate(${percentageToDegrees(value - 50)}deg)`;
       }
     }
 
-    // Assign class based on value
+    // Force complete closure at 100%
     if (value >= 100) {
+      rightRef.current.style.transform = "rotate(180deg)";
+      leftRef.current.style.transform = "rotate(180deg)";
       setProgressClass("border-secondary");
     } else if (value >= 80) {
       setProgressClass("border-info");

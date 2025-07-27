@@ -230,21 +230,6 @@ export const socketHandler = (httpServer) => {
       `Client connected: ${socket.id}, Role: ${socket.role}, Company: ${socket.companyId || "None"
       }`
     );
-    // ONLY FOR TESTING PURPOSE
-    if (socket.role === "public") {
-      socket.companyId = "68443081dcdfe43152aebf80";  // <-- fake companyId injected
-      socket.role = "employee";  // optionally override role to admin
-      socket.companyId = "68443081dcdfe43152aebf80";
-      socket.employeeId = "6879df8337412a2eb7454d46";
-      socket.userMetadata = {
-        companyId: "68443081dcdfe43152aebf80",
-        employeeId: "6879df8337412a2eb7454d46",
-        isEmployeeVerified: true,
-        role: "employee"
-      };
-      console.log("🔧 Injected test companyId and role:", "68443081dcdfe43152aebf80");
-    }
-    /////////////////////////////////
     const role = socket.role || "guest";
   router(socket, io, role);
 

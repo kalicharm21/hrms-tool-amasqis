@@ -1,41 +1,33 @@
 
 import { ObjectId } from 'mongodb';
-import { getStartOfDay } from '../../utils/startDay.js';
+import { getStartOfDayInTimeZone } from '../../utils/startDayTimeZone.js';
 import { getTenantCollections } from '../../config/db.js';
 import { getWorkingDays } from '../../utils/workingDays.js'
 import { fillSalaryMonths } from '../../utils/fillMissingMonths.js';
+import { DateTime } from 'luxon';
 
 const ALLOWED_STATUSES = ["onHold", "ongoing", "completed", "pending"];
 
-// only for testing
-export const getEmployeeDetailsAll = async (companyId) => {
-  try {
-    const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.find({}).toArray();
-    return {
-      done: true,
-      data: employee,
-    };
-  } catch (error) {
-    console.error("Error fetching employee details:", error);
-    return { done: false, error: error.message };
-  }
-};
-
-//////////////////
 
 export const getEmployeeDetails = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne(new ObjectId(employeeId));
-
+    const [employee, companyDetails] = await Promise.all([
+      collections.employees.findOne({ _id: new ObjectId(employeeId) }),
+      collections.details.findOne({})
+    ]);
     if (!employee) {
       return { done: false, error: "Employee not found" };
     }
-
+    if (!companyDetails || !companyDetails.timeZone) {
+      return { done: false, error: "Company timezone not found" };
+    }
     return {
       done: true,
-      data: employee,
+      data: {
+        ...employee,
+        companyTimeZone: companyDetails.timeZone,
+      }
     };
   } catch (error) {
     console.error("Error fetching employee details:", error);
@@ -264,70 +256,106 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
   }
 };
 
-export const punchIn = async (companyId, employeeId) => {
+export const punchIn = async (companyId, employeeId, timestamp) => {
   try {
     const collections = getTenantCollections(companyId);
+
     const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company' };
     }
 
-    const now = new Date();
-    const today = getStartOfDay(now);
+    console.log('timestamp:', timestamp, timestamp instanceof Date);
+
+    let nowUtc;
+
+    if (timestamp) {
+      if (timestamp instanceof Date) {
+        nowUtc = DateTime.fromJSDate(timestamp).toUTC();
+      } else if (typeof timestamp === 'string') {
+        nowUtc = DateTime.fromISO(timestamp, { zone: 'utc' });
+      } else {
+        return { done: false, error: 'Invalid timestamp. Must be a Date object or ISO string.' };
+      }
+    } else {
+      nowUtc = DateTime.utc();
+    }
+
+    if (!nowUtc.isValid) {
+      return { done: false, error: 'Provided timestamp is invalid.' };
+    }
+
+    console.log('nowUtc', nowUtc.toISO());
+
+    const companyDetails = await collections.details.findOne({});
+    if (!companyDetails || !companyDetails.punchInTime || !companyDetails.timeZone) {
+      return { done: false, error: 'Company settings incomplete (timezone or punch-in time missing)' };
+    }
+
+    const timeZone = companyDetails.timeZone;
+    const localNow = nowUtc.setZone(timeZone);
+    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
 
     const existingAttendance = await collections.attendance.findOne({
       employeeId: new ObjectId(employeeId),
-      date: today,
+      date: todayCompany,
     });
 
     if (existingAttendance) {
       return { done: false, error: 'Already punched in today' };
     }
 
-    const companyDetails = await collections.details.findOne({});
-    if (!companyDetails || !companyDetails.punchInTime) {
-      return { done: false, error: 'Company work day start not configured' };
-    }
-
     const [shiftHour, shiftMinute] = companyDetails.punchInTime.split(':').map(Number);
-    const scheduledStart = new Date(now);
-    scheduledStart.setHours(shiftHour, shiftMinute, 0, 0);
+    const scheduledStart = localNow.set({
+      hour: shiftHour,
+      minute: shiftMinute,
+      second: 0,
+      millisecond: 0,
+    });
 
-    const LATE_BUFFER_MINUTES = companyDetails.lateBufferMinutes ?? 5;
-    const ABSENT_CUTOFF_MINUTES = companyDetails.absentCutoffMinutes ?? 60;
+    const lateBuffer = companyDetails.lateBufferMinutes ?? 5;
+    const absentCutoff = companyDetails.absentCutoffMinutes ?? 60;
 
-    const diffMs = now.getTime() - scheduledStart.getTime();
-    const diffMinutes = diffMs / 60000; // convert to minutes
+    const diffMinutes = localNow.diff(scheduledStart, 'minutes').toObject().minutes;
+    console.log('diffMinutes:', diffMinutes);
 
     let attendanceStatus = '';
 
-    if (diffMinutes <= 0) {
+    if (diffMinutes < -15) {
+      return { done: false, error: 'Cannot punch in before 15 mins of punch in time' };
+    }
+
+    if (diffMinutes <= lateBuffer) {
       attendanceStatus = 'onTime';
-    } else if (diffMinutes <= LATE_BUFFER_MINUTES) {
-      attendanceStatus = 'onTime';
-    } else if (diffMinutes <= ABSENT_CUTOFF_MINUTES) {
+    } else if (diffMinutes <= absentCutoff) {
       attendanceStatus = 'late';
     } else {
       return { done: false, error: 'Punch-in window has closed. You are marked absent.' };
     }
 
-    const attendanceData = {
+    const insertedData = {
       employeeId: new ObjectId(employeeId),
-      date: today,
-      punchIn: now,
+      date: todayCompany,
+      punchIn: nowUtc.toJSDate(),
       attendanceStatus,
       breakDetails: [],
-      totalBreakDuration: 0,
-      totalWorkDuration: 0,
+      totalBreakMins: 0,
+      totalProductiveHours: 0,
+      lateMins: diffMinutes > 0 ? diffMinutes.toFixed(2) : 0,
+      overtimeRequestStatus: "none",
+      expectedOvertimeHours: 0,
     };
 
-    const result = await collections.attendance.insertOne(attendanceData);
+    const result = await collections.attendance.insertOne(insertedData);
 
     return {
       done: true,
-      data: { ...attendanceData, _id: result.insertedId },
+      data: {
+        ...insertedData,
+        _id: result.insertedId,
+        diffMinutes: Math.round(diffMinutes * 100) / 100,
+      },
     };
-
   } catch (error) {
     return { done: false, error: error.message };
   }
@@ -338,37 +366,53 @@ export const punchOut = async (companyId, employeeId) => {
     const collections = getTenantCollections(companyId);
 
     const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
-    if (!employee) {
-      return { done: false, error: 'Employee not found in this company' };
-    }
+    if (!employee) return { done: false, error: 'Employee not found' };
 
-    const now = new Date();
-    const today = getStartOfDay(now);
+    const companyDetails = await collections.details.findOne({});
+    if (!companyDetails?.timeZone) return { done: false, error: 'Company settings incomplete' };
+
+    const nowUtc = DateTime.utc();
+    const localNow = nowUtc.setZone(companyDetails.timeZone);
+    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
 
     const attendanceRecord = await collections.attendance.findOne({
       employeeId: new ObjectId(employeeId),
-      date: today
+      date: todayCompany
     });
 
-    if (!attendanceRecord) {
-      return { done: false, error: 'Punch-in not found for today. Please punch in first.' };
+    if (!attendanceRecord) return { done: false, error: 'Punch-in not found' };
+    if (attendanceRecord.punchOut) return { done: false, error: 'Already punched out' };
+
+    let expectedPunchOut;
+    if (companyDetails.punchOutTime) {
+      const [outHour, outMinute] = companyDetails.punchOutTime.split(':').map(Number);
+      expectedPunchOut = localNow.startOf('day').set({ hour: outHour, minute: outMinute });
+
+      if (localNow < expectedPunchOut) {
+        return { done: false, error: 'Cannot punch out before scheduled time' };
+      }
+
+      if (localNow > expectedPunchOut) {
+        if (attendanceRecord.overtimeRequestStatus === 'approved' && attendanceRecord.expectedOvertimeHours > 0) {
+          const overtimeEnd = expectedPunchOut.plus({ hours: attendanceRecord.expectedOvertimeHours });
+          if (localNow < overtimeEnd) {
+            return {
+              done: false,
+              error: `Overtime approved but cannot punch out before ${overtimeEnd.toFormat('HH:mm')}`
+            };
+          }
+        }
+      }
     }
 
-    if (attendanceRecord.punchOut) {
-      return { done: false, error: 'You have already punched out.' };
-    }
-
-    const punchIn = new Date(attendanceRecord.punchIn);
-    const breakDuration = attendanceRecord.totalBreakDuration || 0;
-
-    const totalWorkDuration = Math.max(
-      (now.getTime() - punchIn.getTime()) / (1000 * 60) - breakDuration,
-      0
-    );
+    const punchIn = DateTime.fromJSDate(attendanceRecord.punchIn);
+    const breakDuration = attendanceRecord.totalBreakMins || 0;
+    const totalProductiveDuration = Math.max(nowUtc.diff(punchIn, 'minutes').minutes - breakDuration, 0);
+    const productiveHours = (totalProductiveDuration / 60).toFixed(2);
 
     const updateObj = {
-      punchOut: now,
-      totalWorkDuration: parseFloat(totalWorkDuration.toFixed(2))
+      punchOut: nowUtc.toJSDate(),
+      totalProductiveHours: productiveHours,
     };
 
     await collections.attendance.updateOne(
@@ -380,7 +424,7 @@ export const punchOut = async (companyId, employeeId) => {
       done: true,
       data: {
         ...attendanceRecord,
-        ...updateObj
+        ...updateObj,
       }
     };
 
@@ -389,55 +433,72 @@ export const punchOut = async (companyId, employeeId) => {
   }
 };
 
-export const breakStart = async (companyId, employeeId) => {
+export const startBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company' };
+      return { done: false, error: "Employee not found in this company" };
     }
-    const now = new Date();
-    const today = getStartOfDay(now);
+
+    const companyDetails = await collections.details.findOne({});
+    const timeZone = companyDetails.timeZone;
+    const nowUtc = DateTime.utc();
+    const localNow = nowUtc.setZone(timeZone);
+    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
+
     const attendance = await collections.attendance.findOne({
       employeeId: new ObjectId(employeeId),
-      date: today
+      date: todayCompany,
     });
+
     if (!attendance) {
-      return { done: false, error: 'No attendance record for today. Please punch in first.' };
+      return { done: false, error: "No attendance record found. Please punch in first." };
     }
-    const breakDetails = attendance.breakDetails || [];
-    if (breakDetails.length > 0 && !breakDetails[breakDetails.length - 1].end) {
-      return {
-        done: false,
-        error: 'A break is already active. Please end the current break before starting a new one.'
-      };
+
+    const hasOpenBreak = attendance.breakDetails?.some(b => !b.end);
+    if (hasOpenBreak) {
+      return { done: false, error: "An active break is already in progress." };
     }
-    breakDetails.push({ start: now, end: null });
+
+    const newBreak = {
+      start: nowUtc,
+      end: null,
+    };
+
     await collections.attendance.updateOne(
       { _id: attendance._id },
-      { $set: { breakDetails } }
+      { $push: { breakDetails: newBreak } }
     );
-    return { done: true, data: { breakDetails } };
+    return {
+      done: true,
+      message: "Break Started successfully!"
+    };
   } catch (error) {
-    return { done: false, error: error.message };
+    return {
+      done: false,
+      error: error.message,
+    };
   }
 };
 
 export const resumeBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-
     const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company' };
     }
 
-    const now = new Date();
-    const today = getStartOfDay(now);
+    const companyDetails = await collections.details.findOne({});
+    const timeZone = companyDetails.timeZone;
+    const nowUtc = DateTime.utc();
+    const localNow = nowUtc.setZone(timeZone);
+    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
 
     const attendance = await collections.attendance.findOne({
       employeeId: new ObjectId(employeeId),
-      date: today
+      date: todayCompany
     });
 
     if (!attendance) {
@@ -456,34 +517,32 @@ export const resumeBreak = async (companyId, employeeId) => {
       },
       {
         $set: {
-          "breakDetails.$.end": now
+          "breakDetails.$.end": localNow.toJSDate()
         }
       }
     );
 
     const updatedAttendance = await collections.attendance.findOne({ _id: attendance._id });
-
-    const totalBreakDuration = updatedAttendance.breakDetails.reduce((sum, br) => {
+    const totalBreakMins = updatedAttendance.breakDetails.reduce((sum, br) => {
       if (br.start && br.end) {
-        return sum + Math.round((new Date(br.end) - new Date(br.start)) / (1000 * 60));
+        return sum + Math.round((new Date(br.end).getTime() - new Date(br.start).getTime()) / (1000 * 60));
       }
       return sum;
     }, 0);
 
     await collections.attendance.updateOne(
       { _id: attendance._id },
-      { $set: { totalBreakDuration } }
+      { $set: { totalBreakMins } }
     );
 
     return {
       done: true,
-      data: { totalBreakInMins: totalBreakDuration }
+      data: { totalBreakMins }
     };
-
   } catch (error) {
     return {
       done: false,
-      error: error.message
+      error: error.message || 'Unknown error'
     };
   }
 };
@@ -493,34 +552,10 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
     const collections = getTenantCollections(companyId);
     const empObjectId = new ObjectId(employeeId);
 
-    const selectedYear = !isNaN(year) && +year >= 1970 ? +year : new Date().getFullYear();
-    const now = new Date();
-
-    const startOfYear = new Date(`${selectedYear}-01-01T00:00:00.000Z`);
-    const endOfYear = new Date(`${selectedYear + 1}-01-01T00:00:00.000Z`);
-
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(startOfToday);
-    endOfToday.setDate(endOfToday.getDate() + 1);
-
-    const dayOfWeek = now.getDay();
-    const getMonday = (date) => {
-      const d = new Date(date);
-      const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-      d.setDate(diff);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    };
-
-    const startOfWeek = getMonday(now);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(endOfWeek.getDate() + 7);
-
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-    const companySettings = await collections.details.findOne({}, {
+    // Get company timezone first
+    const companyDetails = await collections.details.findOne({}, {
       projection: {
+        timeZone: 1,
         totalWorkHoursPerDay: 1,
         totalWorkHoursPerWeek: 1,
         totalWorkHoursPerMonth: 1,
@@ -528,21 +563,41 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
       }
     });
 
-    if (!companySettings) {
+    if (!companyDetails) {
       return {
         done: false,
-        error: "Company working hours configuration not found in the details collection"
+        error: "Company details not found"
       };
     }
 
-    const HOURS_PER_DAY = companySettings.totalWorkHoursPerDay ?? 8;
-    const HOURS_PER_WEEK = companySettings.totalWorkHoursPerWeek ?? HOURS_PER_DAY * 5;
-    const HOURS_PER_MONTH = companySettings.totalWorkHoursPerMonth ?? HOURS_PER_WEEK * 4;
-    const MAX_OVERTIME_MONTH = companySettings.totalOvertimePerMonth ?? 5;
+    const timeZone = companyDetails.timeZone || 'UTC';
+    const now = DateTime.now().setZone(timeZone);
+
+    // Set up time periods in company timezone
+    const selectedYear = !isNaN(year) && +year >= 1970 ? +year : now.year;
+    const startOfYear = DateTime.fromObject({ year: selectedYear, month: 1, day: 1 }, { zone: timeZone });
+    const endOfYear = startOfYear.plus({ years: 1 });
+
+    const startOfToday = now.startOf('day');
+    const endOfToday = startOfToday.plus({ days: 1 });
+
+    const startOfWeek = now.startOf('week');
+    const endOfWeek = startOfWeek.plus({ weeks: 1 });
+
+    const startOfMonth = now.startOf('month');
+    const endOfMonth = startOfMonth.plus({ months: 1 });
+
+    const HOURS_PER_DAY = companyDetails.totalWorkHoursPerDay ?? 8;
+    const HOURS_PER_WEEK = companyDetails.totalWorkHoursPerWeek ?? HOURS_PER_DAY * 5;
+    const HOURS_PER_MONTH = companyDetails.totalWorkHoursPerMonth ?? HOURS_PER_WEEK * 4;
+    const MAX_OVERTIME_MONTH = companyDetails.totalOvertimePerMonth ?? 5;
 
     const attendanceRecords = await collections.attendance.find({
       employeeId: empObjectId,
-      date: { $gte: startOfYear, $lt: endOfYear }
+      date: {
+        $gte: startOfYear.toJSDate(),
+        $lt: endOfYear.toJSDate()
+      }
     }).toArray();
 
     let todayWorked = 0;
@@ -554,42 +609,44 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
     let monthDays = 0;
 
     for (const rec of attendanceRecords) {
-      const date = new Date(rec.date);
+      const recordDate = DateTime.fromJSDate(rec.date).setZone(timeZone);
       const work = rec.totalProductiveDuration || 0;
-      const brk = rec.totalBreakDuration || 0;
+      const brk = rec.totalBreakMins || 0;
 
-      if (date >= startOfToday && date < endOfToday) {
+      // Today's stats
+      if (recordDate >= startOfToday && recordDate < endOfToday) {
         todayWorked += work;
         todayBreak += brk;
       }
 
-      if (date >= startOfWeek && date < endOfWeek) {
+      // Weekly stats
+      if (recordDate >= startOfWeek && recordDate < endOfWeek) {
         weekWorked += work;
         weekBreak += brk;
         weekDays++;
       }
 
-      if (date >= startOfMonth && date < endOfMonth) {
+      // Monthly stats
+      if (recordDate >= startOfMonth && recordDate < endOfMonth) {
         monthWorked += work;
         monthDays++;
       }
     }
-
     const stats = {
       today: {
         expectedHours: HOURS_PER_DAY,
-        workedHours: +todayWorked.toFixed(2),
-        breakHours: +todayBreak.toFixed(2),
-        overtimeHours: +(Math.max(0, todayWorked - HOURS_PER_DAY)).toFixed(2)
+        workedHours: +(todayWorked / 60).toFixed(2),
+        breakHours: +(todayBreak / 60).toFixed(2),
+        overtimeHours: +(Math.max(0, (todayWorked / 60) - HOURS_PER_DAY)).toFixed(2)
       },
       thisWeek: {
         expectedHours: weekDays * HOURS_PER_DAY,
-        workedHours: +weekWorked.toFixed(2)
+        workedHours: +(weekWorked / 60).toFixed(2)
       },
       thisMonth: {
         expectedHours: monthDays * HOURS_PER_DAY,
-        workedHours: +monthWorked.toFixed(2),
-        overtimeHours: +(Math.max(0, monthWorked - (monthDays * HOURS_PER_DAY))).toFixed(2),
+        workedHours: +(monthWorked / 60).toFixed(2),
+        overtimeHours: +(Math.max(0, (monthWorked / 60) - (monthDays * HOURS_PER_DAY))).toFixed(2),
         expectedOvertimeHours: MAX_OVERTIME_MONTH
       }
     };
@@ -1132,5 +1189,66 @@ export const getTodaysBirthday = async (companyId, employeeId) => {
       done: false,
       error: error.message
     };
+  }
+};
+
+export const getLastDayTimmings = async (companyId, employeeId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    const empId = new ObjectId(employeeId);
+
+    const timezoneDoc = await collections.details.findOne({});
+    const tz = (timezoneDoc && timezoneDoc.timeZone) || 'UTC';
+
+    const employee = await collections.employees.findOne({ _id: empId });
+    if (!employee) return { done: false, error: 'Employee not found in this company.' };
+
+    const attendance = await collections.attendance
+      .find({ employeeId: empId })
+      .sort({ punchIn: -1 })
+      .limit(1)
+      .next();
+
+    if (!attendance || !attendance.punchIn)
+      return { done: false, error: 'No valid attendance record found.' };
+
+    const punchInDT = DateTime.fromJSDate(attendance.punchIn).setZone(tz);
+    const punchOutDT = attendance.punchOut
+      ? DateTime.fromJSDate(attendance.punchOut).setZone(tz)
+      : null;
+
+    const breakDetails = (attendance.breakDetails || [])
+      .filter(b => b.start && b.end)
+      .map(b => ({
+        start: DateTime.fromJSDate(b.start).setZone(tz).toFormat('HH:mm'),
+        end: DateTime.fromJSDate(b.end).setZone(tz).toFormat('HH:mm'),
+      }));
+
+    if (punchOutDT && attendance.overtimeRequestStatus === 'approved' && attendance.overtimeHours > 0) {
+      const shiftEnd = punchOutDT.minus({ hours: attendance.overtimeHours }).toFormat('HH:mm');
+      const overtimeStart = shiftEnd;
+
+      return {
+        done: true,
+        data: {
+          punchInTime: punchInDT.toFormat('HH:mm'),
+          breakDetails,
+          shiftEnd,
+          overtimeStart,
+          punchOut: punchOutDT.toFormat('HH:mm'),
+        }
+      };
+    } else {
+      return {
+        done: true,
+        data: {
+          punchInTime: punchInDT.toFormat('HH:mm'),
+          breakDetails,
+          punchOut: punchOutDT ? punchOutDT.toFormat('HH:mm') : '',
+        }
+      };
+    }
+  } catch (error) {
+    return { done: false, error: error.message || 'Internal server error' };
   }
 };

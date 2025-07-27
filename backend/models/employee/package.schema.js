@@ -10,7 +10,8 @@ const employeeSchema = new mongoose.Schema({
   joinedOn: { type: String, required: true },
   managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead', required: true },
   avatar: { type: String, default: 'assets/img/profiles/default-avatar.jpg' },
-  seededAt: { type: Date, default: Date.now }
+  seededAt: { type: Date, default: Date.now },
+  timeZone: {type:String, required: true},
 },
   { timestamps: true }
 );
@@ -80,11 +81,12 @@ const attendanceSchema = new Schema({
       end: { type: Date }
     }
   ],
-  totalBreakDuration: { type: Number, default: 0 },
-  totalProductiveDuration: { type: Number, default: 0 },
+  totalBreakMins: { type: Number, default: 0 },
+  totalProductiveHours: { type: Number, default: 0 },
   attendanceStatus: { type: String, enum: ['onTime', 'late', 'absent'], required: true },
   mode: { type: String, enum: ["workFromHome", "onSite"], default: "onSite" },
   overtimeRequestStatus: { type: String, enum: ["pending", "approved", "rejected", "none"], default: "none" },
+  expectedOvertimeHours: { type: Number, default: 0 },
   overtimeHours: { type: Number, default: 0 },
 }, { timestamps: true });
 
@@ -106,6 +108,7 @@ const detailsSchema = new mongoose.Schema({
   totalWorkingHoursInDay: { type: Number, required: true },
   totalWorkingDays: { type: Number, required: true },
   totalLeavesAllowed: { type: Number, required: true },
+  timeZone: {type: String, required: true},
 }, {
   timestamps: true
 });

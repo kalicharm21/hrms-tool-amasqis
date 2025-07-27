@@ -17,6 +17,10 @@ import io from "socket.io-client";
 import { ApexOptions } from "apexcharts";
 import RequestModals from "../../../core/modals/requestModal";
 import CryptoJS from "crypto-js";
+import { DateTime } from 'luxon';
+import { current } from "immer";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 
 interface DashboardData {
   employeeDetails?: {
@@ -29,6 +33,7 @@ interface DashboardData {
     email: string;
     reportOffice: string;
     joinedOn: string;
+    timeZone: string;
   },
   attendanceStats?: {
     absent: number,
@@ -37,9 +42,8 @@ interface DashboardData {
     workFromHome: number,
     workedDays: number,
     workingDays: number,
-    punchIn: string,
-    punchOut: string,
   }
+
   leaveStats?: {
     lossOfPay: number,
     requestedLeaves: number,
@@ -48,17 +52,20 @@ interface DashboardData {
     totalLeavesAllowed: number,
   }
   workingHoursStats?: {
-    today: {
-      breakHours: number,
+    today?: {
+      expectedHours?: number,
+      workedHours?: number,
+      breakHours?: number,
+      overtimeRequestStatus?: string,
+      expectedOvertimeHours?: number,
+      overtimeHours?: number,
+      punchIn?: string,
+    }
+    thisWeek?: {
       expectedHours: number,
-      overtimeHours: number,
       workedHours: number,
     }
-    thisWeek: {
-      expectedHours: number,
-      workedHours: number,
-    }
-    thisMonth: {
+    thisMonth?: {
       expectedHours: number,
       workedHours: number,
       expectedOvertimeHours: number,
@@ -118,6 +125,7 @@ interface DashboardData {
     role?: string;
   }>
 }
+
 const ENCRYPTION_KEY = 'your-strong-encryption-key';
 const leaveType = [
   { value: "Select", label: "Select" },
@@ -128,13 +136,25 @@ const leaveType = [
 const EmployeeDashboard = () => {
   const routes = all_routes;
   const { getToken } = useAuth();
-  const { user, isLoaded, isSignedIn } = useUser();
   const [socket, setSocket] = useState<any>(null);
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [date, setDate] = useState(new Date());
+  const [isPunchIn, setIsPunchIn] = useState(false);
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [checkInTime, setCheckInTime] = useState<string | null>(null);
+  const [breakDetails, setBreakDetails] = useState<
+    { breakStartTime: string; breakEndTime: string }[]
+  >([]);
+  const [punchInError, setPunchInError] = useState<string | null>(null);
+  const [punchOutError, setPunchOutError] = useState<string | null>(null);
+  const [endBreakError, setEndBreakError] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() =>
+    DateTime.now().setZone(dashboardData?.employeeDetails?.timeZone)
+  );
+  const [punchOutInitiated, setPunchOutInitiated] = useState(false);
+  const [isPunchingOut, setIsPunchingOut] = useState(false);
 
   const [filters, setFilters] = useState({
     attendanceStats: year,
@@ -146,15 +166,313 @@ const EmployeeDashboard = () => {
   });
 
   const currentYear = new Date().getFullYear();
-  const yearOptions = Array.from({ length: 3 }, (_, i) => (currentYear - i).toString());
+  const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
-  const handleYearChangeAll = (newDate: Date) => {
-    console.log(`[YEAR FILTER] Year changed to: ${newDate.getFullYear()}`);
-    setDate(newDate);
-
+  const handleYearChangeAll = (year: number) => {
+    console.log(`[YEAR FILTER] Year changed to: ${year}`);
+    setYear(year);
     if (socket) {
-      const year = newDate.getFullYear();
-      socket.emit("admin/dashboard/get-all-data", { year });
+      socket.emit("employee/dashboard/get-all-data", { year });
+    } else {
+      console.log("socket not found");
+    }
+  };
+
+  // export function 
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const currentDate = new Date().toLocaleDateString();
+      const currentYear = new Date().getFullYear();
+
+      // Title
+      doc.setFontSize(20);
+      doc.text("Employee Dashboard Report", 20, 20);
+
+      doc.setFontSize(12);
+      doc.text(`Generated on: ${currentDate}`, 20, 35);
+      doc.text(`Year: ${currentYear}`, 20, 45);
+
+      let yPosition = 60;
+
+      // Employee Details
+      doc.setFontSize(16);
+      doc.text("Personal Information", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(10);
+      const employee = dashboardData.employeeDetails;
+      if (employee) {
+        doc.text(`Name: ${employee.name}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Designation: ${employee.designation}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Email: ${employee.email}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Phone: ${employee.phoneNumber}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Report Office: ${employee.reportOffice}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Joined On: ${employee.joinedOn}`, 20, yPosition);
+        yPosition += 15;
+      }
+
+      // Attendance Stats
+      doc.setFontSize(16);
+      doc.text("Attendance Statistics", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(10);
+      const attendance = dashboardData.attendanceStats;
+      if (attendance) {
+        doc.text(`Worked Days: ${attendance.workedDays}/${attendance.workingDays}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`On Time: ${attendance.onTime}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Late Arrivals: ${attendance.late}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Absent Days: ${attendance.absent}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Work From Home: ${attendance.workFromHome}`, 20, yPosition);
+        yPosition += 15;
+      }
+
+      // Working Hours
+      const workingHours = dashboardData.workingHoursStats;
+      if (workingHours) {
+        doc.setFontSize(16);
+        doc.text("Working Hours", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        if (workingHours.today) {
+          doc.text("Today:", 20, yPosition);
+          yPosition += 8;
+          doc.text(`• Worked: ${workingHours.today.workedHours || 0}h`, 30, yPosition);
+          yPosition += 8;
+          doc.text(`• Break: ${workingHours.today.breakHours || 0}h`, 30, yPosition);
+          yPosition += 8;
+          doc.text(`• Overtime: ${workingHours.today.overtimeHours || 0}h`, 30, yPosition);
+          yPosition += 8;
+          doc.text(`• Punch In: ${workingHours.today.punchIn || 'N/A'}`, 30, yPosition);
+          yPosition += 15;
+        }
+
+        if (workingHours.thisWeek) {
+          doc.text(`This Week: ${workingHours.thisWeek.workedHours}h worked / ${workingHours.thisWeek.expectedHours}h expected`, 20, yPosition);
+          yPosition += 15;
+        }
+
+        if (workingHours.thisMonth) {
+          doc.text(`This Month: ${workingHours.thisMonth.workedHours}h worked / ${workingHours.thisMonth.expectedHours}h expected`, 20, yPosition);
+          yPosition += 8;
+          doc.text(`Overtime: ${workingHours.thisMonth.overtimeHours || 0}h`, 20, yPosition);
+          yPosition += 15;
+        }
+      }
+
+      // Leave Stats
+      const leaves = dashboardData.leaveStats;
+      if (leaves) {
+        doc.setFontSize(16);
+        doc.text("Leave Summary", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        doc.text(`Total Allowed: ${leaves.totalLeavesAllowed}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Taken: ${leaves.takenLeaves}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Sick Leaves: ${leaves.sickLeaves}`, 20, yPosition);
+        yPosition += 8;
+        doc.text(`Loss of Pay: ${leaves.lossOfPay}`, 20, yPosition);
+        yPosition += 15;
+      }
+
+      // Projects
+      if (dashboardData.projects && dashboardData.projects.length > 0) {
+        if (yPosition > 250) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        doc.setFontSize(16);
+        doc.text("Current Projects", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        dashboardData.projects.forEach(project => {
+          if (yPosition > 280) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          doc.text(`• ${project.projectTitle}`, 20, yPosition);
+          yPosition += 8;
+          doc.text(`  Due: ${project.dueDate}`, 30, yPosition);
+          yPosition += 8;
+          doc.text(`  Tasks: ${project.completedTasks}/${project.totalTasks}`, 30, yPosition);
+          yPosition += 8;
+          doc.text(`  Lead: ${project.leadName || 'N/A'}`, 30, yPosition);
+          yPosition += 12;
+        });
+      }
+
+      // Save the PDF
+      doc.save(`employee-dashboard-${employee?.name || 'report'}-${currentDate.replace(/\//g, '-')}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Error generating PDF export. Please try again.");
+    }
+  }
+
+  const exportToExcel = () => {
+    try {
+      const currentDate = new Date().toLocaleDateString();
+      const wb = XLSX.utils.book_new();
+
+      // Employee Details Sheet
+      if (dashboardData.employeeDetails) {
+        const employeeData: (string | number)[][] = [
+          ["Employee Information", ""],
+          ["Name", dashboardData.employeeDetails.name],
+          ["Designation", dashboardData.employeeDetails.designation],
+          ["Email", dashboardData.employeeDetails.email],
+          ["Phone", dashboardData.employeeDetails.phoneNumber],
+          ["Report Office", dashboardData.employeeDetails.reportOffice],
+          ["Joined On", dashboardData.employeeDetails.joinedOn],
+          ["Time Zone", dashboardData.employeeDetails.timeZone]
+        ];
+        const employeeWS = XLSX.utils.aoa_to_sheet(employeeData);
+        XLSX.utils.book_append_sheet(wb, employeeWS, "Employee Info");
+      }
+
+      // Attendance Stats Sheet
+      if (dashboardData.attendanceStats) {
+        const attendanceData: (string | number)[][] = [
+          ["Attendance Statistics", ""],
+          ["Worked Days", `${dashboardData.attendanceStats.workedDays}/${dashboardData.attendanceStats.workingDays}`],
+          ["On Time", dashboardData.attendanceStats.onTime],
+          ["Late Arrivals", dashboardData.attendanceStats.late],
+          ["Absent Days", dashboardData.attendanceStats.absent],
+          ["Work From Home", dashboardData.attendanceStats.workFromHome]
+        ];
+        const attendanceWS = XLSX.utils.aoa_to_sheet(attendanceData);
+        XLSX.utils.book_append_sheet(wb, attendanceWS, "Attendance");
+      }
+
+      // Working Hours Sheet
+      if (dashboardData.workingHoursStats) {
+        const workingHoursData: (string | number)[][] = [["Working Hours", ""]];
+
+        if (dashboardData.workingHoursStats.today) {
+          workingHoursData.push(
+            ["Today's Hours", ""],
+            ["Worked Hours", dashboardData.workingHoursStats.today.workedHours || 0],
+            ["Break Hours", dashboardData.workingHoursStats.today.breakHours || 0],
+            ["Overtime Hours", dashboardData.workingHoursStats.today.overtimeHours || 0],
+            ["Punch In Time", dashboardData.workingHoursStats.today.punchIn || 'N/A']
+          );
+        }
+
+        if (dashboardData.workingHoursStats.thisWeek) {
+          workingHoursData.push(
+            ["", ""],
+            ["This Week", ""],
+            ["Worked Hours", dashboardData.workingHoursStats.thisWeek.workedHours],
+            ["Expected Hours", dashboardData.workingHoursStats.thisWeek.expectedHours]
+          );
+        }
+
+        if (dashboardData.workingHoursStats.thisMonth) {
+          workingHoursData.push(
+            ["", ""],
+            ["This Month", ""],
+            ["Worked Hours", dashboardData.workingHoursStats.thisMonth.workedHours],
+            ["Expected Hours", dashboardData.workingHoursStats.thisMonth.expectedHours],
+            ["Overtime Hours", dashboardData.workingHoursStats.thisMonth.overtimeHours || 0]
+          );
+        }
+
+        const workingHoursWS = XLSX.utils.aoa_to_sheet(workingHoursData);
+        XLSX.utils.book_append_sheet(wb, workingHoursWS, "Working Hours");
+      }
+
+      // Leave Stats Sheet
+      if (dashboardData.leaveStats) {
+        const leaveData: (string | number)[][] = [
+          ["Leave Statistics", ""],
+          ["Total Leaves Allowed", dashboardData.leaveStats.totalLeavesAllowed],
+          ["Taken Leaves", dashboardData.leaveStats.takenLeaves],
+          ["Sick Leaves", dashboardData.leaveStats.sickLeaves],
+          ["Loss of Pay", dashboardData.leaveStats.lossOfPay],
+          ["Requested Leaves", dashboardData.leaveStats.requestedLeaves]
+        ];
+        const leaveWS = XLSX.utils.aoa_to_sheet(leaveData);
+        XLSX.utils.book_append_sheet(wb, leaveWS, "Leaves");
+      }
+
+      // Projects Sheet
+      if (dashboardData.projects && dashboardData.projects.length > 0) {
+        const projectData: (string | number)[][] = [
+          ["Project Title", "Due Date", "Tasks Completed", "Total Tasks", "Lead"]
+        ];
+
+        dashboardData.projects.forEach(project => {
+          projectData.push([
+            project.projectTitle,
+            project.dueDate,
+            project.completedTasks,
+            project.totalTasks,
+            project.leadName || 'N/A'
+          ]);
+        });
+
+        const projectWS = XLSX.utils.aoa_to_sheet(projectData);
+        XLSX.utils.book_append_sheet(wb, projectWS, "Projects");
+      }
+
+      // Tasks Sheet
+      if (dashboardData.tasks && dashboardData.tasks.length > 0) {
+        const taskData: (string | boolean)[][] = [
+          ["Task Title", "Status", "Starred"]
+        ];
+
+        dashboardData.tasks.forEach(task => {
+          taskData.push([
+            task.title,
+            task.status,
+            task.starred
+          ]);
+        });
+
+        const taskWS = XLSX.utils.aoa_to_sheet(taskData);
+        XLSX.utils.book_append_sheet(wb, taskWS, "Tasks");
+      }
+
+      // Skills Sheet
+      if (dashboardData.skills && dashboardData.skills.length > 0) {
+        const skillData: (string | number)[][] = [
+          ["Skill Name", "Proficiency", "Last Updated"]
+        ];
+
+        dashboardData.skills.forEach(skill => {
+          skillData.push([
+            skill.name,
+            skill.proficiency,
+            skill.updatedAt
+          ]);
+        });
+
+        const skillWS = XLSX.utils.aoa_to_sheet(skillData);
+        XLSX.utils.book_append_sheet(wb, skillWS, "Skills");
+      }
+
+      // Save the Excel file
+      const fileName = `employee-dashboard-${dashboardData.employeeDetails?.name || 'report'}-${currentDate.replace(/\//g, '-')}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error("Error generating Excel:", error);
+      alert("Error generating Excel export. Please try again.");
     }
   };
 
@@ -207,6 +525,7 @@ const EmployeeDashboard = () => {
         currentSocket.on("employee/dashboard/get-attendance-stats-response", (response: any) => {
           if (!isMounted) return;
           if (response.done) {
+            console.log("Attendance data", response);
             setDashboardData(prev => ({
               ...prev,
               attendanceStats: response.data,
@@ -276,6 +595,180 @@ const EmployeeDashboard = () => {
           }
         });
 
+        currentSocket.on("employee/dashboard/punch-in-response",
+          (response: {
+            done: boolean;
+            data?: {
+              punchIn: string;
+              overtimeRequestStatus?: string;
+              overtimeHours?: number;
+            };
+            error?: string
+          }) => {
+            if (!isMounted) return;
+
+            if (response?.done) {
+              setDashboardData(prev => ({
+                ...prev,
+                workingHoursStats: {
+                  ...prev.workingHoursStats,
+                  today: {
+                    ...prev.workingHoursStats?.today,
+                    punchIn: response.data?.punchIn || new Date().toISOString(),
+                    overtimeRequestStatus: response.data?.overtimeRequestStatus,
+                    expectedOvertimeHours: response.data?.overtimeHours ?? 0,
+                  },
+                  thisWeek: prev.workingHoursStats?.thisWeek,
+                  thisMonth: prev.workingHoursStats?.thisMonth,
+                }
+              }));
+
+              setIsPunchIn(true);
+              const punchInTime = response.data?.punchIn || new Date().toISOString();
+              setCheckInTime(punchInTime);
+
+              const breakDetails: Array<{ breakStartTime: string; breakEndTime: string }> = [];
+              const encryptedBreaks = encryptValue(JSON.stringify(breakDetails));
+              localStorage.setItem("encryptedBreakDetails", encryptedBreaks);
+              localStorage.setItem("encryptedPunchInTime", encryptValue(punchInTime));
+
+              setBreakDetails(breakDetails);
+              setPunchInError(null);
+            } else {
+              console.warn("[PunchIn] Failed:", response?.error);
+              setPunchInError(response?.error ?? "Punch-in failed.");
+            }
+          });
+
+        currentSocket.on("employee/dashboard/punch-out-response", (response: any) => {
+          console.log("Hello3");
+
+          if (!isMounted) return;
+          if (response?.done) {
+            console.log("Hello2");
+
+            localStorage.removeItem("encryptedPunchInTime");
+            localStorage.removeItem("encryptedBreakDetails");
+            setIsPunchIn(false);
+            setCheckInTime(null);
+            setBreakDetails([]);
+            setIsOnBreak(false);
+            setPunchOutError(null);
+            currentSocket.emit("employee/dashboard/working-hours-stats");
+          } else {
+            console.warn("[PunchOUT] Failed:", response?.error);
+            setPunchOutError(response?.error ?? "Punch-out failed.");
+          }
+        });
+
+        currentSocket.on("employee/dashboard/working-hours-stats-response", (response: any) => {
+          if (!isMounted) return;
+
+          if (response?.done) {
+            console.log("Hello1");
+
+            setDashboardData(prev => ({
+              ...prev,
+              workingHoursStats: {
+                today: {
+                  ...prev?.workingHoursStats?.today,
+                  expectedHours: response.data.today.expectedHours,
+                  workedHours: response.data.today.workedHours,
+                  breakHours: response.data.today.breakHours,
+                  overtimeHours: response.data.today.overtimeHours
+                },
+                thisWeek: {
+                  ...prev?.workingHoursStats?.thisWeek,
+                  expectedHours: response.data.thisWeek.expectedHours,
+                  workedHours: response.data.thisWeek.workedHours
+                },
+                thisMonth: {
+                  ...prev?.workingHoursStats?.thisMonth,
+                  expectedHours: response.data.thisMonth.expectedHours,
+                  workedHours: response.data.thisMonth.workedHours,
+                  overtimeHours: response.data.thisMonth.overtimeHours,
+                  expectedOvertimeHours: response.data.thisMonth.expectedOvertimeHours
+                }
+              }
+            }));
+          } else {
+            console.error("Failed to load working hours stats:", response?.error);
+          }
+        });
+
+        currentSocket.on('employee/dashboard/start-break-response', (response: any) => {
+          if (!isMounted) return;
+
+          let currentBreaks: Array<{ breakStartTime: string; breakEndTime: string }> = [];
+          try {
+            const encrypted = localStorage.getItem('encryptedBreakDetails');
+            if (encrypted) {
+              const decryptedStr = decryptValue(encrypted);
+              if (decryptedStr) {
+                currentBreaks = JSON.parse(decryptedStr);
+              }
+            }
+          } catch (error) {
+            console.error('Error reading or parsing break details:', error);
+            currentBreaks = [];
+          }
+          if (response?.done) {
+            const newBreak = {
+              breakStartTime: response.data?.breakStartTime || new Date().toISOString(),
+              breakEndTime: "",
+            };
+            const updatedBreaks = [...currentBreaks, newBreak];
+            setBreakDetails(updatedBreaks);
+            try {
+              const encryptedUpdatedBreaks = encryptValue(JSON.stringify(updatedBreaks));
+              localStorage.setItem('encryptedBreakDetails', encryptedUpdatedBreaks);
+            } catch (error) {
+              console.error('Failed to encrypt and save break details:', error);
+            }
+            setIsOnBreak(true);
+          } else {
+            console.warn('Break start failed:', response?.error);
+          }
+        });
+
+        currentSocket.on('employee/dashboard/end-break-response', (response: any) => {
+          if (!isMounted) return;
+
+          if (response?.done) {
+            let breakDetails = [];
+            try {
+              const encrypted = localStorage.getItem('encryptedBreakDetails');
+              if (encrypted) {
+                const decrypted = decryptValue(encrypted);
+                breakDetails = decrypted ? JSON.parse(decrypted) : [];
+              }
+            } catch (err) {
+              console.error('Failed to decrypt break details', err);
+              breakDetails = [];
+            }
+            const breakEndTime = new Date().toISOString();
+            const lastBreak = breakDetails[breakDetails.length - 1];
+            if (lastBreak && !lastBreak.breakEndTime) {
+              lastBreak.breakEndTime = breakEndTime;
+              try {
+                const encryptedUpdated = encryptValue(JSON.stringify(breakDetails));
+                localStorage.setItem('encryptedBreakDetails', encryptedUpdated);
+              } catch (err) {
+                console.error('Failed to encrypt or save break details', err);
+              }
+              setIsOnBreak(false);
+              setBreakDetails(breakDetails);
+              setEndBreakError(null);
+            } else {
+              console.warn('No open break session found to close.');
+              setEndBreakError("No open break session found to close.");
+            }
+          } else {
+            console.error('Break end failed:', response?.error || 'Unknown error');
+            setEndBreakError(response?.error ?? "Failed to end break.");
+          }
+        });
+
         currentSocket.on("connect_error", (err: any) => {
           console.error("Socket connection error:", err);
           clearTimeout(timeoutId);
@@ -316,7 +809,117 @@ const EmployeeDashboard = () => {
 
   }, []);
 
+
   // helper functions
+  const baseHours = dashboardData?.workingHoursStats?.today?.expectedHours ?? 8;
+  const overtimeHours = dashboardData?.workingHoursStats?.today?.expectedOvertimeHours ?? 0;
+  const expectedHours = baseHours + overtimeHours;
+  const expectedSeconds = expectedHours * 3600;
+  const punchInTimeUTC = checkInTime ?? null;
+  const timeZone = dashboardData?.employeeDetails?.timeZone || "Asia/Kolkata";
+  const [leftover, setLeftover] = useState(() =>
+    getLeftoverTimeObject(punchInTimeUTC, timeZone, expectedSeconds)
+  );
+
+  function getLeftoverTimeObject(punchIn: string | null, timeZone: string, expectedSeconds: number) {
+    if (!punchIn || !timeZone) {
+      return {
+        c_time: "00:00:00",
+        hrs: 0,
+        mins: 0,
+        secs: 0,
+        isTimerExpired: true
+      };
+    }
+
+    const punchInDT = DateTime.fromISO(punchIn, { zone: "utc" }).setZone(timeZone);
+    const now = DateTime.now().setZone(timeZone);
+
+    let elapsed = now.diff(punchInDT, "seconds").seconds ?? 0;
+    if (elapsed < 0) elapsed = 0;
+
+    let leftover = expectedSeconds - elapsed;
+    const isTimerExpired = leftover <= 0;
+    if (leftover < 0) leftover = 0;
+
+    const hrs = Math.floor(leftover / 3600);
+    const mins = Math.floor((leftover % 3600) / 60);
+    const secs = Math.floor(leftover % 60);
+    const c_time = [hrs, mins, secs].map(n => String(n).padStart(2, "0")).join(":");
+
+    return {
+      c_time,
+      hrs,
+      mins,
+      secs,
+      isTimerExpired
+    };
+  }
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLeftover(getLeftoverTimeObject(punchInTimeUTC ?? "", timeZone, expectedSeconds));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [punchInTimeUTC, timeZone, expectedSeconds]);
+
+  useEffect(() => {
+    if (!punchInTimeUTC || leftover.isTimerExpired) return;
+
+    const interval = setInterval(() => {
+      const newLeftover = getLeftoverTimeObject(punchInTimeUTC, timeZone, expectedSeconds);
+      setLeftover(newLeftover);
+
+      if (newLeftover.c_time === "00:00:00" && !punchOutInitiated) {
+        console.log("Auto punch-out triggered");
+        handlePunchOut();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [punchInTimeUTC, leftover.isTimerExpired, punchOutInitiated]);
+
+  const calculateElapsedTime = (punchInISO: string) => {
+    const now = DateTime.now();
+    const punchIn = DateTime.fromISO(punchInISO);
+    const diff = now.diff(punchIn, ['hours', 'minutes', 'seconds']);
+
+    return {
+      c_time: `${diff.hours}h ${diff.minutes}m`,
+      hrs: diff.hours,
+      mins: diff.minutes,
+      secs: Math.floor(diff.seconds)
+    };
+  };
+
+  const [elapsedTime, setElapsedTime] = useState(calculateElapsedTime(checkInTime!));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedTime(calculateElapsedTime(checkInTime!));
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [checkInTime]);
+
+  useEffect(() => {
+    const encryptedPunchInTime = localStorage.getItem("encryptedPunchInTime");
+    if (encryptedPunchInTime) {
+      try {
+        const decryptedPunchInTime = decryptValue(encryptedPunchInTime);
+        setCheckInTime(decryptedPunchInTime);
+        setIsPunchIn(true);
+      } catch (e) {
+        console.error("Failed to decrypt punch-in time", e);
+        if (dashboardData?.workingHoursStats?.today?.punchIn) {
+          setCheckInTime(dashboardData.workingHoursStats.today.punchIn);
+          setIsPunchIn(true);
+        }
+      }
+    } else if (dashboardData?.workingHoursStats?.today?.punchIn) {
+      setCheckInTime(dashboardData.workingHoursStats.today.punchIn);
+      setIsPunchIn(true);
+    }
+  }, [dashboardData]);
 
   function encryptValue(value: string): string {
     return CryptoJS.AES.encrypt(value, ENCRYPTION_KEY).toString();
@@ -331,49 +934,70 @@ const EmployeeDashboard = () => {
       return null;
     }
   }
-  let overallTimerInterval: ReturnType<typeof setInterval> | null = null;
-  let productionTimerInterval: ReturnType<typeof setInterval> | null = null;
-
-  function handlePunchIn(employeeId : String): void {
-    const checkInTime = Date.now();
-    const encryptedCheckIn = encryptValue(checkInTime.toString());
-    localStorage.setItem('encryptedCheckIn', encryptedCheckIn);
-    socket.emit("employee/dashboard/punch-in");
-    console.log(` Punched in at ${new Date(checkInTime).toLocaleString()}`);
-    startOverallTimer(checkInTime);
-    startProductionTimer(checkInTime);
-  }
-  function startOverallTimer(checkInTime: number) {
-    clearInterval(overallTimerInterval!);
-
-    overallTimerInterval = setInterval(() => {
-      const now = Date.now();
-      const elapsed = now - checkInTime;
-
-      const formatted = formatMsToTime(elapsed);
-      console.log("🕒 Overall Time:", formatted);
-
-      // Optionally update UI state here
-    }, 1000);
+  function convertUtcToTimeZone(
+    utcDate: string | Date,
+    timeZone: string,
+    format = "HH:mm:ss"
+  ): string {
+    return DateTime
+      .fromISO(typeof utcDate === 'string' ? utcDate : utcDate.toISOString(), { zone: 'utc' })
+      .setZone(timeZone)
+      .toFormat(format);
   }
 
-  function startProductionTimer(startTime: number) {
-    clearInterval(productionTimerInterval!);
-    productionTimerInterval = setInterval(() => {
-      const now = Date.now();
-      const elapsed = now - startTime;
-      const formatted = formatMsToTime(elapsed);
-      console.log("🔧 Production Time:", formatted);
-      // Optionally update UI state here
-    }, 1000);
+  function handlePunchIn(
+    socket: any,
+    setPunchInError: (v: string | null) => void
+  ) {
+    console.log("[PunchIn] Called");
+    if (!socket || !socket.connected) {
+      console.error("Socket not connected");
+      setPunchInError("Unable to connect to server.");
+      return;
+    }
+    socket.emit('employee/dashboard/punch-in');
   }
 
-  function formatMsToTime(ms: number): string {
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    const minutes = Math.floor((ms / (1000 * 60)) % 60);
-    const seconds = Math.floor((ms / 1000) % 60);
-    return [hours, minutes, seconds].map(pad).join(':');
+  let time;
+  const encTime = localStorage.getItem("encryptedPunchInTime");
+  if (encTime) {
+    time = decryptValue(encTime);
   }
+
+  function handleBreakStart(socket: any) {
+    if (!socket || !socket.connected) {
+      console.error("Socket not connected");
+      return;
+    }
+    socket.emit('employee/dashboard/start-break');
+  }
+
+  function handleEndBreak(
+    socket: any,
+    setEndBreakError: (v: string | null) => void,
+  ) {
+    console.log("[EndBreak] Called");
+    if (!socket || !socket.connected) {
+      console.error("Socket not connected");
+      setEndBreakError("Unable to connect to server.");
+      return;
+    }
+    socket.emit('employee/dashboard/end-break');
+  }
+
+  const handlePunchOut = async () => {
+    if (punchOutInitiated || isPunchingOut) return;
+    setIsPunchingOut(true);
+    try {
+      setPunchOutInitiated(true);
+      socket.emit("employee/dashboard/punch-out");
+    } catch (error) {
+      console.error("Punch-out error:", error);
+      setPunchOutInitiated(false);
+    } finally {
+      setIsPunchingOut(false);
+    }
+  };
 
   function pad(value: number): string {
     return value.toString().padStart(2, '0');
@@ -410,22 +1034,16 @@ const EmployeeDashboard = () => {
     const minutes = totalMinutes % 60;
     return `${hours}h ${minutes}m`;
   }
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(DateTime.now().setZone(dashboardData?.employeeDetails?.timeZone));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [dashboardData?.employeeDetails?.timeZone]);
 
-  const formatCurrentDateTime = () => {
-    const date = new Date();
+  const formattedMins = currentTime.toFormat("h:mm a, dd LLL yyyy");
+  const formattedSec = currentTime.toFormat("h:mm:ss");
 
-    const time = date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    }).replace(/^0/, '');
-
-    const day = date.toLocaleDateString('en-US', { day: '2-digit' });
-    const month = date.toLocaleDateString('en-US', { month: 'short' });
-    const year = date.getFullYear();
-
-    return `${time}, ${day} ${month} ${year}`;
-  };
   function parseHourDecimal(hourDecimal: number | undefined): number {
     if (hourDecimal == null) return 0;
     const hours = Math.floor(hourDecimal);
@@ -458,49 +1076,6 @@ const EmployeeDashboard = () => {
       breakPercent: (brk / total) * 100,
     };
   };
-
-  const {
-    productivePercent,
-    overtimePercent,
-    breakPercent,
-  } = calculateTimePercentages(
-    dashboardData?.workingHoursStats?.today?.expectedHours,
-    dashboardData?.workingHoursStats?.today?.workedHours,
-    dashboardData?.workingHoursStats?.today?.overtimeHours,
-    dashboardData?.workingHoursStats?.today?.breakHours,
-  );
-
-  function fillMissingMonths(performanceData: { months: string[]; salaries: number[] }) {
-    const allMonths = [
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
-      "Sep", "Oct", "Nov", "Dec"
-    ];
-    const currentMonthIndex = new Date().getMonth();
-    const monthsToUse = allMonths.slice(0, currentMonthIndex + 1);
-
-    const salaryMap = new Map<string, number>();
-    performanceData.months.forEach((month, idx) => {
-      salaryMap.set(month.toLowerCase(), performanceData.salaries[idx]);
-    });
-
-    let lastSalary: number | null = null;
-    const filledSalaries = monthsToUse.map(month => {
-      const salary = salaryMap.get(month.toLowerCase());
-      if (salary !== undefined) {
-        lastSalary = salary;
-        return salary;
-      }
-      return lastSalary === null ? 0 : lastSalary;
-    });
-
-    return {
-      months: monthsToUse,
-      salaries: filledSalaries,
-    };
-  }
-  // const processedPerformance = fillMissingMonths(
-  //   dashboardData.performanceData ?? { months: [], salaries: [] }
-  // );
 
   //New Chart
   const leavesChart_series = [
@@ -562,7 +1137,7 @@ const EmployeeDashboard = () => {
       curve: "straight",
     },
     title: {
-      text: "Performance Over Time",
+      text: "",
       align: "left",
     },
     xaxis: {
@@ -574,36 +1149,6 @@ const EmployeeDashboard = () => {
     legend: {
       position: "top",
     },
-  };
-
-
-  const employeename = [
-    { value: "Select", label: "Select" },
-    { value: "Anthony Lewis", label: "Anthony Lewis" },
-    { value: "Brian Villalobos", label: "Brian Villalobos" },
-    { value: "Harvey Smith", label: "Harvey Smith" },
-  ];
-
-  const formatTime = (dateString: string) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-
-  const getModalContainer = () => {
-    const modalElement = document.getElementById("modal-datepicker");
-    return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
   };
 
   const handleMeetingFilterChange = (filter: "today" | "month" | "year") => {
@@ -620,7 +1165,7 @@ const EmployeeDashboard = () => {
     setFilters(prev => ({ ...prev, tasks: filter }));
     socket.emit('employee/dashboard/get-tasks', { filter: filter });
   }
-  const handleYearChange = (widget: string, year: string) => {
+  const handleYearChange = (widget: string, year: number) => {
     console.log(`[YEAR FILTER] ${widget}: ${year}`);
     setFilters(prev => ({
       ...prev,
@@ -677,13 +1222,27 @@ const EmployeeDashboard = () => {
                   </Link>
                   <ul className="dropdown-menu  dropdown-menu-end p-3">
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          exportToPDF();
+                        }}
+                      >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
                       </Link>
                     </li>
                     <li>
-                      <Link to="#" className="dropdown-item rounded-1">
+                      <Link
+                        to="#"
+                        className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          exportToExcel();
+                        }}
+                      >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel{" "}
                       </Link>
@@ -691,34 +1250,37 @@ const EmployeeDashboard = () => {
                   </ul>
                 </div>
               </div>
-              <div className="input-icon w-120 position-relative mb-2">
-                <span className="input-icon-addon">
-                  <i className="ti ti-calendar text-gray-9" />
-                </span>
-                <Calendar
-                  value={date}
-                  onChange={(e: any) => setDate(e.value)}
-                  view="year"
-                  dateFormat="yy"
-                  className="Calendar-form"
-                />
+              <div className="me-2 mb-2">
+                <div className="dropdown">
+                  <Link
+                    to="#"
+                    className="dropdown-toggle btn btn-white d-inline-flex align-items-center"
+                    data-bs-toggle="dropdown"
+                    role="button"
+                    aria-expanded="false"
+                  >
+                    <i className="ti ti-calendar me-1" />
+                    {year}
+                  </Link>
+                  <ul className="dropdown-menu dropdown-menu-end p-3">
+                    {yearOptions.map((year) => (
+                      <li key={year}>
+                        <Link
+                          to="#"
+                          className="dropdown-item rounded-1"
+                          onClick={() => handleYearChangeAll(year)}
+                        >
+                          {year}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
               <div className="ms-2 head-icons">
                 <CollapseHeader />
               </div>
             </div>
-          </div>
-          {/* /Breadcrumb */}
-          <div className="alert bg-secondary-transparent alert-dismissible fade show mb-4">
-            {/* Your Leave Request on“24th April 2024”has been Approved!!! */}
-            <button
-              type="button"
-              className="btn-close fs-14"
-              data-bs-dismiss="alert"
-              aria-label="Close"
-            >
-              <i className="ti ti-x" />
-            </button>
           </div>
           <div className="row">
             <div className="col-xl-4 d-flex">
@@ -866,19 +1428,6 @@ const EmployeeDashboard = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="col-md-12">
-                      <div className="form-check mt-2">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id="todo1"
-                        />
-                        <label className="form-check-label" htmlFor="todo1">
-                          Better than <span className="text-gray-9">85%</span>{" "}
-                          of Employees
-                        </label>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -975,20 +1524,73 @@ const EmployeeDashboard = () => {
                 <div className="card-body">
                   <div className="mb-4 text-center">
                     <h6 className="fw-medium text-gray-5 mb-1">Attendance</h6>
-                    <h4>{formatCurrentDateTime()}</h4>
+                    <h4>{formattedMins}</h4>
                   </div>
-                  <CircleProgress working_hour={dashboardData?.workingHoursStats?.today?.expectedHours ?? 0} time={9} />
+                  <CircleProgress working_hour={expectedSeconds} time={leftover} />;
                   <div className="text-center">
-                    <div className="badge badge-dark badge-md mb-3">
-                      Production : 3.45 hrs
-                    </div>
-                    <h6 className="fw-medium d-flex align-items-center justify-content-center mb-4">
-                      <i className="ti ti-fingerprint text-primary me-1" />
-                      Punch In at {dashboardData?.attendanceStats?.punchIn}
-                    </h6>
-                    <Link to="#" className="btn btn-primary w-100">
-                      Punch Out
-                    </Link>
+                    {isPunchIn && checkInTime && (
+                      <h6 className="fw-medium d-flex align-items-center justify-content-center mb-4">
+                        <i className="ti ti-fingerprint text-primary me-1" />
+                        {leftover.isTimerExpired ? (
+                          "Auto-Punched Out"
+                        ) : (
+                          `Punch In at ${convertUtcToTimeZone(checkInTime, dashboardData?.employeeDetails?.timeZone || "")}`
+                        )}
+                      </h6>
+                    )}
+
+                    {!isPunchIn || leftover.isTimerExpired ? (
+                      <>
+                        <Link
+                          to="#"
+                          className="btn btn-success w-100"
+                          onClick={() => handlePunchIn(socket, setPunchInError)}
+                        >
+                          Punch In
+                        </Link>
+
+                        {punchInError && (
+                          <div className="alert alert-danger mt-2 text-center">
+                            {punchInError}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className={`btn btn-danger w-100 mb-2 ${isPunchingOut ? 'disabled' : ''}`}
+                          disabled={!(leftover.hrs === 0 && leftover.mins === 0 && leftover.secs === 0) || isPunchingOut}
+                          onClick={handlePunchOut}
+                        >
+                          {isPunchingOut ? (
+                            <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          ) : (
+                            'Punch Out'
+                          )}
+                        </button>
+
+                        {!isOnBreak ? (
+                          <button
+                            className="btn btn-warning w-100"
+                            onClick={() => handleBreakStart(socket)}
+                          >
+                            Start Break
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-outline-secondary w-100"
+                            onClick={() => handleEndBreak(socket, setEndBreakError)}
+                          >
+                            Resume Work
+                          </button>
+                        )}
+                        {punchOutError && (
+                          <div className="alert alert-danger mt-2 text-center">
+                            {punchOutError}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1009,14 +1611,14 @@ const EmployeeDashboard = () => {
                           Total Hours Today
                         </p>
                       </div>
-                      <div>
+                      {/* <div>
                         <p className="d-flex align-items-center fs-13">
                           <span className="avatar avatar-xs rounded-circle bg-success flex-shrink-0 me-2">
                             <i className="ti ti-arrow-up fs-12" />
                           </span>
                           <span>5% This Week</span>
                         </p>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
@@ -1034,14 +1636,14 @@ const EmployeeDashboard = () => {
                           Total Hours Week
                         </p>
                       </div>
-                      <div>
+                      {/* <div>
                         <p className="d-flex align-items-center fs-13">
                           <span className="avatar avatar-xs rounded-circle bg-success flex-shrink-0 me-2">
                             <i className="ti ti-arrow-up fs-12" />
                           </span>
                           <span>7% Last Week</span>
                         </p>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
@@ -1059,14 +1661,14 @@ const EmployeeDashboard = () => {
                           Total Hours Month
                         </p>
                       </div>
-                      <div>
+                      {/* <div>
                         <p className="d-flex align-items-center fs-13 text-truncate">
                           <span className="avatar avatar-xs rounded-circle bg-danger flex-shrink-0 me-2">
                             <i className="ti ti-arrow-down fs-12" />
                           </span>
                           <span>8% Last Month</span>
                         </p>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
@@ -1084,14 +1686,14 @@ const EmployeeDashboard = () => {
                           Overtime this Month
                         </p>
                       </div>
-                      <div>
+                      {/* <div>
                         <p className="d-flex align-items-center fs-13 text-truncate">
                           <span className="avatar avatar-xs rounded-circle bg-danger flex-shrink-0 me-2">
                             <i className="ti ti-arrow-down fs-12" />
                           </span>
                           <span>6% Last Month</span>
                         </p>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
@@ -1133,87 +1735,6 @@ const EmployeeDashboard = () => {
                               Overtime
                             </p>
                             <h3>{convertHoursDecimalToHoursMinutes(dashboardData?.workingHoursStats?.today?.overtimeHours ?? 0)}</h3>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="row">
-                        <div className="col-md-12">
-                          <div
-                            className="progress bg-transparent-dark mb-3"
-                            style={{ height: 24 }}
-                          >
-                            <div
-                              className="progress-bar bg-white rounded"
-                              role="progressbar"
-                              style={{ width: "18%" }}
-                            />
-                            <div
-                              className="progress-bar bg-success rounded me-2"
-                              role="progressbar"
-                              style={{ width: "18%" }}
-                            />
-                            <div
-                              className="progress-bar bg-warning rounded me-2"
-                              role="progressbar"
-                              style={{ width: "5%" }}
-                            />
-                            <div
-                              className="progress-bar bg-success rounded me-2"
-                              role="progressbar"
-                              style={{ width: "28%" }}
-                            />
-                            <div
-                              className="progress-bar bg-warning rounded me-2"
-                              role="progressbar"
-                              style={{ width: "17%" }}
-                            />
-                            <div
-                              className="progress-bar bg-success rounded me-2"
-                              role="progressbar"
-                              style={{ width: "22%" }}
-                            />
-                            <div
-                              className="progress-bar bg-warning rounded me-2"
-                              role="progressbar"
-                              style={{ width: "5%" }}
-                            />
-                            <div
-                              className="progress-bar bg-info rounded me-2"
-                              role="progressbar"
-                              style={{ width: "3%" }}
-                            />
-                            <div
-                              className="progress-bar bg-info rounded"
-                              role="progressbar"
-                              style={{ width: "2%" }}
-                            />
-                            <div
-                              className="progress-bar bg-white rounded"
-                              role="progressbar"
-                              style={{ width: "18%" }}
-                            />
-                          </div>
-                        </div>
-                        <div className="co-md-12">
-                          <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-2">
-                            <span className="fs-10">06:00</span>
-                            <span className="fs-10">07:00</span>
-                            <span className="fs-10">08:00</span>
-                            <span className="fs-10">09:00</span>
-                            <span className="fs-10">10:00</span>
-                            <span className="fs-10">11:00</span>
-                            <span className="fs-10">12:00</span>
-                            <span className="fs-10">01:00</span>
-                            <span className="fs-10">02:00</span>
-                            <span className="fs-10">03:00</span>
-                            <span className="fs-10">04:00</span>
-                            <span className="fs-10">05:00</span>
-                            <span className="fs-10">06:00</span>
-                            <span className="fs-10">07:00</span>
-                            <span className="fs-10">08:00</span>
-                            <span className="fs-10">09:00</span>
-                            <span className="fs-10">10:00</span>
-                            <span className="fs-10">11:00</span>
                           </div>
                         </div>
                       </div>
@@ -1848,13 +2369,13 @@ const EmployeeDashboard = () => {
           </p>
         </div>
       </div>
-      {/* /Page Wrapper */}
-      <RequestModals socket={socket} onLeaveRequestCreated={() => {
-        // Refresh dashboard data when a leave request is created
-        if (socket) {
-          socket.emit("employee/dashboard/get-all-data");
-        }
-      }} />
+      <RequestModals
+        onLeaveRequestCreated={() => {
+          if(socket){
+            socket?.emit("admin/dashboard/get-all-data", { year: currentYear });
+          }
+        }}
+      />
     </>
   );
 };

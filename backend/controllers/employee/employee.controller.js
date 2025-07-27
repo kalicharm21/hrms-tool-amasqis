@@ -53,20 +53,7 @@ const employeeDashboardController = (socket, io) => {
             return handler(...args);
         };
     };
-    //////////testing
-    socket.on("employee/dashboard/get-employee-details-all", async () => {
-        try {
-            const { companyId } = validateEmployeeAccess(socket);
-            const result = await employeeService.getEmployeeDetailsAll(companyId);
-            socket.emit("employee/dashboard/get-employee-details-all-response", result);
-        } catch (error) {
-            socket.emit("employee/dashboard/get-employee-details-all-response", {
-                done: false,
-                error: error.message
-            })
-        }
-    });
-    ///// for testing
+
     socket.on("employee/dashboard/get-employee-details", async () => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
@@ -102,7 +89,7 @@ const employeeDashboardController = (socket, io) => {
             const year = typeof payload.year === "number" && !isNaN(payload.year)
                 ? payload.year
                 : new Date().getFullYear();
-            const result = await employeeService.getLeaveStats(companyId, employeeId,year);
+            const result = await employeeService.getLeaveStats(companyId, employeeId, year);
             socket.emit("employee/dashboard/get-leave-stats-response", result);
         } catch (error) {
             socket.emit("employee/dashboard/get-leave-stats-response", {
@@ -175,7 +162,7 @@ const employeeDashboardController = (socket, io) => {
                 done: true,
                 data: result
             });
-            // io.to(`leads_room_${companyId}`).emit("leads/leave/refresh",result);
+            io.to(`leads_room_${companyId}`).emit("leads/leave/refresh",result);
         } catch (err) {
             socket.emit("employee/dashboard/add-leave-response", {
                 done: false,
@@ -213,7 +200,7 @@ const employeeDashboardController = (socket, io) => {
     socket.on("employee/dashboard/start-break", async () => {
         try {
             const { companyId, employeeId } = validateEmployeeAccess(socket);
-            const result = await employeeService.breakStart(companyId, employeeId);
+            const result = await employeeService.startBreak(companyId, employeeId);
             socket.emit("employee/dashboard/start-break-response", result);
         } catch (error) {
             socket.emit("employee/dashboard/start-break-response", {
@@ -487,19 +474,32 @@ const employeeDashboardController = (socket, io) => {
             });
         }
     });
-    
+
     socket.on("employee/dashboard/get-birthdays", async () => {
-  try {
-    const { companyId, employeeId } = validateEmployeeAccess(socket);
-    const result = await employeeService.getTodaysBirthday(companyId, employeeId);
-    socket.emit("employee/dashboard/get-birthdays-response", result);
-  } catch (error) {
-    socket.emit("employee/dashboard/get-birthdays-response", {
-      done: false,
-      error: error.message || "Failed to fetch birthday team members."
+        try {
+            const { companyId, employeeId } = validateEmployeeAccess(socket);
+            const result = await employeeService.getTodaysBirthday(companyId, employeeId);
+            socket.emit("employee/dashboard/get-birthdays-response", result);
+        } catch (error) {
+            socket.emit("employee/dashboard/get-birthdays-response", {
+                done: false,
+                error: error.message || "Failed to fetch birthday team members."
+            });
+        }
     });
-  }
-});
+
+    socket.on("employee/dashboard/get-last-day-timmings", async () => {
+        try {
+            const { companyId, employeeId } = validateEmployeeAccess(socket);
+            const result = await employeeService.getLastDayTimmings(companyId, employeeId);
+            socket.emit("employee/dashboard/get-last-day-timmings-response", result);
+        } catch (error) {
+            socket.emit("employee/dashboard/get-last-day-timmings-response", {
+                done: false,
+                error: error.message || "Failed to fetch birthday team members."
+            });
+        }
+    });
 
     // get all data
     socket.on("employee/dashboard/get-all-data", async (data = {}) => {
@@ -520,6 +520,7 @@ const employeeDashboardController = (socket, io) => {
                 notifications,
                 meetings,
                 birthdays,
+                lastDayTimmings
             ] = await Promise.all([
                 employeeService.getEmployeeDetails(companyId, employeeId),
                 employeeService.getAttendanceStats(companyId, employeeId, year),
@@ -532,7 +533,8 @@ const employeeDashboardController = (socket, io) => {
                 employeeService.getTeamMembers(companyId, employeeId),
                 employeeService.getTodaysNotifications(companyId, employeeId),
                 employeeService.getMeetings(companyId, employeeId, "today"),
-                employeeService.getTodaysBirthday(companyId,employeeId),
+                employeeService.getTodaysBirthday(companyId, employeeId),
+                employeeService.getLastDayTimmings(companyId, employeeId),
             ])
             socket.emit("employee/dashboard/get-all-data-response", {
                 done: true,
@@ -549,6 +551,7 @@ const employeeDashboardController = (socket, io) => {
                     notifications: notifications.data,
                     meetings: meetings.data,
                     birthdays: birthdays.data,
+                    lastDayTimmings: lastDayTimmings.data,
                 }
             })
         } catch (error) {
