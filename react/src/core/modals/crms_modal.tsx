@@ -1,6 +1,6 @@
 import AddActivity from './add_activity';
 import AddContact from './add_contact';
-import AddCompany from './add_contact';
+import AddCompany from './add_company';
 import AddDeals from './add_deals';
 import AddLeads from './add_leads';
 import AddPipeline from './add_pipeline';
@@ -16,27 +16,26 @@ import PipelineAccess from './pipeline_access';
 import SuccesContacts from './success_contacts';
 
 const CrmsModal = () => {
+  return (
+    <>
+      <AddActivity />
+      <AddContact />
+      <AddCompany />
+      <AddDeals />
+      <AddLeads />
+      <AddPipeline />
+      <AddStage />
+      <EditActivity />
+      <EditCompany />
+      <EditContact />
+      <EditDeals />
+      <EditLeads />
+      <EditPipeline />
+      <EditStage />
+      <PipelineAccess />
+      <SuccesContacts />
+    </>
+  );
+};
 
-    return (
-        <>
-            <AddLeads />
-            <EditLeads />
-            <AddActivity />
-            <EditActivity />
-            <AddDeals />
-            <EditDeals />
-            <AddCompany />
-            <EditCompany />
-            <AddContact />
-            <EditContact />
-            <AddPipeline />
-            <PipelineAccess />
-            <AddStage />
-            <SuccesContacts />
-        </>
-
-
-    )
-}
-
-export default CrmsModal
+export default CrmsModal;
