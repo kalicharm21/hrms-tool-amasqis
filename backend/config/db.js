@@ -31,6 +31,7 @@ export const getTenantCollections = (tenantDbName) => {
     // Existing collections
     stats: db.collection("stats"),
     companies: db.collection("companies"),
+    details: db.collection("details"),     // for company details
 
     // Admin dashboard collections
     employees: db.collection("employees"),
@@ -40,7 +41,9 @@ export const getTenantCollections = (tenantDbName) => {
     attendance: db.collection("attendance"),
     departments: db.collection("departments"),
     leaves: db.collection("leaves"),
+    leaveRequests: db.collection("leaves"),
     leaveTypes: db.collection("leaveTypes"),
+    approvals: db.collection("approvals"),
     invoices: db.collection("invoices"),
     activities: db.collection("activities"),
     todos: db.collection("todos"),
@@ -49,10 +52,19 @@ export const getTenantCollections = (tenantDbName) => {
     jobApplications: db.collection("jobApplications"),
     earnings: db.collection("earnings"),
 
+    
+    // employee dashboard collection 
+    skills: db.collection("skills"),
+    salaryHistory: db.collection("salaryHistory"),
+    meetings: db.collection("meetings"),
+    notifications: db.collection('notifications'),
+
+
     //Pipeline Collections
     pipelines: db.collection("pipelines"),
     stages: db.collection("stages"),
     
+
   };
 };
 

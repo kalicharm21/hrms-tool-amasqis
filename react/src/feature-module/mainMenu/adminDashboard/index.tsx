@@ -11,8 +11,11 @@ import ProjectModals from "../../../core/modals/projectModal";
 import RequestModals from "../../../core/modals/requestModal";
 import TodoModal from "../../../core/modals/todoModal";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
-import { useAuth, useUser } from "@clerk/clerk-react";
-import io from "socket.io-client";
+import { useUser } from "@clerk/clerk-react";
+import { useSocket } from "../../../SocketContext";
+import { Socket } from "socket.io-client";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 
 interface DashboardData {
   pendingItems?: {
@@ -156,24 +159,24 @@ interface DashboardData {
 
 const AdminDashboard = () => {
   const routes = all_routes;
-  const { getToken } = useAuth();
   const { user, isLoaded, isSignedIn } = useUser();
-  const [socket, setSocket] = useState<any>(null);
+  const socket = useSocket() as Socket | null;
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState(new Date());
-  const [todoFilter, setTodoFilter] = useState('today');
+  const [todoFilter, setTodoFilter] = useState('all');
 
   // Filter states for different cards
   const [filters, setFilters] = useState({
-    employeeStatus: 'week',
-    attendanceOverview: 'today',
-    clockInOut: 'today',
-    invoices: 'week',
-    projects: 'week',
-    taskStatistics: 'week',
-    salesOverview: 'week'
+    employeeStatus: 'all',
+    attendanceOverview: 'all',
+    clockInOut: 'all',
+    invoices: 'all',
+    projects: 'all',
+    taskStatistics: 'all',
+    salesOverview: 'all',
+    employeesByDepartment: 'all'
   });
 
   // Additional filter states for departments and invoice types
@@ -245,188 +248,193 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     let isMounted = true;
-    let currentSocket: any = null;
 
-    const initSocket = async () => {
-      try {
-        console.log("Initializing socket connection...");
-        const token = await getToken();
-        console.log("Token obtained, creating socket...");
+    const initDashboard = () => {
+      if (!socket) {
+        console.log("Socket not available yet, waiting...");
+        return;
+      }
 
+      console.log("Socket available, initializing dashboard...");
+      setLoading(true);
+
+      const timeoutId = setTimeout(() => {
+        if (loading && isMounted) {
+          console.warn("Dashboard loading timeout - showing fallback");
+          setError("Dashboard loading timed out. Please refresh the page.");
+          setLoading(false);
+        }
+      }, 30000); // 30 second timeout
+
+      const currentYear = date.getFullYear();
+      console.log(`[INITIAL LOAD] Sending year: ${currentYear}`);
+      socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+
+      // Set up event listeners
+      const handleDashboardResponse = (response: any) => {
+        console.log("Received dashboard data response:", response);
+        clearTimeout(timeoutId);
         if (!isMounted) return;
 
-        currentSocket = io("http://localhost:5000", {
-          auth: { token },
-          timeout: 20000, // 20 second timeout
-        });
-
-        const timeoutId = setTimeout(() => {
-          if (loading && isMounted) {
-            console.warn("Dashboard loading timeout - showing fallback");
-            setError("Dashboard loading timed out. Please refresh the page.");
-            setLoading(false);
-          }
-        }, 30000); // 30 second timeout
-
-        currentSocket.on("connect", () => {
-          console.log("Connected to admin dashboard");
-          console.log("Requesting dashboard data...");
-          currentSocket.emit("admin/dashboard/get-all-data");
-        });
-
-        currentSocket.on("admin/dashboard/get-all-data-response", (response: any) => {
-          console.log("Received dashboard data response:", response);
-          clearTimeout(timeoutId);
-          if (!isMounted) return;
-
-          if (response.done) {
-            console.log("Dashboard data loaded successfully");
-            setDashboardData(response.data);
-            setLoading(false);
-          } else {
-            console.error("Dashboard data error:", response.error);
-            setError(response.error || "Failed to fetch dashboard data");
-            setLoading(false);
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-todos-response", (response: any) => {
-          console.log(`[TODO BROADCAST] Received todos broadcast:`, response);
-          if (!isMounted) return;
-
-          if (response.done) {
-            // Don't filter here - just update the todos directly from server
-            console.log(`[TODO BROADCAST] Setting todos:`, response.data);
-            setDashboardData(prev => ({
-              ...prev,
-              todos: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/update-todo-response", (response: any) => {
-          if (!isMounted) return;
-
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              todos: prev.todos?.map(todo =>
-                todo._id === response.data._id ? response.data : todo
-              )
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-employee-status-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              employeeStatus: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-attendance-overview-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              attendanceOverview: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-clock-inout-data-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              clockInOutData: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-recent-invoices-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              recentInvoices: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-projects-data-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              projectsData: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-task-statistics-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              taskStatistics: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("admin/dashboard/get-sales-overview-response", (response: any) => {
-          if (!isMounted) return;
-          if (response.done) {
-            setDashboardData(prev => ({
-              ...prev,
-              salesOverview: response.data
-            }));
-          }
-        });
-
-        currentSocket.on("connect_error", (err: any) => {
-          console.error("Socket connection error:", err);
-          clearTimeout(timeoutId);
-          if (!isMounted) return;
-
-          setError("Failed to connect to server");
+        if (response.done) {
+          console.log("Dashboard data loaded successfully");
+          setDashboardData(response.data);
           setLoading(false);
-        });
-
-        currentSocket.on("disconnect", (reason: any) => {
-          console.log("Socket disconnected:", reason);
-          clearTimeout(timeoutId);
-        });
-
-        if (isMounted) {
-          setSocket(currentSocket);
-        }
-      } catch (err) {
-        console.error("Failed to initialize socket:", err);
-        if (isMounted) {
-          setError("Failed to authenticate");
+        } else {
+          console.error("Dashboard data error:", response.error);
+          setError(response.error || "Failed to fetch dashboard data");
           setLoading(false);
         }
-      }
+      };
+
+      const handleTodosResponse = (response: any) => {
+        console.log(`[TODO BROADCAST] Received todos broadcast:`, response);
+        if (!isMounted) return;
+
+        if (response.done) {
+          console.log(`[TODO BROADCAST] Setting todos:`, response.data);
+          setDashboardData(prev => ({
+            ...prev,
+            todos: response.data
+          }));
+        }
+      };
+
+      const handleUpdateTodoResponse = (response: any) => {
+        if (!isMounted) return;
+
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            todos: prev.todos?.map(todo =>
+              todo._id === response.data._id ? response.data : todo
+            )
+          }));
+        }
+      };
+
+      const handleEmployeeStatusResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            employeeStatus: response.data
+          }));
+        }
+      };
+
+      const handleAttendanceOverviewResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            attendanceOverview: response.data
+          }));
+        }
+      };
+
+      const handleClockInOutResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            clockInOutData: response.data
+          }));
+        }
+      };
+
+      const handleRecentInvoicesResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            recentInvoices: response.data
+          }));
+        }
+      };
+
+      const handleProjectsDataResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            projectsData: response.data
+          }));
+        }
+      };
+
+      const handleTaskStatisticsResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            taskStatistics: response.data
+          }));
+        }
+      };
+
+      const handleSalesOverviewResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            salesOverview: response.data
+          }));
+        }
+      };
+
+      const handleEmployeesByDepartmentResponse = (response: any) => {
+        if (!isMounted) return;
+        if (response.done) {
+          setDashboardData(prev => ({
+            ...prev,
+            employeesByDepartment: response.data
+          }));
+        }
+      };
+
+      // Add all event listeners
+      socket.on("admin/dashboard/get-all-data-response", handleDashboardResponse);
+      socket.on("admin/dashboard/get-todos-response", handleTodosResponse);
+      socket.on("admin/dashboard/update-todo-response", handleUpdateTodoResponse);
+      socket.on("admin/dashboard/get-employee-status-response", handleEmployeeStatusResponse);
+      socket.on("admin/dashboard/get-attendance-overview-response", handleAttendanceOverviewResponse);
+      socket.on("admin/dashboard/get-clock-inout-data-response", handleClockInOutResponse);
+      socket.on("admin/dashboard/get-recent-invoices-response", handleRecentInvoicesResponse);
+      socket.on("admin/dashboard/get-projects-data-response", handleProjectsDataResponse);
+      socket.on("admin/dashboard/get-task-statistics-response", handleTaskStatisticsResponse);
+      socket.on("admin/dashboard/get-sales-overview-response", handleSalesOverviewResponse);
+      socket.on("admin/dashboard/get-employees-by-department-response", handleEmployeesByDepartmentResponse);
+
+      // Cleanup function
+      return () => {
+        clearTimeout(timeoutId);
+        if (socket) {
+          socket.off("admin/dashboard/get-all-data-response", handleDashboardResponse);
+          socket.off("admin/dashboard/get-todos-response", handleTodosResponse);
+          socket.off("admin/dashboard/update-todo-response", handleUpdateTodoResponse);
+          socket.off("admin/dashboard/get-employee-status-response", handleEmployeeStatusResponse);
+          socket.off("admin/dashboard/get-attendance-overview-response", handleAttendanceOverviewResponse);
+          socket.off("admin/dashboard/get-clock-inout-data-response", handleClockInOutResponse);
+          socket.off("admin/dashboard/get-recent-invoices-response", handleRecentInvoicesResponse);
+          socket.off("admin/dashboard/get-projects-data-response", handleProjectsDataResponse);
+          socket.off("admin/dashboard/get-task-statistics-response", handleTaskStatisticsResponse);
+          socket.off("admin/dashboard/get-sales-overview-response", handleSalesOverviewResponse);
+          socket.off("admin/dashboard/get-employees-by-department-response", handleEmployeesByDepartmentResponse);
+        }
+      };
     };
 
-    if (!socket) {
-      initSocket();
+    if (socket) {
+      const cleanup = initDashboard();
+      return cleanup;
     }
 
     return () => {
       isMounted = false;
-      if (currentSocket) {
-        console.log("Cleaning up socket connection...");
-        currentSocket.removeAllListeners();
-        currentSocket.disconnect();
-      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [socket, date]);
 
   // Chart configurations
   const empDepartmentOptions = {
@@ -435,8 +443,8 @@ const AdminDashboard = () => {
       type: 'bar' as const,
       padding: {
         top: 0,
-        left: 0,
-        right: 0,
+        left: 10,
+        right: 10,
         bottom: 0
       },
       toolbar: {
@@ -453,8 +461,8 @@ const AdminDashboard = () => {
       strokeDashArray: 5,
       padding: {
         top: -20,
-        left: 0,
-        right: 0,
+        left: 20,
+        right: 20,
         bottom: 0
       }
     },
@@ -462,23 +470,62 @@ const AdminDashboard = () => {
       bar: {
         borderRadius: 5,
         horizontal: true,
-        barHeight: '35%',
+        barHeight: '45%',
         endingShape: 'rounded'
       }
     },
     dataLabels: {
-      enabled: false
+      enabled: true,
+      style: {
+        fontSize: '12px',
+        fontWeight: 'bold',
+        colors: ['#fff']
+      },
+      offsetX: 10
     },
     series: [{
-      data: dashboardData.employeesByDepartment?.map(dept => dept.count) || [],
-      name: 'Employee'
+      data: dashboardData.employeesByDepartment?.map(dept => ({
+        x: dept.department,
+        y: dept.count
+      })) || [],
+      name: 'Employees'
     }],
     xaxis: {
-      categories: dashboardData.employeesByDepartment?.map(dept => dept.department) || [],
       labels: {
         style: {
           colors: '#111827',
-          fontSize: '13px',
+          fontSize: '12px',
+        }
+      },
+      axisBorder: {
+        show: true,
+        color: '#E5E7EB'
+      },
+      axisTicks: {
+        show: true,
+        color: '#E5E7EB'
+      },
+      min: 0,
+      max: (() => {
+        const maxValue = Math.max(...(dashboardData.employeesByDepartment?.map(dept => dept.count) || [0]));
+        return maxValue > 0 ? Math.ceil(maxValue * 1.2) : 10;
+      })(),
+      tickAmount: 5,
+      forceNiceScale: true
+    },
+    yaxis: {
+      labels: {
+        style: {
+          colors: '#6B7280',
+          fontSize: '12px',
+        }
+      }
+    },
+    tooltip: {
+      enabled: true,
+      y: {
+        formatter: function (val: number) {
+          return val + " employees";
         }
       }
     }
@@ -735,6 +782,9 @@ const AdminDashboard = () => {
         case 'salesOverview':
           socket.emit("admin/dashboard/get-sales-overview", eventData);
           break;
+        case 'employeesByDepartment':
+          socket.emit("admin/dashboard/get-employees-by-department", eventData);
+          break;
       }
     }
   };
@@ -849,6 +899,246 @@ const AdminDashboard = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardData.todos, todoFilter, filterTodosByCurrentFilter]);
 
+  // Export functions
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const currentDate = new Date().toLocaleDateString();
+      const currentYear = date.getFullYear();
+
+      // Title
+      doc.setFontSize(20);
+      doc.text("Admin Dashboard Report", 20, 20);
+
+      doc.setFontSize(12);
+      doc.text(`Generated on: ${currentDate}`, 20, 35);
+      doc.text(`Year: ${currentYear}`, 20, 45);
+
+      let yPosition = 60;
+
+      // Dashboard Stats
+      doc.setFontSize(16);
+      doc.text("Dashboard Statistics", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(10);
+      const stats = dashboardData.stats;
+      if (stats) {
+        doc.text(`Attendance: ${stats.attendance?.present || 0}/${stats.attendance?.total || 0} (${stats.attendance?.percentage?.toFixed(1) || 0}%)`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Projects: ${stats.projects?.completed || 0}/${stats.projects?.total || 0} (${stats.projects?.percentage?.toFixed(1) || 0}%)`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Total Clients: ${stats.clients || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Tasks: ${stats.tasks?.completed || 0}/${stats.tasks?.total || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Earnings: $${stats.earnings?.toLocaleString() || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Weekly Profit: $${stats.weeklyProfit?.toLocaleString() || 0}`, 20, yPosition);
+        yPosition += 10;
+        doc.text(`Total Employees: ${stats.employees || 0}`, 20, yPosition);
+        yPosition += 20;
+      }
+
+      // Employee Status
+      if (dashboardData.employeeStatus) {
+        doc.setFontSize(16);
+        doc.text("Employee Status Distribution", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        const distribution = dashboardData.employeeStatus.distribution;
+        Object.entries(distribution).forEach(([status, count]) => {
+          doc.text(`${status}: ${count}`, 30, yPosition);
+          yPosition += 8;
+        });
+        yPosition += 10;
+
+        if (dashboardData.employeeStatus.topPerformer) {
+          doc.text("Top Performer:", 20, yPosition);
+          yPosition += 8;
+          doc.text(`${dashboardData.employeeStatus.topPerformer.name} - ${dashboardData.employeeStatus.topPerformer.performance}%`, 30, yPosition);
+          yPosition += 20;
+        }
+      }
+
+      // Recent Activities
+      if (dashboardData.recentActivities && dashboardData.recentActivities.length > 0) {
+        if (yPosition > 250) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        doc.setFontSize(16);
+        doc.text("Recent Activities", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        dashboardData.recentActivities.slice(0, 10).forEach((activity) => {
+          if (yPosition > 280) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          doc.text(`${activity.action}: ${activity.description}`, 20, yPosition);
+          yPosition += 8;
+          doc.text(`By: ${activity.employeeName} - ${formatDate(activity.createdAt)}`, 30, yPosition);
+          yPosition += 12;
+        });
+      }
+
+      // Save the PDF
+      doc.save(`admin-dashboard-report-${currentDate.replace(/\//g, '-')}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Error generating PDF export. Please try again.");
+    }
+  };
+
+  const exportToExcel = () => {
+    try {
+      const currentDate = new Date().toLocaleDateString();
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Dashboard Stats Sheet
+      const statsData: (string | number)[][] = [];
+      if (dashboardData.stats) {
+        statsData.push(["Metric", "Value"]);
+        statsData.push(["Attendance Present", dashboardData.stats.attendance?.present || 0]);
+        statsData.push(["Attendance Total", dashboardData.stats.attendance?.total || 0]);
+        statsData.push(["Attendance Percentage", `${dashboardData.stats.attendance?.percentage?.toFixed(1) || 0}%`]);
+        statsData.push(["Projects Completed", dashboardData.stats.projects?.completed || 0]);
+        statsData.push(["Projects Total", dashboardData.stats.projects?.total || 0]);
+        statsData.push(["Total Clients", dashboardData.stats.clients || 0]);
+        statsData.push(["Tasks Completed", dashboardData.stats.tasks?.completed || 0]);
+        statsData.push(["Tasks Total", dashboardData.stats.tasks?.total || 0]);
+        statsData.push(["Earnings", dashboardData.stats.earnings || 0]);
+        statsData.push(["Weekly Profit", dashboardData.stats.weeklyProfit || 0]);
+        statsData.push(["Total Employees", dashboardData.stats.employees || 0]);
+      }
+      const statsWS = XLSX.utils.aoa_to_sheet(statsData);
+      XLSX.utils.book_append_sheet(wb, statsWS, "Dashboard Stats");
+
+      // Employee Status Sheet
+      if (dashboardData.employeeStatus) {
+        const employeeStatusData: (string | number)[][] = [["Status", "Count"]];
+        Object.entries(dashboardData.employeeStatus.distribution).forEach(([status, count]) => {
+          employeeStatusData.push([status, count]);
+        });
+        const employeeStatusWS = XLSX.utils.aoa_to_sheet(employeeStatusData);
+        XLSX.utils.book_append_sheet(wb, employeeStatusWS, "Employee Status");
+      }
+
+      // Employees by Department Sheet
+      if (dashboardData.employeesByDepartment) {
+        const deptData: (string | number)[][] = [["Department", "Employee Count"]];
+        dashboardData.employeesByDepartment.forEach((dept) => {
+          deptData.push([dept.department, dept.count]);
+        });
+        const deptWS = XLSX.utils.aoa_to_sheet(deptData);
+        XLSX.utils.book_append_sheet(wb, deptWS, "Employees by Department");
+      }
+
+      // Recent Invoices Sheet
+      if (dashboardData.recentInvoices) {
+        const invoiceData: (string | number)[][] = [["Invoice Number", "Title", "Client", "Amount", "Status"]];
+        dashboardData.recentInvoices.forEach((invoice) => {
+          invoiceData.push([
+            invoice.invoiceNumber,
+            invoice.title,
+            invoice.clientName,
+            invoice.amount,
+            invoice.status
+          ]);
+        });
+        const invoiceWS = XLSX.utils.aoa_to_sheet(invoiceData);
+        XLSX.utils.book_append_sheet(wb, invoiceWS, "Recent Invoices");
+      }
+
+      // Projects Data Sheet
+      if (dashboardData.projectsData) {
+        const projectData: (string | number)[][] = [["Project Name", "Hours", "Total Hours", "Progress %", "Priority", "Deadline"]];
+        dashboardData.projectsData.forEach((project) => {
+          projectData.push([
+            project.name,
+            project.hours,
+            project.totalHours,
+            project.progress,
+            project.priority,
+            formatDate(project.deadline)
+          ]);
+        });
+        const projectWS = XLSX.utils.aoa_to_sheet(projectData);
+        XLSX.utils.book_append_sheet(wb, projectWS, "Projects");
+      }
+
+      // Recent Activities Sheet
+      if (dashboardData.recentActivities) {
+        const activityData: string[][] = [["Employee", "Action", "Description", "Date"]];
+        dashboardData.recentActivities.forEach((activity) => {
+          activityData.push([
+            activity.employeeName,
+            activity.action,
+            activity.description,
+            formatDate(activity.createdAt)
+          ]);
+        });
+        const activityWS = XLSX.utils.aoa_to_sheet(activityData);
+        XLSX.utils.book_append_sheet(wb, activityWS, "Recent Activities");
+      }
+
+      // Attendance Overview Sheet
+      if (dashboardData.attendanceOverview) {
+        const attendanceData: (string | number)[][] = [["Metric", "Count"]];
+        attendanceData.push(["Total", dashboardData.attendanceOverview.total]);
+        attendanceData.push(["Present", dashboardData.attendanceOverview.present]);
+        attendanceData.push(["Late", dashboardData.attendanceOverview.late]);
+        attendanceData.push(["Permission", dashboardData.attendanceOverview.permission]);
+        attendanceData.push(["Absent", dashboardData.attendanceOverview.absent]);
+        const attendanceWS = XLSX.utils.aoa_to_sheet(attendanceData);
+        XLSX.utils.book_append_sheet(wb, attendanceWS, "Attendance Overview");
+      }
+
+      // Clock In/Out Data Sheet
+      if (dashboardData.clockInOutData) {
+        const clockData: (string | number)[][] = [["Employee", "Position", "Clock In", "Clock Out", "Status", "Hours Worked"]];
+        dashboardData.clockInOutData.forEach((record) => {
+          clockData.push([
+            record.name,
+            record.position,
+            formatTime(record.clockIn),
+            formatTime(record.clockOut),
+            record.status,
+            record.hoursWorked
+          ]);
+        });
+        const clockWS = XLSX.utils.aoa_to_sheet(clockData);
+        XLSX.utils.book_append_sheet(wb, clockWS, "Clock In-Out Data");
+      }
+
+      // Todos Sheet
+      if (filteredTodos && filteredTodos.length > 0) {
+        const todoData: string[][] = [["Title", "Completed", "Created Date"]];
+        filteredTodos.forEach((todo) => {
+          todoData.push([
+            todo.title,
+            todo.completed ? "Yes" : "No",
+            formatDate(todo.createdAt)
+          ]);
+        });
+        const todoWS = XLSX.utils.aoa_to_sheet(todoData);
+        XLSX.utils.book_append_sheet(wb, todoWS, "Todos");
+      }
+
+      // Save the Excel file
+      XLSX.writeFile(wb, `admin-dashboard-report-${currentDate.replace(/\//g, '-')}.xlsx`);
+    } catch (error) {
+      console.error("Error generating Excel:", error);
+      alert("Error generating Excel export. Please try again.");
+    }
+  };
+
   // Filter invoices based on the selected filter
   const filteredInvoices = useMemo(() => {
     if (!dashboardData.recentInvoices || invoiceFilter === 'all') {
@@ -947,6 +1237,10 @@ const AdminDashboard = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          exportToPDF();
+                        }}
                       >
                         <i className="ti ti-file-type-pdf me-1" />
                         Export as PDF
@@ -956,6 +1250,10 @@ const AdminDashboard = () => {
                       <Link
                         to="#"
                         className="dropdown-item rounded-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          exportToExcel();
+                        }}
                       >
                         <i className="ti ti-file-type-xls me-1" />
                         Export as Excel{" "}
@@ -1241,28 +1539,65 @@ const AdminDashboard = () => {
                       data-bs-toggle="dropdown"
                     >
                       <i className="ti ti-calendar me-1" />
-                      This Week
+                      {filters.employeesByDepartment === 'today' ? 'Today' :
+                        filters.employeesByDepartment === 'week' ? 'This Week' :
+                        filters.employeesByDepartment === 'month' ? 'This Month' :
+                        filters.employeesByDepartment === 'year' ? 'This Year' : 'All Time'}
                     </Link>
                     <ul className="dropdown-menu  dropdown-menu-end p-3">
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'all' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'all');
+                          }}
+                        >
+                          All Time
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="#"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'year' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'year');
+                          }}
+                        >
+                          This Year
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="#"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'month' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'month');
+                          }}
                         >
                           This Month
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'week' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'week');
+                          }}
                         >
                           This Week
                         </Link>
                       </li>
                       <li>
                         <Link to="#"
-                          className="dropdown-item rounded-1"
+                          className={`dropdown-item rounded-1 ${filters.employeesByDepartment === 'today' ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFilterChange('employeesByDepartment', 'today');
+                          }}
                         >
-                          Last Week
+                          Today
                         </Link>
                       </li>
                     </ul>
@@ -1282,7 +1617,10 @@ const AdminDashboard = () => {
                     <span className={`fw-bold ${dashboardData.employeeGrowth?.trend === 'up' ? 'text-success' : dashboardData.employeeGrowth?.trend === 'down' ? 'text-danger' : 'text-secondary'}`}>
                       {dashboardData.employeeGrowth?.trend === 'up' ? '+' : dashboardData.employeeGrowth?.trend === 'down' ? '-' : ''}
                       {Math.abs(dashboardData.employeeGrowth?.percentage || 0)}%
-                    </span> from last Week
+                    </span> from last {filters.employeesByDepartment === 'today' ? 'Day' :
+                      filters.employeesByDepartment === 'week' ? 'Week' :
+                      filters.employeesByDepartment === 'month' ? 'Month' :
+                      filters.employeesByDepartment === 'year' ? 'Year' : 'Period'}
                   </p>
                 </div>
               </div>
@@ -2855,17 +3193,22 @@ const AdminDashboard = () => {
       </div>
       {/* /Page Wrapper */}
 
-      <ProjectModals />
-      <RequestModals socket={socket} onLeaveRequestCreated={() => {
-        // Refresh dashboard data when a leave request is created
+      <ProjectModals onProjectCreated={() => {
         if (socket) {
-          socket.emit("admin/dashboard/get-all-data");
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
         }
       }} />
-      <TodoModal socket={socket} onTodoAdded={() => {
-        // Refresh all dashboard data when a new todo is added
+      <RequestModals onLeaveRequestCreated={() => {
         if (socket) {
-          socket.emit("admin/dashboard/get-all-data");
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+        }
+      }} />
+      <TodoModal onTodoAdded={() => {
+        if (socket) {
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
         }
       }} />
     </>

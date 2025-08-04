@@ -322,19 +322,21 @@ const Activity = () => {
     }
   };
 
-  // Handle modal actions
+  // ✅ FIXED: Handle modal actions - corrected edit handler
   const handleEditClick = useCallback((id: string) => {
-  // Dispatch custom event that edit_activity.tsx is listening for
-  window.dispatchEvent(
-    new CustomEvent('edit-activity', { detail: { activityId: id } })
-  );
+    console.log('Edit activity clicked with ID:', id);
+    
+    // Dispatch custom event that edit_activity.tsx is listening for
+    window.dispatchEvent(
+      new CustomEvent('edit-activity', { detail: { activityId: id } })
+    );
 
-  // Open the Bootstrap modal
-  const modal = document.getElementById('edit_activity');
-  if (modal) {
-    new (window as any).bootstrap.Modal(modal).show();
-  }
-}, []);
+    // Open the Bootstrap modal
+    const modal = document.getElementById('edit_activity');
+    if (modal) {
+      new (window as any).bootstrap.Modal(modal).show();
+    }
+  }, []);
 
   const handleDeleteClick = (activity: Activity) => {
     console.log('Delete activity clicked:', activity);
@@ -352,7 +354,7 @@ const Activity = () => {
     originalData: activity
   }));
 
-  // Original columns with real data
+  // ✅ FIXED: Original columns with corrected edit handler
   const columns = [
     {
       title: "Title",
@@ -399,7 +401,11 @@ const Activity = () => {
             data-bs-toggle="modal" 
             data-inert={true}
             data-bs-target="#edit_activity"
-            onClick={() => handleEditClick(record.originalData)}
+            onClick={(e) => {
+              e.preventDefault();
+              // ✅ FIXED: Pass the ID string, not the entire object
+              handleEditClick(record.originalData._id);
+            }}
           >
             <i className="ti ti-edit" />
           </Link>
@@ -408,7 +414,10 @@ const Activity = () => {
             data-bs-toggle="modal" 
             data-inert={true}
             data-bs-target="#delete_modal"
-            onClick={() => handleDeleteClick(record.originalData)}
+            onClick={(e) => {
+              e.preventDefault();
+              handleDeleteClick(record.originalData);
+            }}
           >
             <i className="ti ti-trash" />
           </Link>

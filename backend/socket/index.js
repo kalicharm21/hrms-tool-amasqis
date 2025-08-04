@@ -64,6 +64,7 @@ const allowedOrigins = [
   "http://dummy.localhost:3000",
   "https://hrms-tool-amasqis.onrender.com",
   process.env.FRONTEND_URL,
+  "*",
 ];
 
 const authorizedParties = [
@@ -89,6 +90,7 @@ export const socketHandler = (httpServer) => {
   io.use(async (socket, next) => {
     console.log("Socket connection attempt...");
     const token = socket.handshake.auth.token;
+    console.log(token);
     if (!token) {
       console.error("No token provided");
       return next(new Error("Authentication error: No token provided"));
@@ -225,15 +227,14 @@ export const socketHandler = (httpServer) => {
 
   io.on("connection", (socket) => {
     console.log(
-      `Client connected: ${socket.id}, Role: ${socket.role}, Company: ${
-        socket.companyId || "None"
+      `Client connected: ${socket.id}, Role: ${socket.role}, Company: ${socket.companyId || "None"
       }`
     );
     const role = socket.role || "guest";
-    router(socket, io, role);
+  router(socket, io, role);
 
-    socket.on("disconnect", () => {
-      console.log(`Client disconnected: ${socket.id}`);
-    });
+  socket.on("disconnect", () => {
+    console.log(`Client disconnected: ${socket.id}`);
   });
+});
 };
