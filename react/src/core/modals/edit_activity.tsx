@@ -21,11 +21,8 @@ const EditActivity = () => {
     reminderType: 'Select',
     owner: '',
     guests: '',
-    description: '',
-    deals: 'Select',
-    contacts: 'Select',
-    companies: 'Select',
-    status: 'pending'
+    description: ''
+    
   });
 
   // UI state
@@ -109,10 +106,7 @@ const EditActivity = () => {
             owner: activity.owner || '',
             guests: activity.guests || '',
             description: activity.description || '',
-            deals: activity.relatedDeals || 'Select',
-            contacts: activity.relatedContacts || 'Select',
-            companies: activity.relatedCompanies || 'Select',
-            status: activity.status || 'pending'
+            
           });
           setCurrentActivityId(activityId);
         } else {
@@ -168,10 +162,7 @@ const EditActivity = () => {
         reminder: formData.reminder || null,
         reminderType: formData.reminderType !== 'Select' ? formData.reminderType : null,
         guests: formData.guests.trim() || null,
-        relatedDeals: formData.deals !== 'Select' ? formData.deals : null,
-        relatedContacts: formData.contacts !== 'Select' ? formData.contacts : null,
-        relatedCompanies: formData.companies !== 'Select' ? formData.companies : null,
-        status: formData.status
+        
       };
 
       console.log('[EditActivity] Updating activity:', updateData);
@@ -222,10 +213,7 @@ const EditActivity = () => {
       owner: '',
       guests: '',
       description: '',
-      deals: 'Select',
-      contacts: 'Select',
-      companies: 'Select',
-      status: 'pending'
+      
     });
     setCurrentActivityId(null);
   };
@@ -467,61 +455,10 @@ const EditActivity = () => {
                   </div>
                 </div>
 
-                {/* Deals */}
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Deals <span className="text-danger">*</span></label>
-                    <CommonSelect
-                      options={deals}
-                      defaultValue={getSelectValue(formData.deals)}
-                      onChange={handleSelectChange('deals')}
-                      className="select"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
+                
 
-                {/* Contacts */}
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Contacts <span className="text-danger">*</span></label>
-                    <CommonSelect
-                      options={contacts}
-                      defaultValue={getSelectValue(formData.contacts)}
-                      onChange={handleSelectChange('contacts')}
-                      className="select"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                {/* Companies */}
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Companies <span className="text-danger">*</span></label>
-                    <CommonSelect
-                      options={company}
-                      defaultValue={getSelectValue(formData.companies)}
-                      onChange={handleSelectChange('companies')}
-                      className="select"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                {/* Status */}
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Status <span className="text-danger">*</span></label>
-                    <CommonSelect
-                      options={statusOptions}
-                      defaultValue={getSelectValue(formData.status)}
-                      onChange={handleSelectChange('status')}
-                      className="select"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
+                
+                
               </div>
             </div>
 

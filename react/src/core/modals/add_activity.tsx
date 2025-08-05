@@ -22,9 +22,7 @@ const AddActivity = () => {
         owner: '', // Changed to string for input field
         guests: '', // Changed to string for input field
         description: '',
-        deals: 'Select',
-        contacts: 'Select',
-        companies: 'Select'
+        
     });
 
     // UI state
@@ -32,12 +30,7 @@ const AddActivity = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
 
-    const addnew = [
-        { value: "Select", label: "Select" },
-        { value: "Epicurean Delights", label: "Epicurean Delights" },
-        { value: "Nimbus Networks", label: "Nimbus Networks" },
-        { value: "UrbanPulse Design", label: "UrbanPulse Design" },
-    ];
+    
 
     const getModalContainer = () => {
         const modalElement = document.getElementById('modal-datepicker');
@@ -106,9 +99,7 @@ const AddActivity = () => {
                 reminder: formData.reminder || null,
                 reminderType: formData.reminderType !== 'Select' ? formData.reminderType : null,
                 guests: formData.guests.trim() || null, // Use the input value directly
-                relatedDeals: formData.deals !== 'Select' ? formData.deals : null,
-                relatedContacts: formData.contacts !== 'Select' ? formData.contacts : null,
-                relatedCompanies: formData.companies !== 'Select' ? formData.companies : null
+               
             };
 
             console.log('[AddActivity] Creating activity:', activityData);
@@ -166,9 +157,7 @@ const AddActivity = () => {
             owner: '', // Reset to empty string
             guests: '', // Reset to empty string
             description: '',
-            deals: 'Select',
-            contacts: 'Select',
-            companies: 'Select'
+            
         });
     };
 
@@ -449,81 +438,7 @@ const AddActivity = () => {
                                             />
                                         </div>
                                     </div>
-                                    <div className="col-md-12">
-                                        <div className="input-block mb-3">
-                                            <div className="d-flex justify-content-between align-items-center">
-                                                <label className="col-form-label">
-                                                    Deals <span className="text-danger"> *</span>
-                                                </label>
-                                                {/* <Link
-                                                    to="#"
-                                                    className="add-new text-primary"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#add_deals"
-                                                >
-                                                    <i className="ti ti-plus text-primary me-1" />
-                                                    Add New
-                                                </Link> */}
-                                            </div>
-                                            <CommonSelect
-                                                className='select'
-                                                options={addnew}
-                                                defaultValue={formData.deals}
-                                                onChange={handleSelectChange('deals')}
-                                                disabled={loading}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="input-block mb-3">
-                                            <div className="d-flex justify-content-between align-items-center">
-                                                <label className="col-form-label">
-                                                    Contacts <span className="text-danger"> *</span>
-                                                </label>
-                                                {/* <Link
-                                                    to="#"
-                                                    className="add-new text-primary"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#add_contact"
-                                                >
-                                                    <i className="ti ti-plus text-primary me-1" />
-                                                    Add New
-                                                </Link> */}
-                                            </div>
-                                            <CommonSelect
-                                                className='select'
-                                                options={contacts}
-                                                defaultValue={formData.contacts}
-                                                onChange={handleSelectChange('contacts')}
-                                                disabled={loading}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-md-12">
-                                        <div className="input-block mb-3">
-                                            <div className="d-flex justify-content-between align-items-center">
-                                                <label className="col-form-label">
-                                                    Companies <span className="text-danger"> *</span>
-                                                </label>
-                                                {/* <Link
-                                                    to="#"
-                                                    className="add-new text-primary"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#add_company"
-                                                >
-                                                    <i className="ti ti-plus text-primary me-1" />
-                                                    Add New
-                                                </Link> */}
-                                            </div>
-                                            <CommonSelect
-                                                className='select'
-                                                options={company}
-                                                defaultValue={formData.companies}
-                                                onChange={handleSelectChange('companies')}
-                                                disabled={loading}
-                                            />
-                                        </div>
-                                    </div>
+                                    
                                 </div>
                             </div>
                             <div className="modal-footer">
