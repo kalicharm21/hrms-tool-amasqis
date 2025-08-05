@@ -22,9 +22,7 @@ export const createActivity = async (companyId, activityData) => {
       // Handle additional fields
       reminder: activityData.reminder || 'none',
       guests: activityData.guests || null,
-      relatedDeals: activityData.relatedDeals || null,
-      relatedContacts: activityData.relatedContacts || null,
-      relatedCompanies: activityData.relatedCompanies || null
+      
     };
 
     const result = await collections.activities.insertOne(newActivity);
@@ -59,12 +57,7 @@ export const getActivities = async (companyId, filters = {}) => {
     } else if (filters.activityType && filters.activityType !== 'all') {
       query.activityType = filters.activityType;
     }
-    // Status
-    if (Array.isArray(filters.status) && filters.status.length > 0) {
-      query.status = { $in: filters.status };
-    } else if (filters.status && filters.status !== 'all') {
-      query.status = filters.status;
-    }
+    
     // Owner
     if (Array.isArray(filters.owner) && filters.owner.length > 0) {
       query.owner = { $in: filters.owner };
@@ -382,7 +375,6 @@ export const exportActivitiesPDF = async (companyId) => {
        .text('Activity Type', 50 + columnWidth, tableTop, { width: columnWidth })
        .text('Due Date', 50 + columnWidth * 2, tableTop, { width: columnWidth })
        .text('Owner', 50 + columnWidth * 3, tableTop, { width: columnWidth })
-       .text('Status', 50 + columnWidth * 4, tableTop, { width: columnWidth })
        .text('Created Date', 50 + columnWidth * 5, tableTop, { width: columnWidth });
 
     // Table content
@@ -414,7 +406,6 @@ export const exportActivitiesPDF = async (companyId) => {
          .text(activity.activityType || 'N/A', 50 + columnWidth, currentY, { width: columnWidth })
          .text(formatDate(activity.dueDate), 50 + columnWidth * 2, currentY, { width: columnWidth })
          .text(activity.owner || 'N/A', 50 + columnWidth * 3, currentY, { width: columnWidth })
-         .text(activity.status || 'N/A', 50 + columnWidth * 4, currentY, { width: columnWidth })
          .text(formatDate(activity.createdAt), 50 + columnWidth * 5, currentY, { width: columnWidth });
 
       currentY += 20;
@@ -503,7 +494,6 @@ export const exportActivitiesExcel = async (companyId) => {
       { header: 'Activity Type', key: 'activityType', width: 15 },
       { header: 'Due Date', key: 'dueDate', width: 15 },
       { header: 'Owner', key: 'owner', width: 20 },
-      { header: 'Status', key: 'status', width: 15 },
       { header: 'Created Date', key: 'createdAt', width: 15 }
     ];
 
@@ -535,7 +525,6 @@ export const exportActivitiesExcel = async (companyId) => {
         activityType: activity.activityType || 'N/A',
         dueDate: formatDate(activity.dueDate),
         owner: activity.owner || 'N/A',
-        status: activity.status || 'N/A',
         createdAt: formatDate(activity.createdAt)
       });
     });
@@ -546,7 +535,6 @@ export const exportActivitiesExcel = async (companyId) => {
       activityType: activities.length,
       dueDate: '',
       owner: '',
-      status: '',
       createdAt: ''
     });
     totalRow.font = { bold: true };
