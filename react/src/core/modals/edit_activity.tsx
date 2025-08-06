@@ -1,488 +1,274 @@
 import { DatePicker } from 'antd';
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React from 'react'
+import { Link } from 'react-router-dom'
 import CommonSelect from '../common/commonSelect';
-import { beforeuse, company, contacts, deals } from '../common/selectoption/selectoption';
-import { useSocket } from '../../SocketContext';
-import { Socket } from 'socket.io-client';
-import dayjs from 'dayjs';
+import { beforeuse, company, contacts, deals, guests, owner } from '../common/selectoption/selectoption';
 
 const EditActivity = () => {
-  const socket = useSocket() as Socket | null;
 
-  // Form state
-  const [formData, setFormData] = useState({
-    _id: '',
-    title: '',
-    activityType: 'Calls',
-    dueDate: null as any,
-    dueTime: '',
-    reminder: '',
-    reminderType: 'Select',
-    owner: '',
-    guests: '',
-    description: ''
-    
-  });
-
-  // UI state
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [currentActivityId, setCurrentActivityId] = useState<string | null>(null);
-
-  const statusOptions = [
-    { value: 'pending', label: 'Pending' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'cancelled', label: 'Cancelled' }
-  ];
-
-  // Helper function to find selected option
-  const findSelectedOption = (options: any[], value: string) => {
-    return options.find(option => option.value === value) || options[0];
+  const getModalContainer = () => {
+    const modalElement = document.getElementById('modal-datepicker');
+    return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
   };
-
-  // ✅ Helper function to ensure value is never null for CommonSelect
-  const getSelectValue = (value: any): string => {
-    if (value === null || value === undefined) return 'Select';
-    return String(value);
-  };
-
-  // Handle input changes
-  const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
-  };
-
-  // Handle select changes - Fixed to extract value properly
-  const handleSelectChange = (field: string) => (selectedOption: any) => {
-    const value = selectedOption?.value || 'Select';
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
-  };
-
-  // Handle activity type selection
-  const handleActivityTypeClick = (activityType: string) => {
-    setFormData(prev => ({ ...prev, activityType }));
-    setError(null);
-  };
-
-  // Load activity data for editing
-  const loadActivityData = async (activityId: string) => {
-    if (!socket) {
-      setError('No socket connection available');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      console.log('[EditActivity] Loading activity:', activityId);
-      socket.emit('activity:getById', activityId);
-      
-      socket.once('activity:getById-response', (response: any) => {
-        setLoading(false);
-        if (response.done && response.data) {
-          const activity = response.data;
-          console.log('[EditActivity] Activity loaded:', activity);
-
-          // Parse date and time from dueDate
-          let parsedDate = null;
-          let parsedTime = '';
-          if (activity.dueDate) {
-            const dueDateTime = dayjs(activity.dueDate);
-            parsedDate = dueDateTime;
-            parsedTime = dueDateTime.format('HH:mm');
-          }
-
-          setFormData({
-            _id: activity._id,
-            title: activity.title || '',
-            activityType: activity.activityType || 'Calls',
-            dueDate: parsedDate,
-            dueTime: parsedTime,
-            reminder: activity.reminder || '',
-            reminderType: activity.reminderType || 'Select',
-            owner: activity.owner || '',
-            guests: activity.guests || '',
-            description: activity.description || '',
-            
-          });
-          setCurrentActivityId(activityId);
-        } else {
-          console.error('[EditActivity] Failed to load activity:', response.error);
-          setError(response.error || 'Failed to load activity');
-        }
-      });
-    } catch (error) {
-      console.error('[EditActivity] Error loading activity:', error);
-      setError('An error occurred while loading the activity');
-      setLoading(false);
-    }
-  };
-
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!socket) {
-      setError('No socket connection available');
-      return;
-    }
-
-    if (!currentActivityId) {
-      setError('No activity selected for editing');
-      return;
-    }
-
-    // Validate required fields
-    if (!formData.title.trim() || !formData.activityType || !formData.dueDate || !formData.owner.trim()) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    try {
-      // Combine date and time if available
-      let combinedDateTime = dayjs(formData.dueDate);
-      if (formData.dueTime) {
-        const [hours, minutes] = formData.dueTime.split(':');
-        combinedDateTime = combinedDateTime.hour(parseInt(hours)).minute(parseInt(minutes)).second(0);
-      }
-
-      // Prepare update data for backend
-      const updateData = {
-        title: formData.title.trim(),
-        activityType: formData.activityType,
-        dueDate: combinedDateTime.toISOString(),
-        owner: formData.owner.trim(),
-        description: formData.description.trim(),
-        reminder: formData.reminder || null,
-        reminderType: formData.reminderType !== 'Select' ? formData.reminderType : null,
-        guests: formData.guests.trim() || null,
-        
-      };
-
-      console.log('[EditActivity] Updating activity:', updateData);
-
-      // Send to backend
-      socket.emit('activity:update', { activityId: currentActivityId, update: updateData });
-
-      // Listen for response
-      socket.once('activity:update-response', (response: any) => {
-        setLoading(false);
-        if (response.done) {
-          console.log('[EditActivity] Activity updated successfully:', response.data);
-          setSuccess(true);
-
-          // Show success message briefly, then close modal
-          setTimeout(() => {
-            closeModal();
-            // Dispatch refresh event to update activity list
-            window.dispatchEvent(new CustomEvent('refresh-activities'));
-            // Reset states
-            setTimeout(() => {
-              setSuccess(false);
-              setError(null);
-            }, 300);
-          }, 1500);
-        } else {
-          console.error('[EditActivity] Failed to update activity:', response.error);
-          setError(response.error || 'Failed to update activity');
-        }
-      });
-    } catch (error) {
-      console.error('[EditActivity] Error updating activity:', error);
-      setError('An error occurred while updating the activity');
-      setLoading(false);
-    }
-  };
-
-  // Reset form
-  const resetForm = () => {
-    setFormData({
-      _id: '',
-      title: '',
-      activityType: 'Calls',
-      dueDate: null,
-      dueTime: '',
-      reminder: '',
-      reminderType: 'Select',
-      owner: '',
-      guests: '',
-      description: '',
-      
-    });
-    setCurrentActivityId(null);
-  };
-
-  // Close modal
-  const closeModal = () => {
-    const modal = document.getElementById('edit_activity');
-    if (modal) {
-      const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modal);
-      if (bootstrapModal) {
-        bootstrapModal.hide();
-      } else {
-        modal.style.display = 'none';
-        modal.setAttribute('aria-hidden', 'true');
-        modal.classList.remove('show');
-        const backdrops = document.querySelectorAll('.modal-backdrop');
-        backdrops.forEach(backdrop => backdrop.remove());
-        document.body.classList.remove('modal-open');
-        document.body.style.overflow = '';
-      }
-    }
-  };
-
-  // Listen for edit activity requests
-  useEffect(() => {
-    const handleEditActivity = (event: CustomEvent) => {
-      const activityId = event.detail.activityId;
-      if (activityId) {
-        loadActivityData(activityId);
-      }
-    };
-
-    window.addEventListener('edit-activity', handleEditActivity as EventListener);
-    return () => {
-      window.removeEventListener('edit-activity', handleEditActivity as EventListener);
-    };
-  }, [socket]);
-
-  // Reset form when modal opens
-  useEffect(() => {
-    const handleModalShow = () => {
-      setError(null);
-      setSuccess(false);
-      if (!currentActivityId) {
-        resetForm();
-      }
-    };
-
-    const handleModalHide = () => {
-      resetForm();
-      setError(null);
-      setSuccess(false);
-      setLoading(false);
-    };
-
-    const modal = document.getElementById('edit_activity');
-    if (modal) {
-      modal.addEventListener('show.bs.modal', handleModalShow);
-      modal.addEventListener('hide.bs.modal', handleModalHide);
-      return () => {
-        modal.removeEventListener('show.bs.modal', handleModalShow);
-        modal.removeEventListener('hide.bs.modal', handleModalHide);
-      };
-    }
-  }, [currentActivityId]);
 
   return (
     <>
-      {/* Edit Activity */}
-      <div className="modal fade" id="edit_activity" tabIndex={-1} aria-labelledby="edit_activityLabel" aria-hidden="true">
-        <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-          <form className="modal-content" onSubmit={handleSubmit}>
+      {/* Edit Activiy */}
+      <div className="modal fade" id="edit_activity">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
             <div className="modal-header">
-              <h1 className="modal-title fs-5" id="edit_activityLabel">Edit Activity</h1>
-              <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Close" onClick={() => setError(null)}></button>
+              <h4 className="modal-title">Edit Activity</h4>
+              <button
+                type="button"
+                className="btn-close custom-btn-close"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                <i className="ti ti-x" />
+              </button>
             </div>
-            <div className="modal-body">
-              {/* Error Alert */}
-              {error && (
-                <div className="alert alert-danger alert-dismissible fade show" role="alert">
-                  <strong>Error!</strong> {error}
-                  <button type="button" className="btn-close" data-bs-dismiss="alert" aria-label="Close" onClick={() => setError(null)}></button>
-                </div>
-              )}
-
-              {/* Success Alert */}
-              {success && (
-                <div className="alert alert-success" role="alert">
-                  Activity updated successfully!
-                </div>
-              )}
-
-              <div className="row">
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Title <span className="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      id="title"
-                      value={formData.title}
-                      onChange={(e) => handleInputChange('title', e.target.value)}
-                      disabled={loading}
-                      placeholder="Enter activity title"
-                    />
+            <form>
+              <div className="modal-body pb-0">
+                <div className="row">
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Title <span className="text-danger"> *</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        defaultValue="We scheduled a meeting for next week"
+                      />
+                    </div>
                   </div>
-                </div>
-
-                {/* Activity Type */}
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Activity Type <span className="text-danger">*</span></label>
-                    <br />
-                    {['Calls', 'Email', 'Meeting', 'Task'].map(type => (
+                  <div className="col-md-12">
+                    <label className="form-label">
+                      Activity Type <span className="text-danger"> *</span>
+                    </label>
+                    <div className="activity-items d-flex align-items-center mb-3">
                       <Link
-                        key={type}
                         to="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleActivityTypeClick(type);
-                        }}
-                        className="btn btn-sm me-2"
-                        style={{
-                          backgroundColor: formData.activityType === type ? '#007bff' : '#f8f9fa',
-                          color: formData.activityType === type ? '#fff' : '#6c757d',
-                          border: '1px solid #dee2e6',
-                          padding: '8px 15px',
-                          borderRadius: '5px',
-                          textDecoration: 'none',
-                          transition: 'all 0.2s'
-                        }}
+                        className=" br-5 d-flex align-items-center justify-content-center active me-2"
                       >
-                        {type}
+                        {" "}
+                        <i className="ti ti-phone me-1" />
+                        Calls
                       </Link>
-                    ))}
+                      <Link
+                        to="#"
+                        className=" br-5 d-flex align-items-center justify-content-center me-2"
+                      >
+                        {" "}
+                        <i className="ti ti-mail me-1" />
+                        Email
+                      </Link>
+                      <Link
+                        to="#"
+                        className=" br-5 d-flex align-items-center justify-content-center me-2"
+                      >
+                        {" "}
+                        <i className="ti ti-user-circle me-1" />
+                        Meeting
+                      </Link>
+                      <Link
+                        to="#"
+                        className=" br-5 d-flex align-items-center justify-content-center me-2"
+                      >
+                        {" "}
+                        <i className="ti ti-list-check me-1" />
+                        Task
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Due Date <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <DatePicker
+                          className="form-control datetimepicker"
+                          format={{
+                            format: "DD-MM-YYYY",
+                            type: "mask",
+                          }}
+                          getPopupContainer={getModalContainer}
+                          placeholder="DD-MM-YYYY"
+                        />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-calendar text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Time <span className="text-danger"> *</span>
+                      </label>
+                      <div className="input-icon-end position-relative">
+                        <input type="text" className="form-control timepicker" />
+                        <span className="input-icon-addon">
+                          <i className="ti ti-clock-hour-10 text-gray-7" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-12 lead-phno-col del-phno-col">
+                    <div className="row">
+                      <div className="col-lg-8">
+                        <div className="input-block mb-3">
+                          <label className="form-label">
+                            Remainder <span className="text-danger"> *</span>
+                          </label>
+                          <div className="input-icon-start position-relative">
+                            <input type="text" className="form-control" />
+                            <span className="input-icon-addon">
+                              <i className="ti ti-bell text-gray-7" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-lg-4 d-flex align-items-end">
+                        <div className="input-block w-100 mb-3 d-flex align-items-center">
+                          <div className="w-100">
+                            <CommonSelect
+                              className='select'
+                              options={beforeuse}
+                              defaultValue={beforeuse[1]}
+                            />
+                          </div>
+                          <h6 className="fs-14 fw-normal ms-3">Before Use</h6>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Owner <span className="text-danger"> *</span>
+                      </label>
+                      <CommonSelect
+                        className='select'
+                        options={owner}
+                        defaultValue={owner[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Guests <span className="text-danger"> *</span>
+                      </label>
+                      <CommonSelect
+                        className='select'
+                        options={guests}
+                        defaultValue={guests[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="mb-3">
+                      <label className="form-label">
+                        Description <span className="text-danger"> *</span>
+                      </label>
+                      <div className="summernote" />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="input-block mb-3">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <label className="col-form-label">
+                          Deals <span className="text-danger"> *</span>
+                        </label>
+                        <Link
+                          to="#"
+                          className="add-new text-primary"
+                          data-bs-toggle="modal"
+                          data-bs-target="#add_deals"
+                        >
+                          <i className="ti ti-plus text-primary me-1" />
+                          Add New
+                        </Link>
+                      </div>
+                      <CommonSelect
+                        className='select'
+                        options={deals}
+                        defaultValue={deals[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="input-block mb-3">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <label className="col-form-label">
+                          Contacts <span className="text-danger"> *</span>
+                        </label>
+                        <Link
+                          to="#"
+                          className="add-new text-primary"
+                          data-bs-toggle="modal"
+                          data-bs-target="#add_contact"
+                        >
+                          <i className="ti ti-plus text-primary me-1" />
+                          Add New
+                        </Link>
+                      </div>
+                      <CommonSelect
+                        className='select'
+                        options={contacts}
+                        defaultValue={contacts[1]}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-12">
+                    <div className="input-block mb-3">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <label className="col-form-label">
+                          Companies <span className="text-danger"> *</span>
+                        </label>
+                        <Link
+                          to="#"
+                          className="add-new text-primary"
+                          data-bs-toggle="modal"
+                          data-bs-target="#add_company"
+                        >
+                          <i className="ti ti-plus text-primary me-1" />
+                          Add New
+                        </Link>
+                      </div>
+                      <CommonSelect
+                        className='select'
+                        options={company}
+                        defaultValue={company[1]}
+                      />
+                    </div>
                   </div>
                 </div>
-
-                {/* Due Date */}
-                <div className="col-md-6">
-                  <div className="mb-3">
-                    <label className="form-label">Due Date <span className="text-danger">*</span></label>
-                    <DatePicker
-                      className="form-control w-100"
-                      format="DD-MM-YYYY"
-                      value={formData.dueDate}
-                      onChange={(date) => handleInputChange('dueDate', date)}
-                      getPopupContainer={() => document.getElementById('edit_activity') as HTMLElement}
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                {/* Time */}
-                <div className="col-md-6">
-                  <div className="mb-3">
-                    <label className="form-label">Time <span className="text-danger">*</span></label>
-                    <input
-                      type="time"
-                      className="form-control"
-                      value={formData.dueTime}
-                      onChange={(e) => handleInputChange('dueTime', e.target.value)}
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                {/* Remainder */}
-                <div className="col-md-8">
-                  <div className="mb-3">
-                    <label className="form-label">Remainder <span className="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={formData.reminder}
-                      onChange={(e) => handleInputChange('reminder', e.target.value)}
-                      disabled={loading}
-                      placeholder="Enter reminder"
-                    />
-                  </div>
-                </div>
-
-                {/* Before Use */}
-                <div className="col-md-4">
-                  <div className="mb-3">
-                    <label className="form-label">Before Use</label>
-                    <CommonSelect
-                      options={beforeuse}
-                      defaultValue={getSelectValue(formData.reminderType)}
-                      onChange={handleSelectChange('reminderType')}
-                      className="select"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                {/* Owner */}
-                <div className="col-md-6">
-                  <div className="mb-3">
-                    <label className="form-label">Owner <span className="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={formData.owner}
-                      onChange={(e) => handleInputChange('owner', e.target.value)}
-                      disabled={loading}
-                      placeholder="Enter owner name"
-                    />
-                  </div>
-                </div>
-
-                {/* Guests */}
-                <div className="col-md-6">
-                  <div className="mb-3">
-                    <label className="form-label">Guests <span className="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={formData.guests}
-                      onChange={(e) => handleInputChange('guests', e.target.value)}
-                      disabled={loading}
-                      placeholder="Enter guest names (comma separated)"
-                    />
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div className="col-md-12">
-                  <div className="mb-3">
-                    <label className="form-label">Description <span className="text-danger">*</span></label>
-                    <textarea
-                      className="form-control"
-                      rows={3}
-                      value={formData.description}
-                      onChange={(e) => handleInputChange('description', e.target.value)}
-                      disabled={loading}
-                      placeholder="Enter description"
-                    />
-                  </div>
-                </div>
-
-                
-
-                
-                
               </div>
-            </div>
-
-            <div className="modal-footer">
-              <button type="button" className="btn btn-light" data-bs-dismiss="modal" disabled={loading}>
-                Cancel
-              </button>
-              <button type="submit" className="btn text-white" style={{backgroundColor: '#ff6b35'}} disabled={loading}>
-                {loading ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    Updating Activity...
-                  </>
-                ) : (
-                  'Update Activity'
-                )}
-              </button>
-            </div>
-          </form>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-light me-2"
+                  data-bs-dismiss="modal"
+                >
+                  Cancel
+                </button>
+                <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
       {/* /Edit Activity */}
     </>
-  );
-};
 
-export default EditActivity;
+
+  )
+}
+
+export default EditActivity
