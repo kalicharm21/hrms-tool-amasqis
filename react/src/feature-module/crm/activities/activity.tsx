@@ -9,7 +9,7 @@ import PredefinedDateRanges from '../../../core/common/datePicker';
 import CrmsModal from '../../../core/modals/crms_modal';
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import { format } from 'date-fns';
-import { message } from "antd";
+import { message, Popconfirm } from "antd";
 
 interface Activity {
   _id: string;
@@ -50,6 +50,115 @@ const Activity = () => {
     'Tasks',
     'Email'
   ];
+
+  // ✅ NEW: Robust modal opening function
+  const openModal = useCallback((modalId: string) => {
+    const modal = document.getElementById(modalId);
+    if (!modal) {
+      console.error(`Modal with ID '${modalId}' not found`);
+      return;
+    }
+
+    try {
+      // Method 1: Try Bootstrap Modal API
+      if ((window as any).bootstrap && (window as any).bootstrap.Modal) {
+        const bootstrapModal = new (window as any).bootstrap.Modal(modal);
+        bootstrapModal.show();
+        return;
+      }
+
+      // Method 2: Try jQuery Bootstrap Modal (if available)
+      if ((window as any).$ && (window as any).$.fn && (window as any).$.fn.modal) {
+        (window as any).$(`#${modalId}`).modal('show');
+        return;
+      }
+
+      // Method 3: Manual modal opening (fallback)
+      modal.style.display = 'block';
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
+      modal.setAttribute('aria-modal', 'true');
+      
+      // Add backdrop
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop fade show';
+      backdrop.setAttribute('data-bs-dismiss', 'modal');
+      document.body.appendChild(backdrop);
+      
+      // Add modal-open class to body
+      document.body.classList.add('modal-open');
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = '0px';
+      
+      // Handle backdrop click
+      backdrop.addEventListener('click', () => {
+        closeModal(modalId);
+      });
+      
+      // Handle escape key
+      const handleEscape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          closeModal(modalId);
+          document.removeEventListener('keydown', handleEscape);
+        }
+      };
+      document.addEventListener('keydown', handleEscape);
+      
+      console.log(`Modal '${modalId}' opened using fallback method`);
+      
+    } catch (error) {
+      console.error(`Error opening modal '${modalId}':`, error);
+      
+      // Final fallback: just show the modal
+      modal.style.display = 'block';
+      modal.classList.add('show');
+    }
+  }, []);
+
+  // ✅ NEW: Robust modal closing function
+  const closeModal = useCallback((modalId: string) => {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    try {
+      // Method 1: Try Bootstrap Modal API
+      if ((window as any).bootstrap && (window as any).bootstrap.Modal) {
+        const bootstrapModal = (window as any).bootstrap.Modal.getInstance(modal);
+        if (bootstrapModal) {
+          bootstrapModal.hide();
+          return;
+        }
+      }
+
+      // Method 2: Try jQuery Bootstrap Modal
+      if ((window as any).$ && (window as any).$.fn && (window as any).$.fn.modal) {
+        (window as any).$(`#${modalId}`).modal('hide');
+        return;
+      }
+
+      // Method 3: Manual modal closing (fallback)
+      modal.style.display = 'none';
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+      modal.removeAttribute('aria-modal');
+      
+      // Remove backdrop
+      const backdrops = document.querySelectorAll('.modal-backdrop');
+      backdrops.forEach(backdrop => backdrop.remove());
+      
+      // Remove modal-open class from body
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      
+    } catch (error) {
+      console.error(`Error closing modal '${modalId}':`, error);
+      
+      // Final fallback: just hide the modal
+      modal.style.display = 'none';
+      modal.classList.remove('show');
+    }
+  }, []);
 
   // Fetch activities
   const fetchActivities = () => {
@@ -322,26 +431,64 @@ const Activity = () => {
     }
   };
 
-  // ✅ FIXED: Handle modal actions - corrected edit handler
-  const handleEditClick = useCallback((id: string) => {
-    console.log('Edit activity clicked with ID:', id);
+  // ✅ FIXED: Handle edit action with robust modal opening
+  const handleEditClick = useCallback((activity: Activity) => {
+    console.log('Edit activity clicked:', activity);
+    
+    // Set the current activity for the edit modal
+    setCurrentActivity(activity);
+    
+    // Store activity data in a global variable for the edit modal to access
+    (window as any).currentEditActivity = activity;
     
     // Dispatch custom event that edit_activity.tsx is listening for
     window.dispatchEvent(
-      new CustomEvent('edit-activity', { detail: { activityId: id } })
+      new CustomEvent('edit-activity', { detail: { activity } })
     );
 
-    // Open the Bootstrap modal
-    const modal = document.getElementById('edit_activity');
-    if (modal) {
-      new (window as any).bootstrap.Modal(modal).show();
-    }
-  }, []);
+    // Open the Bootstrap modal using robust function
+    openModal('edit_activity');
+  }, [openModal]);
 
-  const handleDeleteClick = (activity: Activity) => {
+  // ✅ FIXED: Handle delete action with robust modal opening
+  const handleDeleteClick = useCallback((activity: Activity) => {
     console.log('Delete activity clicked:', activity);
     setCurrentActivity(activity);
-  };
+    
+    // Store activity data for the delete modal
+    (window as any).currentDeleteActivity = activity;
+    
+    // Open the delete modal using robust function
+    openModal('delete_activity');
+  }, [openModal]);
+
+  // ✅ NEW: Handle delete confirmation with Ant Design Popconfirm
+  const handleDeleteConfirm = useCallback(async (activity: Activity) => {
+    if (!socket) {
+      message.error("Socket connection not available");
+      return;
+    }
+
+    try {
+      console.log('Deleting activity:', activity);
+      socket.emit('activity:delete', { activityId: activity._id });
+
+      // Listen for response
+      socket.once('activity:delete-response', (response: any) => {
+        if (response.done) {
+          console.log('Activity deleted successfully:', response.data);
+          message.success('Activity deleted successfully!');
+          fetchActivities(); // Refresh the list
+        } else {
+          console.error('Failed to delete activity:', response.error);
+          message.error(`Failed to delete activity: ${response.error}`);
+        }
+      });
+    } catch (error) {
+      console.error('Error deleting activity:', error);
+      message.error('An error occurred while deleting the activity');
+    }
+  }, [socket]);
 
   // Transform data to match original table structure
   const transformedData = filteredActivities.map(activity => ({
@@ -354,7 +501,7 @@ const Activity = () => {
     originalData: activity
   }));
 
-  // ✅ FIXED: Original columns with corrected edit handler
+  // ✅ UPDATED: Columns with proper edit and delete handlers
   const columns = [
     {
       title: "Title",
@@ -395,6 +542,7 @@ const Activity = () => {
       dataIndex: "actions",
       render: (_: any, record: any) => (
         <div className="action-icon d-inline-flex">
+          {/* Edit Button */}
           <Link
             to="#"
             className="me-2"
@@ -403,24 +551,31 @@ const Activity = () => {
             data-bs-target="#edit_activity"
             onClick={(e) => {
               e.preventDefault();
-              // ✅ FIXED: Pass the ID string, not the entire object
-              handleEditClick(record.originalData._id);
+              handleEditClick(record.originalData);
             }}
           >
             <i className="ti ti-edit" />
           </Link>
-          <Link
-            to="#"
-            data-bs-toggle="modal" 
-            data-inert={true}
-            data-bs-target="#delete_modal"
-            onClick={(e) => {
-              e.preventDefault();
-              handleDeleteClick(record.originalData);
-            }}
+          
+          {/* Delete Button with Popconfirm */}
+          <Popconfirm
+            title="Delete Activity"
+            description={`Are you sure you want to delete "${record.originalData.title}"? This action cannot be undone.`}
+            onConfirm={() => handleDeleteConfirm(record.originalData)}
+            okText="Yes, Delete"
+            cancelText="Cancel"
+            okType="danger"
           >
-            <i className="ti ti-trash" />
-          </Link>
+            <Link
+              to="#"
+              onClick={(e) => {
+                e.preventDefault();
+                // Don't open modal here, let Popconfirm handle it
+              }}
+            >
+              <i className="ti ti-trash" />
+            </Link>
+          </Popconfirm>
         </div>
       ),
     },

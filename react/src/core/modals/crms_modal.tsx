@@ -14,6 +14,7 @@ import EditPipeline from './edit_pipeline';
 import EditStage from './edit_stage';
 import PipelineAccess from './pipeline_access';
 import SuccesContacts from './success_contacts';
+import DeleteActivity from './delete_activity';
 
 const CrmsModal = () => {
   return (
@@ -34,6 +35,7 @@ const CrmsModal = () => {
       <EditStage />
       <PipelineAccess />
       <SuccesContacts />
+      <DeleteActivity />
     </>
   );
 };

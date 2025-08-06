@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../SocketContext';
 import { Socket } from 'socket.io-client';
+import { message } from 'antd';
 
 interface Activity {
   _id: string;
@@ -109,7 +110,7 @@ const DeleteActivity = ({ activity, onActivityDeleted }: DeleteActivityProps) =>
 
   return (
     <>
-      {/* Delete Activity Modal */}
+      {/* Delete Activity Modal - Fallback for non-Popconfirm usage */}
       <div className="modal fade" id="delete_activity">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
