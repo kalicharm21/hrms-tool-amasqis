@@ -175,7 +175,7 @@ import Page from "../content/page";
 import Assets from "../administration/asset";
 import AssetsCategory from "../administration/asset-category";
 import Knowledgebase from "../administration/help-support/knowledgebase";
-import Activity from "../administration/help-support/activity";
+import Activity from "../crm/activities/activity";
 import Users from "../administration/user-management/users";
 import RolesPermission from "../administration/user-management/rolePermission";
 import Categories from "../accounting/categories";
