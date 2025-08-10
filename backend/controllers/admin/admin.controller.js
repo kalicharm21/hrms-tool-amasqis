@@ -325,7 +325,95 @@ const adminController = (socket, io) => {
       });
     }
   });
+  // Get all users (employees and clients combined)
+socket.on("admin/users/get", async (filters) => { // Accept filters here
+  try {
+    const companyId = validateCompanyAccess(socket);
+    const result = await adminService.getAllUsers(companyId, filters); // Pass filters to the service
+    socket.emit("admin/users/get-response", result);
+  } catch (error) {
+    socket.emit("admin/users/get-response", {
+      done: false,
+      error: error.message,
+    });
+  }
+});
 
+// Create a new user
+socket.on("admin/users/create", async (userData) => {
+  try {
+    // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
+    const companyId = validateCompanyAccess(socket);
+    const result = await adminService.createUser(companyId, userData);
+
+    // Respond directly to the sender for immediate feedback
+    socket.emit("admin/users/create-response", result);
+
+    // If successful, fetch the updated list and broadcast it to all admins
+    if (result.done) {
+      const updatedUserList = await adminService.getAllUsers(companyId);
+      io.to(`admin_room_${companyId}`).emit(
+        "admin/users/list-update",
+        updatedUserList
+      );
+    }
+  } catch (error) {
+    socket.emit("admin/users/create-response", {
+      done: false,
+      error: error.message,
+    });
+  }
+});
+
+// Update an existing user
+socket.on("admin/users/update", async (data) => {
+  try {
+    const { userId, updatedData } = data;
+    // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
+    const companyId = validateCompanyAccess(socket);
+    const result = await adminService.updateUser(companyId, userId, updatedData);
+
+    socket.emit("admin/users/update-response", result);
+
+    if (result.done) {
+      const updatedUserList = await adminService.getAllUsers(companyId);
+      io.to(`admin_room_${companyId}`).emit(
+        "admin/users/list-update",
+        updatedUserList
+      );
+    }
+  } catch (error) {
+    socket.emit("admin/users/update-response", {
+      done: false,
+      error: error.message,
+    });
+  }
+});
+
+// Delete a user
+socket.on("admin/users/delete", async (data) => {
+  try {
+    const { userId } = data;
+    // const companyId = validateCompanyAccess(socket); // Temporarily disabled for testing
+    const companyId = validateCompanyAccess(socket);
+    const result = await adminService.deleteUser(companyId, userId);
+
+    socket.emit("admin/users/delete-response", result);
+
+    if (result.done) {
+      const updatedUserList = await adminService.getAllUsers(companyId);
+      io.to(`admin_room_${companyId}`).emit(
+        "admin/users/list-update",
+        updatedUserList
+      );
+    }
+  } catch (error) {
+    socket.emit("admin/users/delete-response", {
+      done: false,
+      error: error.message,
+    });
+  }
+});
   // Get all dashboard data at once
   socket.on("admin/dashboard/get-all-data", async (data = {}) => {
     try {

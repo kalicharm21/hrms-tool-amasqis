@@ -1926,3 +1926,139 @@ export const getLeaveRequestModalData = async (companyId) => {
     return { done: false, error: error.message };
   }
 };
+// Add these functions to admin.services.js
+
+/**
+ * Fetches all employees and clients and merges them into a single list.
+ */
+export const getAllUsers = async (companyId, filters = {}) => {
+  const { employees, clients } = getTenantCollections(companyId);
+  const query = {};
+
+  // 1. Build the query based on filters
+  if (filters.status && filters.status !== 'All') {
+    query.status = filters.status;
+  }
+  if (filters.dateRange?.startDate) {
+    query.createdAt = {
+      $gte: new Date(filters.dateRange.startDate),
+      $lte: new Date(filters.dateRange.endDate),
+    };
+  }
+
+  // 2. Build the sort options
+  const sortOptions = {};
+  switch (filters.sortBy) {
+    case 'name_asc':
+      sortOptions.name = 1;
+      break;
+    case 'name_desc':
+      sortOptions.name = -1;
+      break;
+    case 'recent':
+    default:
+      sortOptions.createdAt = -1;
+      break;
+  }
+
+  // 3. Conditionally fetch from collections based on role filter
+  let employeeDocs = [];
+  let clientDocs = [];
+
+  if (filters.role === 'Employee') {
+    employeeDocs = await employees.find(query).sort(sortOptions).toArray();
+  } else if (filters.role === 'Client') {
+    clientDocs = await clients.find(query).sort(sortOptions).toArray();
+  } else {
+    // Fetch from both if role is 'All' or undefined
+    employeeDocs = await employees.find(query).sort(sortOptions).toArray();
+    clientDocs = await clients.find(query).sort(sortOptions).toArray();
+  }
+
+  // 4. Map and combine results
+  const formattedEmployees = employeeDocs.map(emp => ({
+    _id: emp._id,
+    name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
+    image_url: emp.avatar || "default_avatar.png",
+    email: emp.email,
+    created_date: emp.createdAt,
+    role: 'Employee',
+    status: emp.status || 'Active',
+  }));
+
+  const formattedClients = clientDocs.map(client => ({
+    _id: client._id,
+    name: client.name,
+    image_url: client.logo || "default_avatar.png",
+    email: client.email,
+    created_date: client.createdAt,
+    role: 'Client',
+    status: client.status || 'Active',
+  }));
+  
+  const combinedUsers = [...formattedEmployees, ...formattedClients];
+
+  return { done: true, data: combinedUsers };
+};
+
+/**
+ * Creates a new user in the correct collection based on their role.
+ */
+export const createUser = async (companyId, userData) => {
+  const { role, ...restOfData } = userData;
+  const collections = getTenantCollections(companyId);
+  
+  // 1. Choose the collection based on the role.
+  const collection = role === 'Employee' ? collections.employees : collections.clients;
+  
+  // 2. Insert the new user data into the collection.
+  await collection.insertOne({ ...restOfData, createdAt: new Date() });
+  
+  return { done: true, message: "User created successfully." };
+};
+
+/**
+ * Updates a user in the correct collection.
+ */
+export const updateUser = async (companyId, userId, updatedData) => {
+  const collections = getTenantCollections(companyId);
+  
+  // Determine which collection to update based on the user's role
+  const collection = updatedData.role === 'Employee' ? collections.employees : collections.clients;
+
+  // Prepare the data for the database update
+  // We separate the id and role, as we don't want to update those fields
+  const { _id, role, ...dataToSet } = updatedData;
+  
+  const result = await collection.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: dataToSet }
+  );
+
+  if (result.matchedCount === 0) {
+      // If the user wasn't found in the first collection, try the other one.
+      // This handles cases where a user's role might be changed.
+      const otherCollection = updatedData.role === 'Employee' ? collections.clients : collections.employees;
+      await otherCollection.deleteOne({ _id: new ObjectId(userId) }); // Delete from old collection
+      await collection.insertOne({ _id: new ObjectId(userId), ...dataToSet, role: updatedData.role, createdAt: new Date() }); // Insert into new
+  }
+  
+  return { done: true, message: "User updated successfully." };
+};
+
+/**
+ * Deletes a user from the correct collection.
+ */
+export const deleteUser = async (companyId, userId) => {
+  const { employees, clients } = getTenantCollections(companyId);
+  
+  // 1. Attempt to delete from the employees collection.
+  const employeeResult = await employees.deleteOne({ _id: new ObjectId(userId) });
+  
+  // 2. If not found in employees, attempt to delete from clients.
+  if (employeeResult.deletedCount === 0) {
+    await clients.deleteOne({ _id: new ObjectId(userId) });
+  }
+  
+  return { done: true, message: "User deleted successfully." };
+};
