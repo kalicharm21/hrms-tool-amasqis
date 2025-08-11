@@ -1,17 +1,12 @@
 import superAdminController from "../controllers/superadmin/superadmin.controller.js";
 import adminController from "../controllers/admin/admin.controller.js";
 
-import employeeDashboardController from "../controllers/employee/employee.controller.js";
-
-import pipelineController from "../controllers/pipeline/pipeline.controllers.js";
-import activityController from "../controllers/activities/activities.controllers.js";
-
-
+import userSocketController from "../controllers/user/user.socket.controller.js";
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
 
-  // Attach controllers immediately based on role
+
   switch (role) {
     case "superadmin":
       console.log("Attaching superadmin controller...");
@@ -20,16 +15,17 @@ const router = (socket, io, role) => {
     case "admin":
       console.log("Attaching admin controller...");
       adminController(socket, io);
-      pipelineController(socket, io);
-      activityController(socket, io);
-      
+
+      userSocketController(socket, io);
       break;
+      
     case "hr":
-      console.log("HR controller not implemented yet");
+      console.log("Attaching HR controller...");
+
+      userSocketController(socket, io);
       break;
     case "employee":
-      console.log("Attaching employee controller...");       
-      employeeDashboardController(socket, io);
+      console.log("Employee controller not implemented yet");
       break;
     default:
       console.log(`No controller available for role: ${role}`);
