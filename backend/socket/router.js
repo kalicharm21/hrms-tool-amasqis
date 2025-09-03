@@ -2,6 +2,7 @@ import superAdminController from "../controllers/superadmin/superadmin.controlle
 import adminController from "../controllers/admin/admin.controller.js";
 
 import userSocketController from "../controllers/user/user.socket.controller.js";
+import employeeDashboardController from "../controllers/employee/employee.controller.js";
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -25,7 +26,10 @@ const router = (socket, io, role) => {
       userSocketController(socket, io);
       break;
     case "employee":
-      console.log("Employee controller not implemented yet");
+       console.log("Attaching Employee controller...");
+       employeeDashboardController(socket, io);
+
+      //  userSocketController(socket, io);
       break;
     default:
       console.log(`No controller available for role: ${role}`);

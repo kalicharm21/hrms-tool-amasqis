@@ -25,14 +25,17 @@ import * as XLSX from "xlsx";
 interface DashboardData {
   employeeDetails?: {
     _id: string
-    name: string;
+    firstName: string;
+    lastName: string;
     designation: string;
     role: string;
     avatar: string;
-    phoneNumber: string;
-    email: string;
+    contact: {
+      phone: string;
+      email: string;
+    }
     reportOffice: string;
-    joinedOn: string;
+    dateOfJoining: string;
     timeZone: string;
   },
   attendanceStats?: {
@@ -203,17 +206,17 @@ const EmployeeDashboard = () => {
       doc.setFontSize(10);
       const employee = dashboardData.employeeDetails;
       if (employee) {
-        doc.text(`Name: ${employee.name}`, 20, yPosition);
+        doc.text(`Name: ${employee.firstName} ${employee.lastName}`, 20, yPosition);
         yPosition += 8;
         doc.text(`Designation: ${employee.designation}`, 20, yPosition);
         yPosition += 8;
-        doc.text(`Email: ${employee.email}`, 20, yPosition);
+        doc.text(`Email: ${employee.contact.email}`, 20, yPosition);
         yPosition += 8;
-        doc.text(`Phone: ${employee.phoneNumber}`, 20, yPosition);
+        doc.text(`Phone: ${employee.contact.phone}`, 20, yPosition);
         yPosition += 8;
         doc.text(`Report Office: ${employee.reportOffice}`, 20, yPosition);
         yPosition += 8;
-        doc.text(`Joined On: ${employee.joinedOn}`, 20, yPosition);
+        doc.text(`Joined On: ${employee.dateOfJoining}`, 20, yPosition);
         yPosition += 15;
       }
 
@@ -318,7 +321,7 @@ const EmployeeDashboard = () => {
       }
 
       // Save the PDF
-      doc.save(`employee-dashboard-${employee?.name || 'report'}-${currentDate.replace(/\//g, '-')}.pdf`);
+      doc.save(`employee-dashboard-${employee?.firstName || 'report'}-${currentDate.replace(/\//g, '-')}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert("Error generating PDF export. Please try again.");
@@ -334,12 +337,13 @@ const EmployeeDashboard = () => {
       if (dashboardData.employeeDetails) {
         const employeeData: (string | number)[][] = [
           ["Employee Information", ""],
-          ["Name", dashboardData.employeeDetails.name],
+          ["FirstName", dashboardData.employeeDetails.firstName],
+          ["LastName", dashboardData.employeeDetails.lastName],
           ["Designation", dashboardData.employeeDetails.designation],
-          ["Email", dashboardData.employeeDetails.email],
-          ["Phone", dashboardData.employeeDetails.phoneNumber],
+          ["Email", dashboardData.employeeDetails.contact.email],
+          ["Phone", dashboardData.employeeDetails.contact.phone],
           ["Report Office", dashboardData.employeeDetails.reportOffice],
-          ["Joined On", dashboardData.employeeDetails.joinedOn],
+          ["Joined On", dashboardData.employeeDetails.dateOfJoining],
           ["Time Zone", dashboardData.employeeDetails.timeZone]
         ];
         const employeeWS = XLSX.utils.aoa_to_sheet(employeeData);
@@ -468,7 +472,7 @@ const EmployeeDashboard = () => {
       }
 
       // Save the Excel file
-      const fileName = `employee-dashboard-${dashboardData.employeeDetails?.name || 'report'}-${currentDate.replace(/\//g, '-')}.xlsx`;
+      const fileName = `employee-dashboard-${dashboardData.employeeDetails?.firstName || 'report'}-${currentDate.replace(/\//g, '-')}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (error) {
       console.error("Error generating Excel:", error);
@@ -1294,7 +1298,7 @@ const EmployeeDashboard = () => {
                       />
                     </span>
                     <div>
-                      <h5 className="text-white mb-1">{dashboardData?.employeeDetails?.name}</h5>
+                      <h5 className="text-white mb-1">{dashboardData?.employeeDetails?.firstName} {dashboardData?.employeeDetails?.lastName}</h5>
                       <div className="d-flex align-items-center">
                         <p className="text-white fs-12 mb-0">
                           {dashboardData?.employeeDetails?.designation}
@@ -1316,11 +1320,11 @@ const EmployeeDashboard = () => {
                 <div className="card-body">
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Phone Number</span>
-                    <p className="text-gray-9">{dashboardData?.employeeDetails?.phoneNumber}</p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.contact.phone}</p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Email Address</span>
-                    <p className="text-gray-9">{dashboardData?.employeeDetails?.email}</p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.contact.email}</p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Report Office</span>
@@ -1328,7 +1332,7 @@ const EmployeeDashboard = () => {
                   </div>
                   <div>
                     <span className="d-block mb-1 fs-13">Joined on</span>
-                    <p className="text-gray-9">{dashboardData?.employeeDetails?.joinedOn}</p>
+                    <p className="text-gray-9">{formatDateProject(dashboardData?.employeeDetails?.dateOfJoining || "")}</p>
                   </div>
                 </div>
               </div>
@@ -2371,7 +2375,7 @@ const EmployeeDashboard = () => {
       </div>
       <RequestModals
         onLeaveRequestCreated={() => {
-          if(socket){
+          if (socket) {
             socket?.emit("admin/dashboard/get-all-data", { year: currentYear });
           }
         }}

@@ -8,32 +8,56 @@ import { DateTime } from 'luxon';
 
 const ALLOWED_STATUSES = ["onHold", "ongoing", "completed", "pending"];
 
-
 export const getEmployeeDetails = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const [employee, companyDetails] = await Promise.all([
-      collections.employees.findOne({ _id: new ObjectId(employeeId) }),
-      collections.details.findOne({})
+      collections.employees.findOne(
+        { _id: employeeId },
+        {
+          projection: {
+            _id: 0,
+            employeeId: 1,
+            firstName: 1,
+            lastName: 1,
+            dateOfJoining: 1,
+            designation: 1,
+            department: 1,
+            role: 1,
+            contact: 1,
+            reportOffice: 1,
+            managerId: 1,
+            avatar: 1,
+          },
+        }
+      ),
+      collections.details.findOne({}),
     ]);
+
     if (!employee) {
+      console.log("Response", { done: false, error: `Employee not found: ${employeeId}` });
       return { done: false, error: "Employee not found" };
     }
+
     if (!companyDetails || !companyDetails.timeZone) {
       return { done: false, error: "Company timezone not found" };
     }
+
+    console.log("Employee", employee);
+
     return {
       done: true,
       data: {
         ...employee,
         companyTimeZone: companyDetails.timeZone,
-      }
+      },
     };
   } catch (error) {
     console.error("Error fetching employee details:", error);
     return { done: false, error: error.message };
   }
 };
+
 
 export const getAttendanceStats = async (companyId, employeeId, year) => {
   try {
