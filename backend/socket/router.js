@@ -1,6 +1,6 @@
 import superAdminController from "../controllers/superadmin/superadmin.controller.js";
 import adminController from "../controllers/admin/admin.controller.js";
-
+import invoiceSocketController from "../controllers/invoice/invoice.socket.controller.js";
 import userSocketController from "../controllers/user/user.socket.controller.js";
 
 const router = (socket, io, role) => {
@@ -15,13 +15,13 @@ const router = (socket, io, role) => {
     case "admin":
       console.log("Attaching admin controller...");
       adminController(socket, io);
-
+      invoiceSocketController(socket, io);
       userSocketController(socket, io);
       break;
       
     case "hr":
       console.log("Attaching HR controller...");
-
+      invoiceSocketController(socket, io);
       userSocketController(socket, io);
       break;
     case "employee":
