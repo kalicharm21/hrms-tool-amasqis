@@ -81,8 +81,10 @@ interface DashboardData {
     dueDate: string,
     totalTasks: number,
     completedTasks: number,
-    projectLeadAvatar: string | null;
-    leadName: string | null;
+    leadDetails?: {
+      avatar: string | null;
+      name: string | null;
+    }
     membersAvatars: string[];
   }>
   tasks?: Array<{
@@ -100,7 +102,8 @@ interface DashboardData {
   }>
   teamMembers?: Array<{
     _id: string;
-    name: string;
+    firstName: string;
+    lastName: string
     avatar: string;
     role: string;
   }>,
@@ -315,7 +318,7 @@ const EmployeeDashboard = () => {
           yPosition += 8;
           doc.text(`  Tasks: ${project.completedTasks}/${project.totalTasks}`, 30, yPosition);
           yPosition += 8;
-          doc.text(`  Lead: ${project.leadName || 'N/A'}`, 30, yPosition);
+          doc.text(`  Lead: ${project.leadDetails?.name || 'member'}`, 30, yPosition);
           yPosition += 12;
         });
       }
@@ -427,7 +430,7 @@ const EmployeeDashboard = () => {
             project.dueDate,
             project.completedTasks,
             project.totalTasks,
-            project.leadName || 'N/A'
+            project.leadDetails?.name || 'Member'
           ]);
         });
 
@@ -818,7 +821,8 @@ const EmployeeDashboard = () => {
   const baseHours = dashboardData?.workingHoursStats?.today?.expectedHours ?? 8;
   const overtimeHours = dashboardData?.workingHoursStats?.today?.expectedOvertimeHours ?? 0;
   const expectedHours = baseHours + overtimeHours;
-  const expectedSeconds = expectedHours * 3600;
+  // const expectedSeconds = expectedHours * 3600;
+  const expectedSeconds = 30;
   const punchInTimeUTC = checkInTime ?? null;
   const timeZone = dashboardData?.employeeDetails?.timeZone || "Asia/Kolkata";
   const [leftover, setLeftover] = useState(() =>
@@ -1293,7 +1297,7 @@ const EmployeeDashboard = () => {
                   <div className="d-flex align-items-center">
                     <span className="avatar avatar-lg avatar-rounded border border-white border-2 flex-shrink-0 me-2">
                       <ImageWithBasePath
-                        src={dashboardData?.employeeDetails?.avatar || "assets/img/users/user-01.jpg"}
+                        src={dashboardData?.employeeDetails?.avatar || "C:/Users/hp/Desktop/amasqis/hrms-tool-amasqis/react/public/assets/img/users/user-01.jpg"}
                         alt="Img"
                       />
                     </span>
@@ -1506,15 +1510,15 @@ const EmployeeDashboard = () => {
                     </div>
                     <div className="col-sm-12">
                       <div>
-                        <Link
+                        {/* <Link
                           to="#"
-                          className="btn btn-dark w-100"
-                          data-bs-toggle="modal"
-                          data-inert={true}
+                          className="btn btn-primary btn-md mb-2"
+                          data-bs-toggle="modal" data-inert={true}
                           data-bs-target="#add_leaves"
                         >
-                          Apply New Leave
-                        </Link>
+                          <i className="ti ti-square-rounded-plus me-1" />
+                          Add Requests
+                        </Link> */}
                       </div>
                     </div>
                   </div>
@@ -1539,6 +1543,7 @@ const EmployeeDashboard = () => {
                           "Auto-Punched Out"
                         ) : (
                           `Punch In at ${convertUtcToTimeZone(checkInTime, dashboardData?.employeeDetails?.timeZone || "")}`
+                          // `Punch In at ${checkInTime}`
                         )}
                       </h6>
                     )}
@@ -1790,7 +1795,7 @@ const EmployeeDashboard = () => {
                             <div className="card-body">
                               <div className="d-flex align-items-center justify-content-between mb-3">
                                 <h6>{project.projectTitle}</h6>
-                                <div className="dropdown">
+                                {/* <div className="dropdown">
                                   <Link
                                     to="#"
                                     className="d-inline-flex align-items-center"
@@ -1820,21 +1825,21 @@ const EmployeeDashboard = () => {
                                       </Link>
                                     </li>
                                   </ul>
-                                </div>
+                                </div> */}
                               </div>
 
                               {/* Leader */}
                               <div className="d-flex align-items-center mb-3">
                                 <Link to="#" className="avatar">
                                   <img
-                                    src={project.projectLeadAvatar || 'assets/img/users/user-placeholder.jpg'}
+                                    src={project.leadDetails?.avatar || 'assets/img/users/user-placeholder.jpg'}
                                     className="img-fluid rounded-circle"
                                     alt="lead"
                                   />
                                 </Link>
                                 <div className="ms-2">
                                   <h6 className="fw-normal">
-                                    <Link to="#">{project.leadName || 'N/A'}</Link>
+                                    <Link to="#">{project.leadDetails?.name || 'Lead'}</Link>
                                   </h6>
                                   <span className="fs-13 d-block">Project Leader</span>
                                 </div>
@@ -1897,7 +1902,7 @@ const EmployeeDashboard = () => {
                         className="btn btn-white border-0 dropdown-toggle border btn-sm d-inline-flex align-items-center"
                         data-bs-toggle="dropdown"
                       >
-                        All Projects
+                        Ongoing Projects
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
@@ -1946,7 +1951,7 @@ const EmployeeDashboard = () => {
                                 {task.status}
                               </span>
                               <div className="d-flex align-items-center">
-                                <div className="avatar-list-stacked avatar-group-sm">
+                                {/* <div className="avatar-list-stacked avatar-group-sm">
                                   {task.avatars.slice(0, 3).map((member) => (
                                     <span key={member._id} className="avatar avatar-rounded">
                                       {member.avatar ? (
@@ -1961,7 +1966,7 @@ const EmployeeDashboard = () => {
                                       +{task.avatars.length - 3}
                                     </span>
                                   )}
-                                </div>
+                                </div> */}
                               </div>
                             </div>
                           </div>
@@ -2007,13 +2012,13 @@ const EmployeeDashboard = () => {
                 </div>
                 <div className="card-body">
                   <div>
-                    <div className="bg-light d-flex align-items-center rounded p-2">
+                    {/* <div className="bg-light d-flex align-items-center rounded p-2">
                       <h3 className="me-2">98%</h3>
                       <span className="badge badge-outline-success bg-success-transparent rounded-pill me-1">
                         12%
                       </span>
                       <span>vs last years</span>
-                    </div>
+                    </div> */}
                     {performance_chart2_series.length === months.length && performance_chart2_series.length > 0 ? (
                       <ReactApexChart
                         options={{
@@ -2194,12 +2199,12 @@ const EmployeeDashboard = () => {
                           <ImageWithBasePath
                             src={member.avatar || "assets/img/profiles/avatar-31.jpg"}
                             className="rounded-circle border border-2"
-                            alt={`${member.name}'s avatar`}
+                            alt={`${member.firstName}'s avatar`}
                           />
                         </Link>
                         <div className="ms-2">
                           <h6 className="fs-14 fw-medium text-truncate mb-1">
-                            <Link to="#">{member.name}</Link>
+                            <Link to="#">{member.firstName} {member.lastName}</Link>
                           </h6>
                           <p className="fs-13">{member.role}</p>
                         </div>
@@ -2376,7 +2381,7 @@ const EmployeeDashboard = () => {
       <RequestModals
         onLeaveRequestCreated={() => {
           if (socket) {
-            socket?.emit("admin/dashboard/get-all-data", { year: currentYear });
+            socket?.emit("employee/dashboard/get-all-data", { year: currentYear });
           }
         }}
       />

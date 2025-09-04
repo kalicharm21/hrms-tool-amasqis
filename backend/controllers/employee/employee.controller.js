@@ -503,11 +503,10 @@ const employeeDashboardController = (socket, io) => {
 
     // get all data
     socket.on("employee/dashboard/get-all-data", async (data = {}) => {
-        try {
-            
+        try {                        
             const { companyId, employeeId } = validateEmployeeAccess(socket);
             const year = data.year || new Date().getFullYear();
-
+        
             const [
                 employeeDetails,
                 attendanceStats,
