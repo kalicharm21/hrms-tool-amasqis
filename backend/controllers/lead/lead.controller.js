@@ -5,20 +5,27 @@ const leadController = (socket, io) => {
     if (!socket.user) {
       throw new Error('Unauthorized: No user found');
     }
-    if (!socket.companyId && !socket.userMetadata?.companyId) {
-      throw new Error('No companyId found on socket');
+    if (!socket.companyId) {
+      throw new Error('Unauthorized: Company ID missing');
     }
-    return socket.companyId || socket.userMetadata.companyId;
+    // Ensure the user belongs to the same company
+    if (socket.userMetadata?.companyId !== socket.companyId) {
+      throw new Error('Unauthorized: Company ID mismatch');
+    }
+    // Allow specific roles to access leads dashboard
+    const allowedRoles = ['admin', 'hr', 'leads'];
+    if (!allowedRoles.includes(socket.role)) {
+      throw new Error('Forbidden: Insufficient role to access leads dashboard');
+    }
+    return socket.companyId;
   };
 
   socket.on('lead/dashboard/get-all-data', async (data = {}) => {
     console.log("[LeadDashboard] Received dashboard request", data);
     console.log("[LeadDashboard] Socket user metadata:", socket.userMetadata);
     console.log("[LeadDashboard] Socket companyId:", socket.companyId);
-    console.log("[LeadDashboard] Expected companyId: 68443081dcdfe43152aebf80");
     try {
-      // Temporarily bypass validation for testing
-      const companyId = "68443081dcdfe43152aebf80"; // validateAccess(socket);
+      const companyId = validateAccess(socket);
       const filter = data.filter || 'week';
       const dateRange = data.dateRange || null;
       const newLeadsFilter = data.newLeadsFilter || 'week';
@@ -51,3 +58,4 @@ const leadController = (socket, io) => {
 };
 
 export default leadController;
+
