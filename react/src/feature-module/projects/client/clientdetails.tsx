@@ -1,14 +1,37 @@
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { all_routes } from '../../router/all_routes'
 import ImageWithBasePath from '../../../core/common/imageWithBasePath'
 import { label } from 'yet-another-react-lightbox/*'
 import CommonSelect from '../../../core/common/commonSelect'
 import CommonTextEditor from '../../../core/common/textEditor'
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header'
+import { useClients } from '../../../hooks/useClients'
+import { message } from 'antd'
+
 type PasswordField = "password" | "confirmPassword";
 
+interface Client {
+  _id: string;
+  name: string;
+  company: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  logo?: string;
+  status: 'Active' | 'Inactive';
+  contractValue?: number;
+  projects?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const ClientDetails = () => {
+    const { clientId } = useParams<{ clientId: string }>();
+    const { getClientById, loading, error } = useClients();
+    
+    const [client, setClient] = useState<Client | null>(null);
+    const [loadingClient, setLoadingClient] = useState(true);
 
     const [passwordVisibility, setPasswordVisibility] = useState({
         password: false,
@@ -21,6 +44,40 @@ const ClientDetails = () => {
             [field]: !prevState[field],
         }));
     };
+    
+    // Fetch client details on component mount
+    useEffect(() => {
+        const fetchClientDetails = async () => {
+            if (clientId) {
+                setLoadingClient(true);
+                try {
+                    const clientData = await getClientById(clientId);
+                    if (clientData) {
+                        setClient(clientData);
+                    } else {
+                        message.error('Client not found');
+                    }
+                } catch (error) {
+                    console.error('Error fetching client details:', error);
+                    message.error('Failed to load client details');
+                } finally {
+                    setLoadingClient(false);
+                }
+            } else {
+                // If no clientId in URL, try to get from localStorage or show error
+                const storedClientId = localStorage.getItem('selectedClientId');
+                if (storedClientId) {
+                    const clientData = await getClientById(storedClientId);
+                    if (clientData) {
+                        setClient(clientData);
+                    }
+                }
+                setLoadingClient(false);
+            }
+        };
+        
+        fetchClientDetails();
+    }, [clientId, getClientById]);
 
 
     const tags = [
@@ -85,12 +142,14 @@ const ClientDetails = () => {
                                     <div className="text-center px-3 pb-3 border-bottom">
                                         <div className="mb-3">
                                             <h5 className="d-flex align-items-center justify-content-center mb-1">
-                                                Stephan Peralt
+                                                {client?.name || 'Loading...'}
                                                 <i className="ti ti-discount-check-filled text-success ms-1" />
                                             </h5>
-                                            <p className="text-dark mb-1">EcoVision Enterprises</p>
-                                            <span className="badge badge-soft-secondary fw-medium">
-                                                Operational Manager
+                                            <p className="text-dark mb-1">{client?.company || 'Loading...'}</p>
+                                            <span className={`badge fw-medium ${
+                                                client?.status === 'Active' ? 'badge-soft-success' : 'badge-soft-danger'
+                                            }`}>
+                                                {client?.status || 'Loading...'}
                                             </span>
                                         </div>
                                         <div>

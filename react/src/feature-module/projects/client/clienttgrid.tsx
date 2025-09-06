@@ -1,11 +1,238 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom';
 import { all_routes } from '../../router/all_routes';
+import { useSocket } from '../../../SocketContext';
+import { Socket } from 'socket.io-client';
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
+import AddClient from './add_client';
+import EditClient from './edit_client';
+import DeleteClient from './delete_client';
+import { message } from 'antd';
+
+interface Client {
+  _id: string;
+  name: string;
+  company: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  logo?: string;
+  status: 'Active' | 'Inactive';
+  contractValue?: number;
+  projects?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ClientStats {
+  totalClients: number;
+  activeClients: number;
+  inactiveClients: number;
+  newClients: number;
+}
+
 type PasswordField = "password" | "confirmPassword";
 
 const ClienttGrid = () => {
+    const socket = useSocket() as Socket | null;
+    
+    // State management
+    const [clients, setClients] = useState<Client[]>([]);
+    const [stats, setStats] = useState<ClientStats>({
+        totalClients: 0,
+        activeClients: 0,
+        inactiveClients: 0,
+        newClients: 0
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [exporting, setExporting] = useState(false);
+    
+    const [filters, setFilters] = useState({
+        status: 'All',
+        search: '',
+        sortBy: 'createdAt',
+        sortOrder: 'desc' as 'asc' | 'desc'
+    });
+    
+    const [selectedClient, setSelectedClient] = useState<any>(null);
+    
+    // Fetch clients data
+    const fetchClients = useCallback(() => {
+        if (!socket) return;
+        setLoading(true);
+        setError(null);
+        console.log("[ClientGrid] Fetching all clients from backend");
+        socket.emit('client:getAllData', {});
+    }, [socket]);
+    
+    // Load data on component mount
+    useEffect(() => {
+        if (!socket) return;
+        
+        fetchClients();
+        
+        const clientHandler = (res: any) => {
+            console.log('Client getAllData response:', res);
+            if (res.done) {
+                console.log('Raw clients from backend:', res.data.clients);
+                setClients(res.data.clients || []);
+                setStats(res.data.stats || {
+                    totalClients: 0,
+                    activeClients: 0,
+                    inactiveClients: 0,
+                    newClients: 0
+                });
+                setError(null);
+                console.log(`Loaded ${res.data.clients?.length || 0} clients`);
+            } else {
+                setError(res.error || "Failed to fetch clients");
+                console.error('Failed to fetch clients:', res.error);
+            }
+            setLoading(false);
+        };
+
+        // Listen for real-time updates
+        const handleClientCreated = (response: any) => {
+            if (response.done && response.data) {
+                console.log('Client created:', response.data);
+                fetchClients();
+                message.success('Client created successfully!');
+            }
+        };
+
+        const handleClientUpdated = (response: any) => {
+            if (response.done && response.data) {
+                console.log('Client updated:', response.data);
+                fetchClients();
+                message.success('Client updated successfully!');
+            }
+        };
+
+        const handleClientDeleted = (response: any) => {
+            if (response.done && response.data) {
+                console.log('Client deleted:', response.data);
+                fetchClients();
+                message.success('Client deleted successfully!');
+            }
+        };
+
+        socket.on("client:getAllData-response", clientHandler);
+        socket.on('client:client-created', handleClientCreated);
+        socket.on('client:client-updated', handleClientUpdated);
+        socket.on('client:client-deleted', handleClientDeleted);
+
+        return () => {
+            socket.off("client:getAllData-response", clientHandler);
+            socket.off('client:client-created', handleClientCreated);
+            socket.off('client:client-updated', handleClientUpdated);
+            socket.off('client:client-deleted', handleClientDeleted);
+        };
+    }, [socket, fetchClients]);
+    
+    // Handle edit client
+    const handleEditClient = (client: any) => {
+        setSelectedClient(client);
+        // Store client data for the edit modal
+        (window as any).currentEditClient = client;
+        // Dispatch custom event that edit_client.tsx is listening for
+        window.dispatchEvent(
+            new CustomEvent('edit-client', { detail: { client } })
+        );
+    };
+    
+    // Handle delete client
+    const handleDeleteClient = (client: any) => {
+        setSelectedClient(client);
+        // Store client data for the delete modal
+        (window as any).currentDeleteClient = client;
+        // Dispatch custom event that delete_client.tsx is listening for
+        window.dispatchEvent(
+            new CustomEvent('delete-client', { detail: { client } })
+        );
+    };
+    
+    // Export functions
+    const handleExportPDF = useCallback(async () => {
+        if (!socket) {
+            message.error("Socket connection not available");
+            return;
+        }
+
+        setExporting(true);
+        try {
+            console.log("Starting PDF export...");
+            socket.emit("client/export-pdf");
+
+            const handlePDFResponse = (response: any) => {
+                if (response.done) {
+                    console.log("PDF generated successfully:", response.data.pdfUrl);
+                    const link = document.createElement('a');
+                    link.href = response.data.pdfUrl;
+                    link.download = `clients_${Date.now()}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    message.success("PDF exported successfully!");
+                } else {
+                    console.error("PDF export failed:", response.error);
+                    message.error(`PDF export failed: ${response.error}`);
+                }
+                setExporting(false);
+                socket.off("client/export-pdf-response", handlePDFResponse);
+            };
+
+            socket.on("client/export-pdf-response", handlePDFResponse);
+        } catch (error) {
+            console.error("Error exporting PDF:", error);
+            message.error("Failed to export PDF");
+            setExporting(false);
+        }
+    }, [socket]);
+
+    const handleExportExcel = useCallback(async () => {
+        if (!socket) {
+            message.error("Socket connection not available");
+            return;
+        }
+
+        setExporting(true);
+        try {
+            console.log("Starting Excel export...");
+            socket.emit("client/export-excel");
+
+            const handleExcelResponse = (response: any) => {
+                if (response.done) {
+                    console.log("Excel generated successfully:", response.data.excelUrl);
+                    const link = document.createElement('a');
+                    link.href = response.data.excelUrl;
+                    link.download = `clients_${Date.now()}.xlsx`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    message.success("Excel exported successfully!");
+                } else {
+                    console.error("Excel export failed:", response.error);
+                    message.error(`Excel export failed: ${response.error}`);
+                }
+                setExporting(false);
+                socket.off("client/export-excel-response", handleExcelResponse);
+            };
+
+            socket.on("client/export-excel-response", handleExcelResponse);
+        } catch (error) {
+            console.error("Error exporting Excel:", error);
+            message.error("Failed to export Excel");
+            setExporting(false);
+        }
+    }, [socket]);
+
+    // Handle filter changes
+    const handleStatusFilter = (status: string) => {
+        setFilters(prev => ({ ...prev, status }));
+    };
+    
     const [passwordVisibility, setPasswordVisibility] = useState({
         password: false,
         confirmPassword: false,
@@ -69,6 +296,10 @@ const ClienttGrid = () => {
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleExportPDF();
+                                                }}
                                             >
                                                 <i className="ti ti-file-type-pdf me-1" />
                                                 Export as PDF
@@ -78,6 +309,10 @@ const ClienttGrid = () => {
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleExportExcel();
+                                                }}
                                             >
                                                 <i className="ti ti-file-type-xls me-1" />
                                                 Export as Excel{" "}
@@ -119,7 +354,7 @@ const ClienttGrid = () => {
                                                 <p className="fs-12 fw-medium mb-0 text-gray-5 mb-1">
                                                     Total Clients
                                                 </p>
-                                                <h4>300</h4>
+                                                <h4>{stats?.totalClients || 0}</h4>
                                             </div>
                                         </div>
                                         <span className="badge bg-transparent-purple d-inline-flex align-items-center fw-normal">
@@ -144,7 +379,7 @@ const ClienttGrid = () => {
                                                 <p className="fs-12 fw-medium mb-0 text-gray-5 mb-1">
                                                     Active Clients
                                                 </p>
-                                                <h4>270</h4>
+                                                <h4>{stats?.activeClients || 0}</h4>
                                             </div>
                                         </div>
                                         <span className="badge bg-transparent-primary text-primary d-inline-flex align-items-center fw-normal">
@@ -169,7 +404,7 @@ const ClienttGrid = () => {
                                                 <p className="fs-12 fw-medium mb-0 text-gray-5 mb-1">
                                                     Inactive Clients
                                                 </p>
-                                                <h4>30</h4>
+                                                <h4>{stats?.inactiveClients || 0}</h4>
                                             </div>
                                         </div>
                                         <span className="badge bg-transparent-dark text-dark d-inline-flex align-items-center fw-normal">
@@ -194,7 +429,7 @@ const ClienttGrid = () => {
                                                 <p className="fs-12 fw-medium mb-0 text-gray-5 mb-1">
                                                     New Clients
                                                 </p>
-                                                <h4>300</h4>
+                                                <h4>{stats?.newClients || 0}</h4>
                                             </div>
                                         </div>
                                         <span className="badge bg-transparent-secondary text-dark d-inline-flex align-items-center fw-normal">
@@ -225,14 +460,16 @@ const ClienttGrid = () => {
                                                 <Link
                                                     to="#"
                                                     className="dropdown-item rounded-1"
+                                                    onClick={() => handleStatusFilter('All')}
                                                 >
-                                                    Select Status
+                                                    All Status
                                                 </Link>
                                             </li>
                                             <li>
                                                 <Link
                                                     to="#"
                                                     className="dropdown-item rounded-1"
+                                                    onClick={() => handleStatusFilter('Active')}
                                                 >
                                                     Active
                                                 </Link>
@@ -241,6 +478,7 @@ const ClienttGrid = () => {
                                                 <Link
                                                     to="#"
                                                     className="dropdown-item rounded-1"
+                                                    onClick={() => handleStatusFilter('Inactive')}
                                                 >
                                                     Inactive
                                                 </Link>
@@ -304,137 +542,169 @@ const ClienttGrid = () => {
                     </div>
                     {/* Clients Grid */}
                     <div className="row">
-                        <div className="col-xl-3 col-lg-4 col-md-6">
-                            <div className="card">
-                                <div className="card-body">
-                                    <div className="d-flex justify-content-between align-items-start mb-2">
-                                        <div className="form-check form-check-md">
-                                            <input className="form-check-input" type="checkbox" />
-                                        </div>
-                                        <div>
-                                            <Link
-                                                to={all_routes.clientdetils}
-                                                className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
-                                            >
-                                                <ImageWithBasePath
-                                                    src="assets/img/users/user-39.jpg"
-                                                    className="img-fluid h-auto w-auto"
-                                                    alt="img"
-                                                />
-                                            </Link>
-                                        </div>
-                                        <div className="dropdown">
-                                            <button
-                                                className="btn btn-icon btn-sm rounded-circle"
-                                                type="button"
-                                                data-bs-toggle="dropdown"
-                                                aria-expanded="false"
-                                            >
-                                                <i className="ti ti-dots-vertical" />
-                                            </button>
-                                            <ul className="dropdown-menu dropdown-menu-end p-3">
-                                                <li>
-                                                    <Link
-                                                        className="dropdown-item rounded-1"
-                                                        to="#"
-                                                        data-bs-toggle="modal" data-inert={true}
-                                                        data-bs-target="#edit_client"
-                                                    >
-                                                        <i className="ti ti-edit me-1" />
-                                                        Edit
-                                                    </Link>
-                                                </li>
-                                                <li>
-                                                    <Link
-                                                        className="dropdown-item rounded-1"
-                                                        to="#"
-                                                        data-bs-toggle="modal" data-inert={true}
-                                                        data-bs-target="#delete_modal"
-                                                    >
-                                                        <i className="ti ti-trash me-1" />
-                                                        Delete
-                                                    </Link>
-                                                </li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                    <div className="text-center mb-3">
-                                        <h6 className="mb-1">
-                                            <Link to={all_routes.clientdetils}>Michael Walker</Link>
-                                        </h6>
-                                        <span className="badge bg-pink-transparent fs-10 fw-medium">
-                                            CEO
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <p className="mb-2 text-truncate">
-                                            Project : Office Management App
-                                        </p>
-                                        <div className="progress progress-xs mb-2">
-                                            <div
-                                                className="progress-bar bg-purple"
-                                                role="progressbar"
-                                                style={{ width: "60%" }}
-                                            />
-                                        </div>
-                                        <div className="d-flex align-items-center justify-content-between">
-                                            <div className="avatar-list-stacked avatar-group-sm">
-                                                <span className="avatar avatar-rounded">
-                                                    <ImageWithBasePath
-                                                        src="assets/img/users/user-01.jpg"
-                                                        className="border border-white"
-                                                        alt="img"
-                                                    />
-                                                </span>
-                                                <span className="avatar avatar-rounded">
-                                                    <ImageWithBasePath
-                                                        src="assets/img/users/user-02.jpg"
-                                                        className="border border-white"
-                                                        alt="img"
-                                                    />
-                                                </span>
-                                                <span className="avatar avatar-rounded">
-                                                    <ImageWithBasePath
-                                                        src="assets/img/users/user-03.jpg"
-                                                        className="border border-white"
-                                                        alt="img"
-                                                    />
-                                                </span>
-                                                <Link
-                                                    className="avatar bg-primary avatar-rounded text-fixed-white fs-12"
-                                                    to="#"
-                                                >
-                                                    +1
-                                                </Link>
-                                            </div>
-                                            <span className="text-purple">60%</span>
-                                        </div>
-                                    </div>
-                                    <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
-                                        <div>
-                                            <p className="mb-1 fs-12">Company</p>
-                                            <h6 className="fw-normal text-truncate">
-                                                BrightWave Innovations
-                                            </h6>
-                                        </div>
-                                        <div className="icons-social d-flex align-items-center">
-                                            <Link
-                                                to="#"
-                                                className="avatar avatar-rounded avatar-sm bg-light me-2"
-                                            >
-                                                <i className="ti ti-message" />
-                                            </Link>
-                                            <Link
-                                                to="#"
-                                                className="avatar avatar-rounded avatar-sm bg-light"
-                                            >
-                                                <i className="ti ti-phone" />
-                                            </Link>
-                                        </div>
+                        {loading ? (
+                            <div className="col-12">
+                                <div className="d-flex justify-content-center align-items-center" style={{ height: '400px' }}>
+                                    <div className="spinner-border" role="status">
+                                        <span className="sr-only">Loading clients...</span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        ) : error ? (
+                            <div className="col-12">
+                                <div className="alert alert-danger" role="alert">
+                                    <h4 className="alert-heading">Error!</h4>
+                                    <p>{error}</p>
+                                    <hr />
+                                    <button className="btn btn-primary" onClick={fetchClients}>
+                                        Retry
+                                    </button>
+                                </div>
+                            </div>
+                        ) : clients.length === 0 ? (
+                            <div className="col-12">
+                                <div className="text-center p-4">
+                                    <i className="ti ti-users-group" style={{ fontSize: '48px', color: '#ccc' }} />
+                                    <h5 className="mt-3 mb-2">No Clients Found</h5>
+                                    <p className="text-muted">There are no clients to display. Add a new client to get started.</p>
+                                    <Link
+                                        to="#"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#add_client"
+                                        className="btn btn-primary"
+                                    >
+                                        <i className="ti ti-circle-plus me-2" />
+                                        Add Client
+                                    </Link>
+                                </div>
+                            </div>
+                        ) : (
+                            clients.map((client: any) => (
+                                <div key={client._id} className="col-xl-3 col-lg-4 col-md-6">
+                                    <div className="card">
+                                        <div className="card-body">
+                                            <div className="d-flex justify-content-between align-items-start mb-2">
+                                                <div className="form-check form-check-md">
+                                                    <input className="form-check-input" type="checkbox" />
+                                                </div>
+                                                <div>
+                                                    <Link
+                                                        to={all_routes.clientdetils}
+                                                        className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
+                                                    >
+                                                        <ImageWithBasePath
+                                                            src={client.logo || "assets/img/users/user-39.jpg"}
+                                                            className="img-fluid h-auto w-auto"
+                                                            alt="img"
+                                                        />
+                                                    </Link>
+                                                </div>
+                                                <div className="dropdown">
+                                                    <button
+                                                        className="btn btn-icon btn-sm rounded-circle"
+                                                        type="button"
+                                                        data-bs-toggle="dropdown"
+                                                        aria-expanded="false"
+                                                    >
+                                                        <i className="ti ti-dots-vertical" />
+                                                    </button>
+                                                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                                                        <li>
+                                                            <Link
+                                                                className="dropdown-item rounded-1"
+                                                                to="#"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#edit_client"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    handleEditClient(client);
+                                                                }}
+                                                            >
+                                                                <i className="ti ti-edit me-1" />
+                                                                Edit
+                                                            </Link>
+                                                        </li>
+                                                        <li>
+                                                            <Link
+                                                                className="dropdown-item rounded-1"
+                                                                to="#"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#delete_client"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    handleDeleteClient(client);
+                                                                }}
+                                                            >
+                                                                <i className="ti ti-trash me-1" />
+                                                                Delete
+                                                            </Link>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                            <div className="text-center mb-3">
+                                                <h6 className="mb-1">
+                                                    <Link to={all_routes.clientdetils}>{client.name}</Link>
+                                                </h6>
+                                                <span className={`badge fs-10 fw-medium ${
+                                                    client.status === 'Active' ? 'bg-success-transparent text-success' : 'bg-danger-transparent text-danger'
+                                                }`}>
+                                                    {client.status}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <p className="mb-2 text-truncate">
+                                                    Email: {client.email}
+                                                </p>
+                                                {client.phone && (
+                                                    <p className="mb-2 text-truncate">
+                                                        Phone: {client.phone}
+                                                    </p>
+                                                )}
+                                                {client.contractValue && (
+                                                    <div className="d-flex align-items-center justify-content-between mb-2">
+                                                        <span className="text-muted fs-12">Contract Value:</span>
+                                                        <span className="text-success fw-medium">${client.contractValue.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {client.projects && (
+                                                    <div className="d-flex align-items-center justify-content-between">
+                                                        <span className="text-muted fs-12">Projects:</span>
+                                                        <span className="text-primary fw-medium">{client.projects}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="d-flex align-items-center justify-content-between border-top pt-3 mt-3">
+                                                <div>
+                                                    <p className="mb-1 fs-12">Company</p>
+                                                    <h6 className="fw-normal text-truncate">
+                                                        {client.company}
+                                                    </h6>
+                                                </div>
+                                                <div className="icons-social d-flex align-items-center">
+                                                    <Link
+                                                        to={`mailto:${client.email}`}
+                                                        className="avatar avatar-rounded avatar-sm bg-light me-2"
+                                                        title="Send Email"
+                                                    >
+                                                        <i className="ti ti-message" />
+                                                    </Link>
+                                                    {client.phone && (
+                                                        <Link
+                                                            to={`tel:${client.phone}`}
+                                                            className="avatar avatar-rounded avatar-sm bg-light"
+                                                            title="Call Client"
+                                                        >
+                                                            <i className="ti ti-phone" />
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                         <div className="col-xl-3 col-lg-4 col-md-6">
                             <div className="card">
                                 <div className="card-body">
@@ -3755,6 +4025,11 @@ const ClienttGrid = () => {
                 </div>
             </div>
             {/* /Add Client Success */}
+            
+            {/* Modal Components */}
+            <AddClient />
+            <EditClient />
+            <DeleteClient />
         </>
 
     )
