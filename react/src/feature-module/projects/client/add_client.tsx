@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSocket } from '../../../SocketContext';
 import { Socket } from 'socket.io-client';
 import { message } from 'antd';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 interface ClientFormData {
   name: string;
@@ -42,6 +44,98 @@ const AddClient = () => {
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<ClientFormErrors>({});
+  const [logo, setLogo] = useState<string | null>(null);
+  const [imageUpload, setImageUpload] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cloudinary image upload function
+  const uploadImage = async (file: File) => {
+    setLogo(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "amasqis");
+
+    const res = await fetch(
+      "https://api.cloudinary.com/v1_1/dwc3b5zfe/image/upload",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await res.json();
+    console.log(data);
+    return data.secure_url;
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const maxSize = 4 * 1024 * 1024; // 4MB
+    if (file.size > maxSize) {
+      toast.error("File size must be less than 4MB.", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      event.target.value = "";
+      return;
+    }
+
+    if (
+      file &&
+      ["image/jpeg", "image/png", "image/jpg", "image/ico"].includes(file.type)
+    ) {
+      setImageUpload(true);
+      try {
+        const uploadedUrl = await uploadImage(file);
+        setLogo(uploadedUrl);
+        setFormData(prev => ({ ...prev, logo: uploadedUrl }));
+        console.log(uploadedUrl);
+        setImageUpload(false);
+      } catch (error) {
+        setImageUpload(false);
+        toast.error("Failed to upload image. Please try again.", {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: true,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        event.target.value = "";
+      }
+    } else {
+      toast.error("Please upload image file only.", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      event.target.value = "";
+    }
+  };
+
+  // Remove uploaded logo
+  const removeLogo = () => {
+    setLogo(null);
+    setFormData(prev => ({ ...prev, logo: '' }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -203,12 +297,17 @@ const AddClient = () => {
       projects: 0
     });
     setErrors({});
+    setLogo(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   return (
-    <div className="modal fade" id="add_client">
-      <div className="modal-dialog modal-dialog-centered modal-lg">
-        <div className="modal-content">
+    <>
+      <div className="modal fade" id="add_client">
+        <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-content">
           <div className="modal-header">
             <h4 className="modal-title">Add New Client</h4>
             <button
@@ -251,43 +350,69 @@ const AddClient = () => {
                     <div className="col-md-12">
                       <div className="d-flex align-items-center flex-wrap row-gap-3 bg-light w-100 rounded p-3 mb-4">
                         <div className="d-flex align-items-center justify-content-center avatar avatar-xxl rounded-circle border border-dashed me-2 flex-shrink-0 text-dark frames">
-                          <i className="ti ti-photo" />
+                          {logo ? (
+                            <img
+                              src={logo}
+                              alt="Uploaded Logo"
+                              className="rounded-circle"
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : imageUpload ? (
+                            <div
+                              className="spinner-border text-primary"
+                              role="status"
+                            >
+                              <span className="visually-hidden">
+                                Uploading...
+                              </span>
+                            </div>
+                          ) : (
+                            <i className="ti ti-photo text-gray-2 fs-16" />
+                          )}
                         </div>
                         <div className="profile-upload">
                           <div className="mb-2">
-                            <h6 className="mb-1">Upload Profile Image</h6>
-                            <p className="fs-12">Image should be below 4 mb</p>
+                            <h6 className="mb-1">Upload Client Logo</h6>
+                            <p className="fs-12">
+                              Image should be below 4 mb
+                            </p>
                           </div>
                           <div className="profile-uploader d-flex align-items-center">
                             <div className="drag-upload-btn btn btn-sm btn-primary me-2">
-                              Upload
+                              {logo ? "Change" : "Upload"}
                               <input
                                 type="file"
                                 className="form-control image-sign"
-                                multiple
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (e) => {
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        logo: e.target?.result as string
-                                      }));
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
-                                }}
+                                accept=".png,.jpeg,.jpg,.ico"
+                                ref={fileInputRef}
+                                onChange={handleImageUpload}
                               />
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-light btn-sm"
-                              onClick={() => setFormData(prev => ({ ...prev, logo: '' }))}
-                            >
-                              Cancel
-                            </button>
+                            {logo ? (
+                              <button
+                                type="button"
+                                onClick={removeLogo}
+                                className="btn btn-light btn-sm"
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <button
+                                type="button" 
+                                className="btn btn-light btn-sm"
+                                onClick={() => {
+                                  if (fileInputRef.current) {
+                                    fileInputRef.current.value = "";
+                                  }
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -433,9 +558,11 @@ const AddClient = () => {
               </div>
             </div>
           </form>
+          </div>
         </div>
       </div>
-    </div>
+      <ToastContainer />
+    </>
   );
 };
 
