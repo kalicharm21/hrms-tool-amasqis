@@ -510,7 +510,10 @@ const getDashboardData = async (
     
     // Debug: Check what leads exist in the database with their dates
     try {
-      const allLeadsWithDates = await leadsCollection.find({}, { source: 1, createdAt: 1 }).sort({ createdAt: -1 }).toArray();
+      const allLeadsWithDates = await leadsCollection
+        .find({}, { projection: { source: 1, createdAt: 1 } })
+        .sort({ createdAt: -1 })
+        .toArray();
       console.log("[LeadDashboard] All leads with dates:", allLeadsWithDates.map(l => ({ source: l.source, createdAt: l.createdAt })));
     } catch (error) {
       console.error("[LeadDashboard] Error fetching leads for debugging:", error);

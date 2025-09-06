@@ -44,6 +44,8 @@ const LeadsDasboard = () => {
   const socket = useSocket();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [dataReceived, setDataReceived] = useState(false);
+  const [requestTimedOut, setRequestTimedOut] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<'week' | 'month' | 'year'>('week');
   
   // Add date range state
@@ -757,6 +759,7 @@ const LeadsDasboard = () => {
     // Handler for dashboard data response
     const handleDashboardResponse = (response: any) => {
       console.log("[LeadDashboard] Received response:", response);
+      setRequestTimedOut(false);
       
       if (response.done) {
         // Ensure data is properly structured
@@ -783,9 +786,46 @@ const LeadsDasboard = () => {
         
         setDashboardData(data);
         setDataReceived(true);
+        setErrorMessage(null);
         console.log("[LeadDashboard] Dashboard data set successfully");
       } else {
         console.error("Lead dashboard error:", response.error);
+        setErrorMessage(response.error || 'Failed to load dashboard');
+        // Gracefully show no data instead of infinite loading
+        const emptyData = {
+          totalLeads: 0,
+          newLeads: 0,
+          lostLeads: 0,
+          totalCustomers: 0,
+          pipelineStages: {
+            Contacted: 0,
+            Opportunity: 0,
+            'Not Contacted': 0,
+            Closed: 0,
+            Lost: 0,
+            monthlyData: {
+              contacted: new Array(12).fill(0),
+              opportunity: new Array(12).fill(0),
+              notContacted: new Array(12).fill(0),
+              closed: new Array(12).fill(0),
+              lost: new Array(12).fill(0),
+              closedIncome: new Array(12).fill(0)
+            }
+          },
+          lostLeadsByReason: { 'No Data': 0 },
+          leadsByCompanies: [],
+          leadsBySource: [{ name: 'No Data', count: 0 }],
+          topCountries: [{ name: 'No Data', leads: 0 }],
+          recentLeads: [],
+          recentActivities: [],
+          leadOwners: [],
+          leadTasks: [],
+          leadJobApplications: [],
+          leadClients: [],
+          newLeadsDashboardData: []
+        } as any;
+        setDashboardData(emptyData);
+        setDataReceived(true);
       }
     };
 
@@ -794,6 +834,21 @@ const LeadsDasboard = () => {
 
     // Only emit if socket is actually connected
     if ((socket as any).connected) {
+      // Set a timeout to avoid infinite spinner if server never responds
+      setRequestTimedOut(false);
+      const timer = setTimeout(() => {
+        console.warn('[LeadDashboard] Request timed out');
+        setRequestTimedOut(true);
+        setDataReceived(true);
+        setDashboardData({
+          lostLeadsByReason: { 'No Data': 0 },
+          leadsBySource: [{ name: 'No Data', count: 0 }],
+          topCountries: [{ name: 'No Data', leads: 0 }],
+          pipelineStages: { Contacted: 0, Opportunity: 0, 'Not Contacted': 0, Closed: 0, Lost: 0, monthlyData: { contacted: Array(12).fill(0), opportunity: Array(12).fill(0), notContacted: Array(12).fill(0), closed: Array(12).fill(0), lost: Array(12).fill(0), closedIncome: Array(12).fill(0) } },
+        });
+        setErrorMessage('No response from server. Please try again.');
+      }, 7000);
+
       (socket as any).emit("lead/dashboard/get-all-data", { 
         filter, 
         dateRange, 
@@ -805,6 +860,9 @@ const LeadsDasboard = () => {
         leadsBySourceFilter,
         topCountriesFilter
       });
+
+      // Clear timer when a response is received or on cleanup
+      (socket as any).once("lead/dashboard/get-all-data-response", () => clearTimeout(timer));
     } else {
       // Wait for connect event, then emit
       const onConnect = () => {
@@ -1848,14 +1906,23 @@ const LeadsDasboard = () => {
                          );
                        })()
                      ) : (
-                       <div className="d-flex align-items-center justify-content-center" style={{ height: '355px' }}>
-                         <div className="text-center">
-                           <div className="spinner-border text-primary" role="status">
-                             <span className="visually-hidden">Loading...</span>
+                       dataReceived ? (
+                         <div className="d-flex align-items-center justify-content-center" style={{ height: '355px' }}>
+                           <div className="text-center">
+                             <p className="text-muted mb-0">No Data Available</p>
+                             <p className="text-muted mb-0">No lost leads found for the selected time period</p>
                            </div>
-                           <p className="mt-2 text-muted">Loading Lost Leads Data...</p>
                          </div>
-                       </div>
+                       ) : (
+                         <div className="d-flex align-items-center justify-content-center" style={{ height: '355px' }}>
+                           <div className="text-center">
+                             <div className="spinner-border text-primary" role="status">
+                               <span className="visually-hidden">Loading...</span>
+                             </div>
+                             <p className="mt-2 text-muted">Loading Lost Leads Data...</p>
+                           </div>
+                         </div>
+                       )
                      )}
                   </div>
                 </div>
@@ -2576,18 +2643,26 @@ const LeadsDasboard = () => {
                             );
                           })
                         ) : (
-                          <tr>
-                            <td colSpan={5} className="text-center py-4">
-                              <div className="d-flex align-items-center justify-content-center">
-                                <div className="text-center">
-                                  <div className="spinner-border text-primary" role="status">
-                                    <span className="visually-hidden">Loading...</span>
-                              </div>
-                                  <p className="mt-2 text-muted">Loading Recent Leads...</p>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
+                          dataReceived ? (
+                            <tr>
+                              <td colSpan={5} className="text-center py-4">
+                                <div className="text-muted">No Recent Leads Available</div>
+                              </td>
+                            </tr>
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="text-center py-4">
+                                <div className="d-flex align-items-center justify-content-center">
+                                  <div className="text-center">
+                                    <div className="spinner-border text-primary" role="status">
+                                      <span className="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p className="mt-2 text-muted">Loading Recent Leads...</p>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )
                         )}
                       </tbody>
                     </table>

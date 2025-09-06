@@ -32,6 +32,7 @@ export const getTenantCollections = (tenantDbName) => {
     stats: db.collection("stats"),
     companies: db.collection("companies"),
     details: db.collection("details"),     // for company details
+    leads: db.collection("leads"),
 
     // Admin dashboard collections
     employees: db.collection("employees"),
