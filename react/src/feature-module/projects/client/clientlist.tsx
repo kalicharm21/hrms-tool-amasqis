@@ -38,6 +38,7 @@ const ClientList = () => {
     
     // State management
     const [clients, setClients] = useState<Client[]>([]);
+    const [filteredClients, setFilteredClients] = useState<Client[]>([]);
     const [stats, setStats] = useState<ClientStats>({
         totalClients: 0,
         activeClients: 0,
@@ -47,6 +48,15 @@ const ClientList = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [exporting, setExporting] = useState(false);
+    
+    // Filter states
+    const [selectedStatus, setSelectedStatus] = useState<string>('');
+    const [selectedCompany, setSelectedCompany] = useState<string>('');
+    const [selectedSort, setSelectedSort] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    
+    // Extract unique companies for filter
+    const [companies, setCompanies] = useState<string[]>([]);
     
     const [filters, setFilters] = useState({
         status: 'All',
@@ -76,15 +86,21 @@ const ClientList = () => {
             console.log('Client getAllData response:', res);
             if (res.done) {
                 console.log('Raw clients from backend:', res.data.clients);
-                setClients(res.data.clients || []);
+                const clientsData = res.data.clients || [];
+                setClients(clientsData);
                 setStats(res.data.stats || {
                     totalClients: 0,
                     activeClients: 0,
                     inactiveClients: 0,
                     newClients: 0
                 });
+                
+                // Extract unique companies for filter
+                const uniqueCompanies = Array.from(new Set(clientsData.map((client: Client) => client.company).filter(Boolean))) as string[];
+                setCompanies(uniqueCompanies);
+                
                 setError(null);
-                console.log(`Loaded ${res.data.clients?.length || 0} clients`);
+                console.log(`Loaded ${clientsData.length} clients`);
             } else {
                 setError(res.error || "Failed to fetch clients");
                 console.error('Failed to fetch clients:', res.error);
@@ -129,6 +145,101 @@ const ClientList = () => {
             socket.off('client:client-deleted', handleClientDeleted);
         };
     }, [socket, fetchClients]);
+
+    // Apply filters whenever clients or filter states change (Activity-style filtering)
+    useEffect(() => {
+        console.log("[ClientList] Applying filters...");
+        console.log("[ClientList] Current filters:", { selectedStatus, selectedCompany, selectedSort, searchQuery });
+        console.log("[ClientList] Total clients before filtering:", clients.length);
+        
+        if (!clients || clients.length === 0) {
+            setFilteredClients([]);
+            return;
+        }
+
+        let result = [...clients];
+
+        // Status filter
+        if (selectedStatus && selectedStatus !== '') {
+            console.log("[ClientList] Filtering by status:", selectedStatus);
+            result = result.filter((client) => client.status === selectedStatus);
+            console.log("[ClientList] After status filter:", result.length);
+        }
+
+        // Company filter
+        if (selectedCompany && selectedCompany !== '') {
+            console.log("[ClientList] Filtering by company:", selectedCompany);
+            result = result.filter((client) => client.company === selectedCompany);
+            console.log("[ClientList] After company filter:", result.length);
+        }
+
+        // Search query filter
+        if (searchQuery && searchQuery.trim() !== '') {
+            console.log("[ClientList] Filtering by search query:", searchQuery);
+            const query = searchQuery.toLowerCase().trim();
+            result = result.filter((client) => 
+                client.name.toLowerCase().includes(query) ||
+                client.company.toLowerCase().includes(query) ||
+                client.email.toLowerCase().includes(query) ||
+                (client.phone && client.phone.toLowerCase().includes(query))
+            );
+            console.log("[ClientList] After search filter:", result.length);
+        }
+
+        // Sort
+        if (selectedSort) {
+            result.sort((a, b) => {
+                const dateA = new Date(a.createdAt);
+                const dateB = new Date(b.createdAt);
+                switch (selectedSort) {
+                    case 'asc':
+                        return a.name.localeCompare(b.name);
+                    case 'desc':
+                        return b.name.localeCompare(a.name);
+                    case 'recent':
+                        return dateB.getTime() - dateA.getTime();
+                    case 'oldest':
+                        return dateA.getTime() - dateB.getTime();
+                    case 'company':
+                        return a.company.localeCompare(b.company);
+                    default:
+                        return 0;
+                }
+            });
+        }
+
+        console.log("[ClientList] Final filtered clients count:", result.length);
+        setFilteredClients(result);
+    }, [clients, selectedStatus, selectedCompany, selectedSort, searchQuery]);
+
+    // Handle filter changes (Activity-style handlers)
+    const handleStatusChange = (status: string) => {
+        console.log("[ClientList] Status filter changed to:", status);
+        setSelectedStatus(status);
+    };
+
+    const handleCompanyChange = (company: string) => {
+        console.log("[ClientList] Company filter changed to:", company);
+        setSelectedCompany(company);
+    };
+
+    const handleSortChange = (sort: string) => {
+        console.log("[ClientList] Sort filter changed to:", sort);
+        setSelectedSort(sort);
+    };
+
+    const handleSearchChange = (query: string) => {
+        console.log("[ClientList] Search query changed to:", query);
+        setSearchQuery(query);
+    };
+
+    const handleClearFilters = () => {
+        console.log("[ClientList] Clearing all filters");
+        setSelectedStatus('');
+        setSelectedCompany('');
+        setSelectedSort('');
+        setSearchQuery('');
+    };
 
     // Handle delete client
     const handleDeleteClient = (client: any) => {
@@ -560,25 +671,58 @@ const ClientList = () => {
                         </div>
                     </div>
                     {/* /Clients Info */}
+                    
                     {/* Clients list */}
                     <div className="card">
                         <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                             <h5>Client List</h5>
                             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap row-gap-3">
+                                {/* Search Input */}
+                                <div className="me-3">
+                                    <div className="input-icon-end position-relative">
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            placeholder="Search clients..."
+                                            value={searchQuery}
+                                            onChange={(e) => handleSearchChange(e.target.value)}
+                                        />
+                                        <span className="input-icon-addon">
+                                            <i className="ti ti-search text-gray-7" />
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                {/* Status Filter */}
                                 <div className="dropdown me-3">
                                     <Link
                                         to="#"
                                         className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
                                         data-bs-toggle="dropdown"
                                     >
-                                        Select Status
+                                        {selectedStatus ? `Status: ${selectedStatus}` : 'Select Status'}
                                     </Link>
-                                    <ul className="dropdown-menu  dropdown-menu-end p-3">
+                                    <ul className="dropdown-menu dropdown-menu-end p-3">
                                         <li>
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
-                                                onClick={() => handleStatusFilter('Active')}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleStatusChange('');
+                                                }}
+                                            >
+                                                All Status
+                                            </Link>
+                                        </li>
+                                        <li>
+                                            <Link
+                                                to="#"
+                                                className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleStatusChange('Active');
+                                                }}
                                             >
                                                 Active
                                             </Link>
@@ -587,27 +731,98 @@ const ClientList = () => {
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
-                                                onClick={() => handleStatusFilter('Inactive')}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleStatusChange('Inactive');
+                                                }}
                                             >
                                                 Inactive
                                             </Link>
                                         </li>
                                     </ul>
                                 </div>
-                                <div className="dropdown">
+                                
+                                {/* Company Filter */}
+                                <div className="dropdown me-3">
                                     <Link
                                         to="#"
                                         className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
                                         data-bs-toggle="dropdown"
                                     >
-                                        Sort By : Last 7 Days
+                                        {selectedCompany ? `Company: ${selectedCompany}` : 'Select Company'}
                                     </Link>
-                                    <ul className="dropdown-menu  dropdown-menu-end p-3">
+                                    <ul className="dropdown-menu dropdown-menu-end p-3" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                                         <li>
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
-                                                onClick={() => handleSort('createdAt')}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleCompanyChange('');
+                                                }}
+                                            >
+                                                All Companies
+                                            </Link>
+                                        </li>
+                                        {companies.map((company, index) => (
+                                            <li key={index}>
+                                                <Link
+                                                    to="#"
+                                                    className="dropdown-item rounded-1"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        handleCompanyChange(company);
+                                                    }}
+                                                >
+                                                    {company}
+                                                </Link>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                
+                                {/* Sort Filter */}
+                                <div className="dropdown me-3">
+                                    <Link
+                                        to="#"
+                                        className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
+                                        data-bs-toggle="dropdown"
+                                    >
+                                        {selectedSort ? `Sort: ${selectedSort === 'asc' ? 'A-Z' : selectedSort === 'desc' ? 'Z-A' : selectedSort === 'recent' ? 'Recent' : selectedSort === 'oldest' ? 'Oldest' : 'Company'}` : 'Sort By'}
+                                    </Link>
+                                    <ul className="dropdown-menu dropdown-menu-end p-3">
+                                        <li>
+                                            <Link
+                                                to="#"
+                                                className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleSortChange('asc');
+                                                }}
+                                            >
+                                                Name A-Z
+                                            </Link>
+                                        </li>
+                                        <li>
+                                            <Link
+                                                to="#"
+                                                className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleSortChange('desc');
+                                                }}
+                                            >
+                                                Name Z-A
+                                            </Link>
+                                        </li>
+                                        <li>
+                                            <Link
+                                                to="#"
+                                                className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleSortChange('recent');
+                                                }}
                                             >
                                                 Recently Added
                                             </Link>
@@ -616,37 +831,45 @@ const ClientList = () => {
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
-                                                onClick={() => handleSort('name')}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleSortChange('oldest');
+                                                }}
                                             >
-                                                Ascending
+                                                Oldest First
                                             </Link>
                                         </li>
                                         <li>
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleSortChange('company');
+                                                }}
                                             >
-                                                Desending
-                                            </Link>
-                                        </li>
-                                        <li>
-                                            <Link
-                                                to="#"
-                                                className="dropdown-item rounded-1"
-                                            >
-                                                Last Month
-                                            </Link>
-                                        </li>
-                                        <li>
-                                            <Link
-                                                to="#"
-                                                className="dropdown-item rounded-1"
-                                            >
-                                                Last 7 Days
+                                                By Company
                                             </Link>
                                         </li>
                                     </ul>
                                 </div>
+                                
+                                {/* Clear Filters */}
+                                {(selectedStatus || selectedCompany || selectedSort || searchQuery) && (
+                                    <div className="me-3">
+                                        <Link
+                                            to="#"
+                                            className="btn btn-sm btn-outline-danger d-inline-flex align-items-center"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                handleClearFilters();
+                                            }}
+                                        >
+                                            <i className="ti ti-x me-1" />
+                                            Clear Filters
+                                        </Link>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="card-body p-0">
@@ -665,7 +888,25 @@ const ClientList = () => {
                                     </button>
                                 </div>
                             ) : (
-                                <Table dataSource={clients} columns={columns} Selection={true} />
+                                <>
+                                    {/* Filter Summary */}
+                                    <div className="px-3 py-2 border-bottom bg-light">
+                                        <small className="text-muted">
+                                            Showing {filteredClients.length} of {clients.length} clients
+                                            {(selectedStatus || selectedCompany || selectedSort || searchQuery) && 
+                                                <span className="ms-2">
+                                                    <i className="ti ti-filter me-1"></i>
+                                                    Filters applied:
+                                                    {selectedStatus && ` Status: ${selectedStatus}`}
+                                                    {selectedCompany && ` Company: ${selectedCompany}`}
+                                                    {selectedSort && ` Sort: ${selectedSort}`}
+                                                    {searchQuery && ` Search: "${searchQuery}"`}
+                                                </span>
+                                            }
+                                        </small>
+                                    </div>
+                                    <Table dataSource={filteredClients} columns={columns} Selection={true} />
+                                </>
                             )}
                         </div>
                     </div>
