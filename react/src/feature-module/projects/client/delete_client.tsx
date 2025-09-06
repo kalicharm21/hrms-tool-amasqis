@@ -40,7 +40,7 @@ const DeleteClient = () => {
     setLoading(true);
     try {
       console.log('Deleting client:', client._id);
-      socket.emit('client:delete', { clientId: client._id });
+      socket.emit('client:delete', client._id);
 
       // Listen for response
       socket.once('client:delete-response', (response: any) => {

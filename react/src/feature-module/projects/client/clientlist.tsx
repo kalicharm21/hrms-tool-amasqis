@@ -226,18 +226,36 @@ const ClientList = () => {
     // Handle filter changes
     const handleStatusFilter = (status: string) => {
         setFilters(prev => ({ ...prev, status }));
+        // Apply filters by fetching filtered data
+        if (socket) {
+            socket.emit('client:filter', { status, search: filters.search });
+        }
     };
 
     const handleSearch = (search: string) => {
         setFilters(prev => ({ ...prev, search }));
+        // Apply filters by fetching filtered data
+        if (socket) {
+            socket.emit('client:filter', { status: filters.status, search });
+        }
     };
 
     const handleSort = (sortBy: string) => {
+        const newSortOrder = filters.sortBy === sortBy && filters.sortOrder === 'desc' ? 'asc' : 'desc';
         setFilters(prev => ({ 
             ...prev, 
             sortBy,
-            sortOrder: prev.sortBy === sortBy && prev.sortOrder === 'desc' ? 'asc' : 'desc'
+            sortOrder: newSortOrder
         }));
+        // Apply sorting by fetching sorted data
+        if (socket) {
+            socket.emit('client:filter', { 
+                status: filters.status, 
+                search: filters.search,
+                sortBy,
+                sortOrder: newSortOrder
+            });
+        }
     };
 
     const columns = [
