@@ -128,7 +128,8 @@ const EditClient = () => {
     setLoading(true);
     try {
       console.log('Updating client:', formData);
-      socket.emit('client:update', { clientId: formData._id, updateData: formData });
+      // Backend expects the client data directly with _id field included
+      socket.emit('client:update', formData);
 
       // Listen for response
       socket.once('client:update-response', (response: any) => {
