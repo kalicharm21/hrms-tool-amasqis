@@ -1608,7 +1608,7 @@ export const publicRoutes = [
     roles: ["public"],
   },
   {
-    path: routes.clientdetils,
+    path: "/clients-details/:clientId",
     element: <ClientDetails />,
     route: Route,
     roles: ["public"],

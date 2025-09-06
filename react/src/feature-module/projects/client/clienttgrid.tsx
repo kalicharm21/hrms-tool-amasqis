@@ -776,7 +776,7 @@ const ClienttGrid = () => {
                                                 </div>
                                                 <div>
                                                     <Link
-                                                        to={all_routes.clientdetils}
+                                                        to={`/clients-details/${client._id}`}
                                                         className="avatar avatar-xl avatar-rounded online border p-1 border-primary rounded-circle"
                                                     >
                                                         <ImageWithBasePath
@@ -831,7 +831,7 @@ const ClienttGrid = () => {
                                             </div>
                                             <div className="text-center mb-3">
                                                 <h6 className="mb-1">
-                                                    <Link to={all_routes.clientdetils}>{client.name}</Link>
+                                                    <Link to={`/clients-details/${client._id}`}>{client.name}</Link>
                                                 </h6>
                                                 <span className={`badge fs-10 fw-medium ${
                                                     client.status === 'Active' ? 'bg-success-transparent text-success' : 'bg-danger-transparent text-danger'

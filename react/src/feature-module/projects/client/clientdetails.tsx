@@ -48,28 +48,42 @@ const ClientDetails = () => {
     // Fetch client details on component mount
     useEffect(() => {
         const fetchClientDetails = async () => {
+            console.log('ClientDetails: clientId from URL params:', clientId);
+            
             if (clientId) {
                 setLoadingClient(true);
                 try {
+                    console.log('ClientDetails: Fetching client with ID:', clientId);
                     const clientData = await getClientById(clientId);
+                    console.log('ClientDetails: Received client data:', clientData);
+                    
                     if (clientData) {
                         setClient(clientData);
+                        console.log('ClientDetails: Client set successfully');
                     } else {
+                        console.log('ClientDetails: No client data received');
                         message.error('Client not found');
                     }
                 } catch (error) {
-                    console.error('Error fetching client details:', error);
+                    console.error('ClientDetails: Error fetching client details:', error);
                     message.error('Failed to load client details');
                 } finally {
                     setLoadingClient(false);
                 }
             } else {
+                console.log('ClientDetails: No clientId in URL params');
                 // If no clientId in URL, try to get from localStorage or show error
                 const storedClientId = localStorage.getItem('selectedClientId');
+                console.log('ClientDetails: Stored client ID from localStorage:', storedClientId);
+                
                 if (storedClientId) {
-                    const clientData = await getClientById(storedClientId);
-                    if (clientData) {
-                        setClient(clientData);
+                    try {
+                        const clientData = await getClientById(storedClientId);
+                        if (clientData) {
+                            setClient(clientData);
+                        }
+                    } catch (error) {
+                        console.error('ClientDetails: Error fetching stored client:', error);
                     }
                 }
                 setLoadingClient(false);
@@ -108,6 +122,101 @@ const ClientDetails = () => {
         { value: "Inprogress", label: "Inprogress" },
     ];
 
+    // Show loading state
+    if (loadingClient) {
+        return (
+            <div className="page-wrapper">
+                <div className="content">
+                    <div className="row justify-content-between align-items-center mb-4">
+                        <div className="col-md-12">
+                            <div className="d-flex justify-content-between align-items-center">
+                                <h6 className="fw-medium d-inline-flex align-items-center mb-3 mb-sm-0">
+                                    <Link to={all_routes.clientlist}>
+                                        <i className="ti ti-arrow-left me-2" />
+                                        Clients
+                                    </Link>
+                                </h6>
+                                <div className="ms-2 head-icons">
+                                    <CollapseHeader />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="text-center p-5">
+                        <div className="spinner-border text-primary" role="status">
+                            <span className="sr-only">Loading client details...</span>
+                        </div>
+                        <p className="mt-3 text-muted">Loading client details...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Show error state
+    if (error) {
+        return (
+            <div className="page-wrapper">
+                <div className="content">
+                    <div className="row justify-content-between align-items-center mb-4">
+                        <div className="col-md-12">
+                            <div className="d-flex justify-content-between align-items-center">
+                                <h6 className="fw-medium d-inline-flex align-items-center mb-3 mb-sm-0">
+                                    <Link to={all_routes.clientlist}>
+                                        <i className="ti ti-arrow-left me-2" />
+                                        Clients
+                                    </Link>
+                                </h6>
+                                <div className="ms-2 head-icons">
+                                    <CollapseHeader />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="alert alert-danger m-3">
+                        <h6>Error loading client details</h6>
+                        <p className="mb-0">{error}</p>
+                        <button className="btn btn-primary mt-2" onClick={() => window.location.reload()}>
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Show not found state
+    if (!client) {
+        return (
+            <div className="page-wrapper">
+                <div className="content">
+                    <div className="row justify-content-between align-items-center mb-4">
+                        <div className="col-md-12">
+                            <div className="d-flex justify-content-between align-items-center">
+                                <h6 className="fw-medium d-inline-flex align-items-center mb-3 mb-sm-0">
+                                    <Link to={all_routes.clientlist}>
+                                        <i className="ti ti-arrow-left me-2" />
+                                        Clients
+                                    </Link>
+                                </h6>
+                                <div className="ms-2 head-icons">
+                                    <CollapseHeader />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="alert alert-warning m-3">
+                        <h6>Client not found</h6>
+                        <p className="mb-0">The requested client could not be found.</p>
+                        <Link to={all_routes.clientlist} className="btn btn-primary mt-2">
+                            Back to Clients
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <>
             {/* Page Wrapper */}
@@ -134,9 +243,9 @@ const ClientDetails = () => {
                                 <div className="card-body p-0">
                                     <span className="avatar avatar-xl avatar-rounded border border-2 border-white m-auto d-flex mb-2">
                                         <ImageWithBasePath
-                                            src="assets/img/users/user-13.jpg"
+                                            src={client?.logo || "assets/img/users/user-13.jpg"}
                                             className="w-auto h-auto"
-                                            alt="Img"
+                                            alt={client?.name || "Client"}
                                         />
                                     </span>
                                     <div className="text-center px-3 pb-3 border-bottom">
@@ -158,14 +267,14 @@ const ClientDetails = () => {
                                                     <i className="ti ti-id me-2" />
                                                     Client ID
                                                 </span>
-                                                <p className="text-dark">CLT-0024</p>
+                                                <p className="text-dark">{client?._id?.slice(-8).toUpperCase() || 'Loading...'}</p>
                                             </div>
                                             <div className="d-flex align-items-center justify-content-between">
                                                 <span className="d-inline-flex align-items-center">
                                                     <i className="ti ti-calendar-check me-2" />
                                                     Added on
                                                 </span>
-                                                <p className="text-dark">1st Jan 2023</p>
+                                                <p className="text-dark">{client?.createdAt ? new Date(client.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Loading...'}</p>
                                             </div>
                                             <div className="row gx-2 mt-3">
                                                 <div className="col-6">
@@ -207,7 +316,7 @@ const ClientDetails = () => {
                                                 <i className="ti ti-phone me-2" />
                                                 Phone
                                             </span>
-                                            <p className="text-dark">(163) 2459 315</p>
+                                            <p className="text-dark">{client?.phone || 'Not provided'}</p>
                                         </div>
                                         <div className="d-flex align-items-center justify-content-between mb-2">
                                             <span className="d-inline-flex align-items-center">
@@ -218,7 +327,7 @@ const ClientDetails = () => {
                                                 to="to"
                                                 className="text-info d-inline-flex align-items-center"
                                             >
-                                                perralt12@example.com
+{client?.email || 'Not provided'}
                                                 <i className="ti ti-copy text-dark ms-2" />
                                             </Link>
                                         </div>
@@ -228,7 +337,7 @@ const ClientDetails = () => {
                                                 Address
                                             </span>
                                             <p className="text-dark text-end">
-                                                1861 Bayonne Ave, <br /> Manchester, NJ, 08759
+                                                {client?.address || 'Not provided'}
                                             </p>
                                         </div>
                                     </div>

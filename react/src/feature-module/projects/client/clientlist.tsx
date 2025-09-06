@@ -374,7 +374,7 @@ const ClientList = () => {
             title: "Client ID",
             dataIndex: "_id",
             render: (text: string, record: any) => (
-                <Link to={all_routes.clientdetils}>
+                <Link to={`/clients-details/${record._id}`}>
                     {record._id.slice(-8).toUpperCase()}
                 </Link>
             ),
@@ -386,7 +386,7 @@ const ClientList = () => {
             render: (text: string, record: any) => (
                 <div className="d-flex align-items-center file-name-icon">
                     <Link
-                        to={all_routes.clientdetils}
+                        to={`/clients-details/${record._id}`}
                         className="avatar avatar-md border avatar-rounded"
                     >
                         <ImageWithBasePath 
@@ -397,7 +397,7 @@ const ClientList = () => {
                     </Link>
                     <div className="ms-2">
                         <h6 className="fw-medium">
-                            <Link to={all_routes.clientdetils}>{record.name}</Link>
+                            <Link to={`/clients-details/${record._id}`}>{record.name}</Link>
                         </h6>
                         <span className="fs-12 fw-normal">{record.company}</span>
                     </div>
