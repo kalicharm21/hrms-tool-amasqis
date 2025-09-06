@@ -137,14 +137,15 @@ const EditClient = () => {
           console.log('Client updated successfully:', response.data);
           message.success('Client updated successfully!');
           
-          // Close modal
-          const modal = document.getElementById('edit_client');
-          if (modal) {
-            const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modal);
-            if (bootstrapModal) {
-              bootstrapModal.hide();
-            }
-          }
+          // Show success message briefly, then close modal
+          setTimeout(() => {
+            closeModal();
+            
+            // Reset errors after modal closes
+            setTimeout(() => {
+              setErrors({});
+            }, 300);
+          }, 1500);
         } else {
           console.error('Failed to update client:', response.error);
           message.error(`Failed to update client: ${response.error}`);
@@ -155,6 +156,50 @@ const EditClient = () => {
       console.error('Error updating client:', error);
       message.error('An error occurred while updating the client');
       setLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    const modal = document.getElementById('edit_client');
+    if (!modal) return;
+
+    try {
+      // Method 1: Try Bootstrap Modal API
+      if ((window as any).bootstrap && (window as any).bootstrap.Modal) {
+        const bootstrapModal = (window as any).bootstrap.Modal.getInstance(modal);
+        if (bootstrapModal) {
+          bootstrapModal.hide();
+          return;
+        }
+      }
+
+      // Method 2: Try jQuery Bootstrap Modal
+      if ((window as any).$ && (window as any).$.fn && (window as any).$.fn.modal) {
+        (window as any).$('#edit_client').modal('hide');
+        return;
+      }
+
+      // Method 3: Manual modal closing (fallback)
+      modal.style.display = 'none';
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+      modal.removeAttribute('aria-modal');
+      
+      // Remove backdrop
+      const backdrops = document.querySelectorAll('.modal-backdrop');
+      backdrops.forEach(backdrop => backdrop.remove());
+      
+      // Remove modal-open class from body
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      
+    } catch (error) {
+      console.error('Error closing edit client modal:', error);
+      
+      // Final fallback: just hide the modal
+      modal.style.display = 'none';
+      modal.classList.remove('show');
     }
   };
 
@@ -377,7 +422,7 @@ const EditClient = () => {
                   <button
                     type="button"
                     className="btn btn-outline-light border me-2"
-                    data-bs-dismiss="modal"
+                    onClick={closeModal}
                   >
                     Cancel
                   </button>

@@ -123,14 +123,16 @@ const AddClient = () => {
           });
           setErrors({});
           
-          // Close modal
-          const modal = document.getElementById('add_client');
-          if (modal) {
-            const bootstrapModal = (window as any).bootstrap?.Modal?.getInstance(modal);
-            if (bootstrapModal) {
-              bootstrapModal.hide();
-            }
-          }
+          // Show success message briefly, then close modal
+          setTimeout(() => {
+            closeModal();
+            resetForm();
+            
+            // Reset states after modal closes
+            setTimeout(() => {
+              setLoading(false);
+            }, 300);
+          }, 1500);
         } else {
           console.error('Failed to create client:', response.error);
           message.error(`Failed to create client: ${response.error}`);
@@ -142,6 +144,65 @@ const AddClient = () => {
       message.error('An error occurred while creating the client');
       setLoading(false);
     }
+  };
+
+  const closeModal = () => {
+    const modal = document.getElementById('add_client');
+    if (!modal) return;
+
+    try {
+      // Method 1: Try Bootstrap Modal API
+      if ((window as any).bootstrap && (window as any).bootstrap.Modal) {
+        const bootstrapModal = (window as any).bootstrap.Modal.getInstance(modal);
+        if (bootstrapModal) {
+          bootstrapModal.hide();
+          return;
+        }
+      }
+
+      // Method 2: Try jQuery Bootstrap Modal
+      if ((window as any).$ && (window as any).$.fn && (window as any).$.fn.modal) {
+        (window as any).$('#add_client').modal('hide');
+        return;
+      }
+
+      // Method 3: Manual modal closing (fallback)
+      modal.style.display = 'none';
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+      modal.removeAttribute('aria-modal');
+      
+      // Remove backdrop
+      const backdrops = document.querySelectorAll('.modal-backdrop');
+      backdrops.forEach(backdrop => backdrop.remove());
+      
+      // Remove modal-open class from body
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      
+    } catch (error) {
+      console.error('Error closing add client modal:', error);
+      
+      // Final fallback: just hide the modal
+      modal.style.display = 'none';
+      modal.classList.remove('show');
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      company: '',
+      email: '',
+      phone: '',
+      address: '',
+      logo: '',
+      status: 'Active',
+      contractValue: 0,
+      projects: 0
+    });
+    setErrors({});
   };
 
   return (
@@ -354,7 +415,10 @@ const AddClient = () => {
                   <button
                     type="button"
                     className="btn btn-outline-light border me-2"
-                    data-bs-dismiss="modal"
+                    onClick={() => {
+                      closeModal();
+                      resetForm();
+                    }}
                   >
                     Cancel
                   </button>
