@@ -171,71 +171,6 @@ export const useClients = () => {
     });
   }, [socket]);
 
-  // Export PDF
-  const exportPDF = useCallback(async (): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
-
-    setExporting(true);
-    return new Promise((resolve) => {
-      console.log('[useClients] Exporting clients as PDF');
-      socket.emit('client:export-pdf');
-
-      const handleResponse = (response: any) => {
-        console.log('[useClients] PDF export response received:', response);
-        setExporting(false);
-        if (response.done) {
-          console.log('[useClients] PDF exported successfully:', response.data);
-          message.success('PDF exported successfully!');
-          // Open the PDF in a new tab
-          window.open(response.data.pdfUrl, '_blank');
-          resolve(true);
-        } else {
-          console.error('[useClients] Failed to export PDF:', response.error);
-          message.error(`Failed to export PDF: ${response.error}`);
-          resolve(false);
-        }
-        socket.off('client:export-pdf-response', handleResponse);
-      };
-
-      socket.on('client:export-pdf-response', handleResponse);
-    });
-  }, [socket]);
-
-  // Export Excel
-  const exportExcel = useCallback(async (): Promise<boolean> => {
-    if (!socket) {
-      message.error('Socket connection not available');
-      return false;
-    }
-
-    setExporting(true);
-    return new Promise((resolve) => {
-      console.log('[useClients] Exporting clients as Excel');
-      socket.emit('client:export-excel');
-
-      const handleResponse = (response: any) => {
-        console.log('[useClients] Excel export response received:', response);
-        setExporting(false);
-        if (response.done) {
-          console.log('[useClients] Excel exported successfully:', response.data);
-          message.success('Excel exported successfully!');
-          // Open the Excel file in a new tab
-          window.open(response.data.excelUrl, '_blank');
-          resolve(true);
-        } else {
-          console.error('[useClients] Failed to export Excel:', response.error);
-          message.error(`Failed to export Excel: ${response.error}`);
-          resolve(false);
-        }
-        socket.off('client:export-excel-response', handleResponse);
-      };
-
-      socket.on('client:export-excel-response', handleResponse);
-    });
-  }, [socket]);
 
   // Filter clients
   const filterClients = useCallback((filters: ClientFilters) => {
@@ -298,6 +233,82 @@ export const useClients = () => {
       socket.off('client:client-deleted', handleClientDeleted);
     };
   }, [socket, fetchAllData]);
+
+  // Export clients as PDF
+  const exportPDF = useCallback(async () => {
+    if (!socket) {
+      message.error("Socket connection not available");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      console.log("Starting PDF export...");
+      socket.emit("client:export-pdf");
+
+      const handlePDFResponse = (response: any) => {
+        if (response.done) {
+          console.log("PDF generated successfully:", response.data.pdfUrl);
+          const link = document.createElement('a');
+          link.href = response.data.pdfUrl;
+          link.download = `clients_${Date.now()}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          message.success("PDF exported successfully!");
+        } else {
+          console.error("PDF export failed:", response.error);
+          message.error(`PDF export failed: ${response.error}`);
+        }
+        setExporting(false);
+        socket.off("client:export-pdf-response", handlePDFResponse);
+      };
+
+      socket.on("client:export-pdf-response", handlePDFResponse);
+    } catch (error) {
+      console.error("Error exporting PDF:", error);
+      message.error("Failed to export PDF");
+      setExporting(false);
+    }
+  }, [socket]);
+
+  // Export clients as Excel
+  const exportExcel = useCallback(async () => {
+    if (!socket) {
+      message.error("Socket connection not available");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      console.log("Starting Excel export...");
+      socket.emit("client:export-excel");
+
+      const handleExcelResponse = (response: any) => {
+        if (response.done) {
+          console.log("Excel generated successfully:", response.data.excelUrl);
+          const link = document.createElement('a');
+          link.href = response.data.excelUrl;
+          link.download = `clients_${Date.now()}.xlsx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          message.success("Excel exported successfully!");
+        } else {
+          console.error("Excel export failed:", response.error);
+          message.error(`Excel export failed: ${response.error}`);
+        }
+        setExporting(false);
+        socket.off("client:export-excel-response", handleExcelResponse);
+      };
+
+      socket.on("client:export-excel-response", handleExcelResponse);
+    } catch (error) {
+      console.error("Error exporting Excel:", error);
+      message.error("Failed to export Excel");
+      setExporting(false);
+    }
+  }, [socket]);
 
   return {
     clients,

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { all_routes } from '../../router/all_routes';
 import { useSocket } from '../../../SocketContext';
 import { Socket } from 'socket.io-client';
+import { useClients } from '../../../hooks/useClients';
 import ImageWithBasePath from '../../../core/common/imageWithBasePath';
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
 import AddClient from './add_client';
@@ -36,106 +37,35 @@ const ClienttGrid = () => {
     const socket = useSocket() as Socket | null;
     
     // State management
-    const [clients, setClients] = useState<Client[]>([]);
+    const { clients, stats, fetchAllData, loading, error, exportPDF, exportExcel, exporting } = useClients();
     const [filteredClients, setFilteredClients] = useState<Client[]>([]);
-    const [stats, setStats] = useState<ClientStats>({
-        totalClients: 0,
-        activeClients: 0,
-        inactiveClients: 0,
-        newClients: 0
-    });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [exporting, setExporting] = useState(false);
     const [selectedClient, setSelectedClient] = useState<any>(null);
+    
+    // Export handlers
+    const handleExportPDF = async () => {
+        await exportPDF();
+    };
+
+    const handleExportExcel = async () => {
+        await exportExcel();
+    };
     
     // Filter states (Activity-style filtering)
     const [selectedStatus, setSelectedStatus] = useState<string>('');
     const [selectedCompany, setSelectedCompany] = useState<string>('');
     const [selectedSort, setSelectedSort] = useState<string>('');
-    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState<string>(''); // Changed from '' to ''
     
     // Extract unique companies for filter
     const [companies, setCompanies] = useState<string[]>([]);
     
-    // Fetch clients data
-    const fetchClients = useCallback(() => {
-        if (!socket) return;
-        setLoading(true);
-        setError(null);
-        console.log("[ClientGrid] Fetching all clients from backend");
-        socket.emit('client:getAllData', {});
-    }, [socket]);
     
-    // Load data on component mount
+    // Initialize data fetch using the hook
     useEffect(() => {
-        if (!socket) return;
-        
-        fetchClients();
-        
-        const clientHandler = (res: any) => {
-            console.log('Client getAllData response:', res);
-            if (res.done) {
-                console.log('Raw clients from backend:', res.data.clients);
-                const clientsData = res.data.clients || [];
-                setClients(clientsData);
-                setStats(res.data.stats || {
-                    totalClients: 0,
-                    activeClients: 0,
-                    inactiveClients: 0,
-                    newClients: 0
-                });
-                
-                // Extract unique companies for filter
-                const uniqueCompanies = Array.from(new Set(clientsData.map((client: Client) => client.company).filter(Boolean))) as string[];
-                setCompanies(uniqueCompanies);
-                
-                setError(null);
-                console.log(`Loaded ${clientsData.length} clients`);
-            } else {
-                setError(res.error || "Failed to fetch clients");
-                console.error('Failed to fetch clients:', res.error);
-            }
-            setLoading(false);
-        };
-
-        // Listen for real-time updates
-        const handleClientCreated = (response: any) => {
-            if (response.done && response.data) {
-                console.log('Client created:', response.data);
-                fetchClients();
-                message.success('Client created successfully!');
-            }
-        };
-
-        const handleClientUpdated = (response: any) => {
-            if (response.done && response.data) {
-                console.log('Client updated:', response.data);
-                fetchClients();
-                message.success('Client updated successfully!');
-            }
-        };
-
-        const handleClientDeleted = (response: any) => {
-            if (response.done && response.data) {
-                console.log('Client deleted:', response.data);
-                fetchClients();
-                message.success('Client deleted successfully!');
-            }
-        };
-
-        socket.on("client:getAllData-response", clientHandler);
-        socket.on('client:client-created', handleClientCreated);
-        socket.on('client:client-updated', handleClientUpdated);
-        socket.on('client:client-deleted', handleClientDeleted);
-
-        return () => {
-            socket.off("client:getAllData-response", clientHandler);
-            socket.off('client:client-created', handleClientCreated);
-            socket.off('client:client-updated', handleClientUpdated);
-            socket.off('client:client-deleted', handleClientDeleted);
-        };
-    }, [socket, fetchClients]);
+        console.log('ClientGrid component mounted');
+        fetchAllData();
+    }, [fetchAllData]);
+    
     
     // Apply filters whenever clients or filter states change (Activity-style filtering)
     useEffect(() => {
@@ -254,80 +184,6 @@ const ClienttGrid = () => {
         );
     };
 
-    // Export functions
-    const handleExportPDF = useCallback(async () => {
-        if (!socket) {
-            message.error("Socket connection not available");
-            return;
-        }
-
-        setExporting(true);
-        try {
-            console.log("Starting PDF export...");
-            socket.emit("client/export-pdf");
-
-            const handlePDFResponse = (response: any) => {
-                if (response.done) {
-                    console.log("PDF generated successfully:", response.data.pdfUrl);
-                    const link = document.createElement('a');
-                    link.href = response.data.pdfUrl;
-                    link.download = `clients_${Date.now()}.pdf`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    message.success("PDF exported successfully!");
-                } else {
-                    console.error("PDF export failed:", response.error);
-                    message.error(`PDF export failed: ${response.error}`);
-                }
-                setExporting(false);
-                socket.off("client/export-pdf-response", handlePDFResponse);
-            };
-
-            socket.on("client/export-pdf-response", handlePDFResponse);
-        } catch (error) {
-            console.error("Error exporting PDF:", error);
-            message.error("Failed to export PDF");
-            setExporting(false);
-        }
-    }, [socket]);
-
-    const handleExportExcel = useCallback(async () => {
-        if (!socket) {
-            message.error("Socket connection not available");
-            return;
-        }
-
-        setExporting(true);
-        try {
-            console.log("Starting Excel export...");
-            socket.emit("client/export-excel");
-
-            const handleExcelResponse = (response: any) => {
-                if (response.done) {
-                    console.log("Excel generated successfully:", response.data.excelUrl);
-                    const link = document.createElement('a');
-                    link.href = response.data.excelUrl;
-                    link.download = `clients_${Date.now()}.xlsx`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    message.success("Excel exported successfully!");
-                } else {
-                    console.error("Excel export failed:", response.error);
-                    message.error(`Excel export failed: ${response.error}`);
-                }
-                setExporting(false);
-                socket.off("client/export-excel-response", handleExcelResponse);
-            };
-
-            socket.on("client/export-excel-response", handleExcelResponse);
-        } catch (error) {
-            console.error("Error exporting Excel:", error);
-            message.error("Failed to export Excel");
-            setExporting(false);
-        }
-    }, [socket]);
 
 
     return (
@@ -761,7 +617,7 @@ const ClienttGrid = () => {
                             <div className="alert alert-danger m-3">
                                 <h6>Error loading clients</h6>
                                 <p className="mb-0">{error}</p>
-                                <button className="btn btn-primary mt-2" onClick={fetchClients}>
+                                <button className="btn btn-primary mt-2" onClick={() => fetchAllData()}>
                                     Retry
                                 </button>
                             </div>
