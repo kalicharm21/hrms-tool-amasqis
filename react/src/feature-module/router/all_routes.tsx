@@ -309,7 +309,7 @@ export const all_routes = {
 
   clientgrid: "/clients-grid",
   clientlist: "/clients",
-  clientdetils: "/clients-details",
+  clientdetils: "/clients-details/:clientId",
   project: "/projects-grid",
   projectlist: "/projects",
   projectdetails: "/projects-details",
