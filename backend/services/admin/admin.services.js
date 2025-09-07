@@ -1035,8 +1035,20 @@ export const getTodos = async (
 ) => {
   try {
     const collections = getTenantCollections(companyId);
+    // Build the base query - for admin users, show all todos in the company
+    let query = {
+      isDeleted: { $ne: true }
+    };
+    
+    // Only filter by userId for non-admin users (if needed in the future)
+    // For now, admin users see all todos in the company
 
-    // Calculate date ranges for filtering
+    // Add priority filter if not "all"
+    if (filter && filter !== "all" && ["high", "medium", "low"].includes(filter.toLowerCase())) {
+      query.priority = { $regex: new RegExp(`^${filter}$`, 'i') };
+    }
+
+    // Calculate date ranges for filtering (only for date-based filters)
     const now = new Date();
     let dateFilter = {};
 
@@ -1070,17 +1082,15 @@ export const getTodos = async (
           createdAt: { $gte: monthStart, $lte: monthEnd },
         };
         break;
-      default:
-        // No date filter for 'all'
-        break;
+    }
+
+    // Add date filter to query if applicable
+    if (Object.keys(dateFilter).length > 0) {
+      query = { ...query, ...dateFilter };
     }
 
     const todos = await collections.todos
-      .find({
-        userId,
-        isDeleted: { $ne: true },
-        ...dateFilter,
-      })
+      .find(query)
       .sort({ createdAt: -1 })
       .toArray();
 
