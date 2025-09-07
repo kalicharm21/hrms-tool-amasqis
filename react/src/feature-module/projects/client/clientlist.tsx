@@ -249,6 +249,7 @@ const ClientList = () => {
                             src={record.logo || `assets/img/users/user-01.jpg`} 
                             className="img-fluid" 
                             alt="img" 
+                            isLink={record.logo ? record.logo.startsWith('https://') : false}
                         />
                     </Link>
                     <div className="ms-2">

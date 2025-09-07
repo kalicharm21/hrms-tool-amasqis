@@ -8,6 +8,7 @@ import CommonTextEditor from '../../../core/common/textEditor'
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header'
 import { useClients } from '../../../hooks/useClients'
 import { message } from 'antd'
+import EditClient from './edit_client'
 
 type PasswordField = "password" | "confirmPassword";
 
@@ -32,6 +33,7 @@ const ClientDetails = () => {
     
     const [client, setClient] = useState<Client | null>(null);
     const [loadingClient, setLoadingClient] = useState(true);
+    const [selectedClient, setSelectedClient] = useState<any>(null);
 
     const [passwordVisibility, setPasswordVisibility] = useState({
         password: false,
@@ -43,6 +45,23 @@ const ClientDetails = () => {
             ...prevState,
             [field]: !prevState[field],
         }));
+    };
+    
+    // Handle edit client
+    const handleEditClient = () => {
+        if (client) {
+            setSelectedClient(client);
+            // Store client data for the edit modal
+            (window as any).currentEditClient = client;
+            console.log('[ClientDetails] Dispatching edit event with client:', client);
+            // Dispatch custom event that edit_client.tsx is listening for
+            window.dispatchEvent(
+                new CustomEvent('edit-client', { detail: { client } })
+            );
+        } else {
+            console.log('[ClientDetails] No client data available for edit');
+            message.error('Client data not loaded yet. Please try again.');
+        }
     };
     
     // Fetch client details on component mount
@@ -246,6 +265,7 @@ const ClientDetails = () => {
                                             src={client?.logo || "assets/img/users/user-13.jpg"}
                                             className="w-auto h-auto"
                                             alt={client?.name || "Client"}
+                                            isLink={client?.logo ? client.logo.startsWith('https://') : false}
                                         />
                                     </span>
                                     <div className="text-center px-3 pb-3 border-bottom">
@@ -303,10 +323,14 @@ const ClientDetails = () => {
                                         <div className="d-flex align-items-center justify-content-between mb-2">
                                             <h6>Basic information</h6>
                                             <Link
-                                                to="to"
+                                                to="#"
                                                 className="btn btn-icon btn-sm"
                                                 data-bs-toggle="modal" data-inert={true}
                                                 data-bs-target="#edit_client"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleEditClient();
+                                                }}
                                             >
                                                 <i className="ti ti-edit" />
                                             </Link>
@@ -5272,6 +5296,9 @@ const ClientDetails = () => {
                 </div>
             </div>
             {/* /Add Note */}
+            
+            {/* Modal Components */}
+            <EditClient />
         </>
 
     )
