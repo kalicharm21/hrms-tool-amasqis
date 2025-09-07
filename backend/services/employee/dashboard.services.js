@@ -58,7 +58,6 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
   }
 };
 
-
 export const getAttendanceStats = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
@@ -131,7 +130,6 @@ export const getAttendanceStats = async (companyId, employeeId, year) => {
 
 export const getLeaveStats = async (companyId, employeeId, year) => {
   try {
-    console.log("****HEllo*****2*");
 
     const collections = getTenantCollections(companyId);
 
