@@ -143,20 +143,25 @@ const EditClient = () => {
     const handleEditClient = (event: any) => {
       const client = event.detail.client;
       console.log('[EditClient] Received client data:', client);
-      setFormData({
-        _id: client._id || '',
-        name: client.name || '',
-        company: client.company || '',
-        email: client.email || '',
-        phone: client.phone || '',
-        address: client.address || '',
-        logo: client.logo || '',
-        status: client.status || 'Active',
-        contractValue: client.contractValue || 0,
-        projects: client.projects || 0
-      });
-      setLogo(client.logo || null);
-      setErrors({});
+      
+      // Add a small delay to ensure modal is ready
+      setTimeout(() => {
+        setFormData({
+          _id: client._id || '',
+          name: client.name || '',
+          company: client.company || '',
+          email: client.email || '',
+          phone: client.phone || '',
+          address: client.address || '',
+          logo: client.logo || '',
+          status: client.status || 'Active',
+          contractValue: client.contractValue || 0,
+          projects: client.projects || 0
+        });
+        setLogo(client.logo || null);
+        setErrors({});
+        console.log('[EditClient] Form data updated with client data');
+      }, 150);
     };
 
     window.addEventListener('edit-client', handleEditClient);

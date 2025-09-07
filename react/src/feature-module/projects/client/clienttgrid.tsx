@@ -639,6 +639,7 @@ const ClienttGrid = () => {
                                                             src={client.logo || "assets/img/users/user-39.jpg"}
                                                             className="img-fluid h-auto w-auto"
                                                             alt="img"
+                                                            isLink={client.logo ? client.logo.startsWith('https://') : false}
                                                         />
                                                     </Link>
                                                 </div>
