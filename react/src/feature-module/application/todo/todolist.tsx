@@ -7,6 +7,7 @@ import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import CollapseHeader from "../../../core/common/collapse-header/collapse-header";
 import { useSocket } from "../../../SocketContext";
+import { Socket } from "socket.io-client";
 
 const { RangePicker } = DatePicker;
 
@@ -27,8 +28,7 @@ interface Todo {
 
 
 const TodoList = () => {
-  const socket = useSocket();
-  const [isTodo, setIsTodo] = useState([false, false, false]);
+  const socket = useSocket() as Socket | null;
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("all");
@@ -43,13 +43,86 @@ const TodoList = () => {
   const [customDateRange, setCustomDateRange] = useState<{start: string, end: string} | null>(null);
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [selectedTodoToDelete, setSelectedTodoToDelete] = useState<string | null>(null);
+  const [selectedTodoToEdit, setSelectedTodoToEdit] = useState<Todo | null>(null);
+  const [selectedTodoToView, setSelectedTodoToView] = useState<Todo | null>(null);
 
-  const toggleTodo = (index: number) => {
-    setIsTodo((prevIsTodo) => {
-      const newIsTodo = [...prevIsTodo];
-      newIsTodo[index] = !newIsTodo[index];
-      return newIsTodo;
-    });
+  const toggleTodo = async (todoId: string, currentCompleted: boolean) => {
+    if (!socket) {
+      console.error('Socket not available');
+      return;
+    }
+
+    try {
+      const updateData = {
+        id: todoId,
+        completed: !currentCompleted
+      };
+
+      console.log('Updating todo completion status:', updateData);
+
+      const handleResponse = (response: any) => {
+        console.log('Update todo response received:', response);
+        if (response.done) {
+          console.log('Todo completion status updated successfully');
+          // The todos will be updated via the broadcast from the backend
+        } else {
+          console.error('Failed to update todo:', response.error);
+          // Revert the change in UI if update failed
+          setTodos(prevTodos => 
+            prevTodos.map(todo => 
+              todo._id === todoId 
+                ? { ...todo, completed: currentCompleted } // Revert to original state
+                : todo
+            )
+          );
+        }
+        // Remove the specific listener after handling the response
+        if (socket) {
+          socket.off("admin/dashboard/update-todo-response", handleResponse);
+        }
+      };
+
+      // Optimistically update the UI
+      setTodos(prevTodos => 
+        prevTodos.map(todo => 
+          todo._id === todoId 
+            ? { ...todo, completed: !currentCompleted }
+            : todo
+        )
+      );
+
+      if (socket) {
+        socket.on("admin/dashboard/update-todo-response", handleResponse);
+        socket.emit("admin/dashboard/update-todo", updateData);
+      }
+
+      // Add timeout to prevent infinite loading
+      setTimeout(() => {
+        console.error("Update todo request timed out");
+        if (socket) {
+          socket.off("admin/dashboard/update-todo-response", handleResponse);
+        }
+        // Revert the change if timeout
+        setTodos(prevTodos => 
+          prevTodos.map(todo => 
+            todo._id === todoId 
+              ? { ...todo, completed: currentCompleted }
+              : todo
+          )
+        );
+      }, 10000); // 10 second timeout
+
+    } catch (error) {
+      console.error('Error updating todo completion status:', error);
+      // Revert the change in UI if error occurred
+      setTodos(prevTodos => 
+        prevTodos.map(todo => 
+          todo._id === todoId 
+            ? { ...todo, completed: currentCompleted }
+            : todo
+        )
+      );
+    }
   };
 
   // Handle tag filter change
@@ -128,6 +201,25 @@ const TodoList = () => {
     const confirmed = window.confirm("Are you sure you want to delete this todo? This action cannot be undone.");
     if (confirmed) {
       handleDeleteTodo(todoId);
+    }
+  };
+
+  // Handle edit button click
+  const handleEditClick = (todo: Todo) => {
+    setSelectedTodoToEdit(todo);
+    console.log('Edit todo clicked:', todo);
+  };
+
+  // Handle view button click
+  const handleViewClick = (todo: Todo) => {
+    setSelectedTodoToView(todo);
+    console.log('View todo clicked:', todo);
+  };
+
+  // Handle todo refresh
+  const handleTodoRefresh = () => {
+    if (socket) {
+      socket.emit("admin/dashboard/get-todos", { filter: activeFilter });
     }
   };
 
@@ -432,7 +524,7 @@ const TodoList = () => {
                   <Link
                     to="#"
                     className="btn btn-primary d-flex align-items-center"
-                    data-bs-toggle="modal" data-inert={true}
+                    data-bs-toggle="modal"
                     data-bs-target="#add_todo"
                     title="Create a new todo task"
                   >
@@ -881,7 +973,7 @@ const TodoList = () => {
                                       className="form-check-input" 
                                       type="checkbox" 
                                       checked={todo.completed}
-                                      onChange={() => toggleTodo(index)}
+                                      onChange={() => toggleTodo(todo._id, todo.completed)}
                                     />
                             </div>
                             <span className="mx-2 d-flex align-items-center rating-select">
@@ -944,8 +1036,20 @@ const TodoList = () => {
                             <Link
                               to="#"
                               className="btn btn-sm btn-icon"
-                              data-bs-toggle="modal" data-inert={true}
-                              data-bs-target="#edit_todo"
+                              data-bs-toggle="modal"
+                              data-bs-target="#view-note-units"
+                              onClick={() => handleViewClick(todo)}
+                              title="View todo"
+                            >
+                              <i className="ti ti-eye" />
+                            </Link>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                              data-bs-toggle="modal"
+                              data-bs-target="#edit-note-units"
+                              onClick={() => handleEditClick(todo)}
+                              title="Edit todo"
                             >
                               <i className="ti ti-edit" />
                             </Link>
@@ -984,8 +1088,12 @@ const TodoList = () => {
       </>
 
       <TodoModal 
+        onTodoAdded={handleTodoRefresh}
         selectedTodoToDelete={selectedTodoToDelete}
         onDeleteTodo={handleDeleteTodo}
+        selectedTodoToEdit={selectedTodoToEdit}
+        onTodoUpdated={handleTodoRefresh}
+        selectedTodoToView={selectedTodoToView}
       />
     </>
   );
