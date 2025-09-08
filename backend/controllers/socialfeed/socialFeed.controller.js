@@ -1,6 +1,8 @@
 import { SocialFeedService } from '../../services/socialfeed/socialFeed.services.js';
 import { clerkClient, verifyToken } from '@clerk/express';
 import dotenv from 'dotenv';
+import { createHttpErrorResponse, createHttpSuccessResponse } from './response.helpers.js';
+import { validatePostData, validateCommentData, validateReplyData, validatePostId, validateCommentId, validatePagination } from './validation.helpers.js';
 
 dotenv.config();
 
@@ -126,528 +128,281 @@ export const socialFeedController = {
 
   createPost: async (req, res) => {
     try {
-      const userId = req.user.sub;
-      const { companyId } = req.user.publicMetadata || {};
-      const { content, images, tags, location, isPublic = true } = req.body;
-
-      if (!content || !content.trim()) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post content is required'
-        });
-      }
-
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const validation = validatePostData(req.body);
+      if (!validation.isValid) {
+        return createHttpErrorResponse(res, 400, validation.errors[0]);
       }
 
       const postData = {
-        userId,
-        companyId,
-        content: content.trim(),
-        images: images || [],
-        tags: tags || [],
-        location: location || null,
-        isPublic
+        userId: req.user.sub,
+        companyId: req.companyId,
+        content: req.body.content.trim(),
+        images: req.body.images || [],
+        tags: req.body.tags || [],
+        location: req.body.location || null,
+        isPublic: req.body.isPublic ?? true
       };
 
-      const newPost = await SocialFeedService.createPost(companyId, postData);
-
-      res.status(201).json({
-        done: true,
-        data: newPost,
-        message: 'Post created successfully'
-      });
+      const newPost = await SocialFeedService.createPost(req.companyId, postData);
+      return createHttpSuccessResponse(res, newPost, 'Post created successfully', 201);
     } catch (error) {
       console.error('Error creating post:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to create post'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to create post');
     }
   },
 
   updatePost: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId } = req.params;
-      const userId = req.user.sub;
-      const { content, images, tags, location, isPublic } = req.body;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
-      }
-
-      if (!content || !content.trim()) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post content is required'
-        });
+      const validation = validatePostData(req.body);
+      if (!validation.isValid) {
+        return createHttpErrorResponse(res, 400, validation.errors[0]);
       }
 
       const updateData = {
-        content: content.trim(),
-        images: images || [],
-        tags: tags || [],
-        location: location || null,
-        isPublic,
+        content: req.body.content.trim(),
+        images: req.body.images || [],
+        tags: req.body.tags || [],
+        location: req.body.location || null,
+        isPublic: req.body.isPublic,
         updatedAt: new Date()
       };
 
-      const updatedPost = await SocialFeedService.updatePost(companyId, postId, userId, updateData);
-
-      res.json({
-        done: true,
-        data: updatedPost,
-        message: 'Post updated successfully'
-      });
+      const updatedPost = await SocialFeedService.updatePost(req.companyId, req.params.postId, req.user.sub, updateData);
+      return createHttpSuccessResponse(res, updatedPost, 'Post updated successfully');
     } catch (error) {
       console.error('Error updating post:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to update post'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to update post');
     }
   },
 
   deletePost: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId } = req.params;
-      const userId = req.user.sub;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
-      }
-
-      const result = await SocialFeedService.deletePost(companyId, postId, userId);
-
-      res.json({
-        done: true,
-        message: result.message
-      });
+      const result = await SocialFeedService.deletePost(req.companyId, req.params.postId, req.user.sub);
+      return createHttpSuccessResponse(res, null, result.message);
     } catch (error) {
       console.error('Error deleting post:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to delete post'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to delete post');
     }
   },
 
   toggleLike: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId } = req.params;
-      const userId = req.user.sub;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
-      }
-
-      const updatedPost = await SocialFeedService.toggleLike(companyId, postId, userId);
-
-      res.json({
-        done: true,
-        data: updatedPost,
-        message: 'Like updated successfully'
-      });
+      const updatedPost = await SocialFeedService.toggleLike(req.companyId, req.params.postId, req.user.sub);
+      return createHttpSuccessResponse(res, updatedPost, 'Like updated successfully');
     } catch (error) {
       console.error('Error toggling like:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to toggle like'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to toggle like');
     }
   },
 
   addComment: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId } = req.params;
-      const userId = req.user.sub;
-      const { content } = req.body;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const validation = validateCommentData(req.body);
+      if (!validation.isValid) {
+        return createHttpErrorResponse(res, 400, validation.errors[0]);
       }
 
-      if (!content || !content.trim()) {
-        return res.status(400).json({
-          done: false,
-          error: 'Comment content is required'
-        });
-      }
-
-      const updatedPost = await SocialFeedService.addComment(companyId, postId, userId, content.trim());
-
-      res.json({
-        done: true,
-        data: updatedPost,
-        message: 'Comment added successfully'
-      });
+      const updatedPost = await SocialFeedService.addComment(req.companyId, req.params.postId, req.user.sub, req.body.content.trim());
+      return createHttpSuccessResponse(res, updatedPost, 'Comment added successfully');
     } catch (error) {
       console.error('Error adding comment:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to add comment'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to add comment');
     }
   },
 
   deleteComment: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId, commentId } = req.params;
-      const userId = req.user.sub;
-
-      if (!postId || !commentId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID and Comment ID are required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const commentIdValidation = validateCommentId(req.params.commentId);
+      if (!commentIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, commentIdValidation.error);
       }
 
-      const result = await SocialFeedService.deleteComment(companyId, postId, commentId, userId);
-
-      res.json({
-        done: true,
-        message: result.message
-      });
+      const result = await SocialFeedService.deleteComment(req.companyId, req.params.postId, req.params.commentId, req.user.sub);
+      return createHttpSuccessResponse(res, null, result.message);
     } catch (error) {
       console.error('Error deleting comment:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to delete comment'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to delete comment');
     }
   },
 
   toggleBookmark: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId } = req.params;
-      const userId = req.user.sub;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
-      }
-
-      const result = await SocialFeedService.toggleBookmark(companyId, postId, userId);
-
-      res.json({
-        done: true,
-        message: result.message
-      });
+      const result = await SocialFeedService.toggleBookmark(req.companyId, req.params.postId, req.user.sub);
+      return createHttpSuccessResponse(res, null, result.message);
     } catch (error) {
       console.error('Error toggling bookmark:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to toggle bookmark'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to toggle bookmark');
     }
   },
 
   getTrendingHashtags: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { limit = 10 } = req.query;
-
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const limit = parseInt(req.query.limit) || 10;
+      if (limit < 1 || limit > 50) {
+        return createHttpErrorResponse(res, 400, 'Limit must be between 1 and 50');
       }
 
-      const hashtags = await SocialFeedService.getTrendingHashtags(companyId, parseInt(limit));
-
-      res.json({
-        done: true,
-        data: hashtags
-      });
+      const hashtags = await SocialFeedService.getTrendingHashtags(req.companyId, limit);
+      return createHttpSuccessResponse(res, hashtags);
     } catch (error) {
       console.error('Error fetching trending hashtags:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to fetch trending hashtags'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch trending hashtags');
     }
   },
 
   getBookmarkedPosts: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const userId = req.user.sub;
-      const { page = 1, limit = 20 } = req.query;
-
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
       }
 
-      const result = await SocialFeedService.getBookmarkedPosts(companyId, userId, parseInt(page), parseInt(limit));
-
-      res.json({
-        done: true,
-        data: result.posts,
+      const result = await SocialFeedService.getBookmarkedPosts(req.companyId, req.user.sub, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        posts: result.posts,
         pagination: result.pagination
       });
     } catch (error) {
       console.error('Error fetching bookmarked posts:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to fetch bookmarked posts'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch bookmarked posts');
     }
   },
 
   searchPosts: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { query, page = 1, limit = 20 } = req.query;
-
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      if (!req.query.query || !req.query.query.trim()) {
+        return createHttpErrorResponse(res, 400, 'Search query is required');
       }
 
-      if (!query || !query.trim()) {
-        return res.status(400).json({
-          done: false,
-          error: 'Search query is required'
-        });
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
       }
 
-      const result = await SocialFeedService.searchPosts(companyId, query.trim(), parseInt(page), parseInt(limit));
-
-      res.json({
-        done: true,
-        data: result.posts,
+      const result = await SocialFeedService.searchPosts(req.companyId, req.query.query.trim(), pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        posts: result.posts,
         pagination: result.pagination,
-        query: query.trim()
+        query: req.query.query.trim()
       });
     } catch (error) {
       console.error('Error searching posts:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to search posts'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to search posts');
     }
   },
 
   addReply: async (req, res) => {
-    try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId, commentId } = req.params;
-      const userId = req.user.sub;
-      const { content } = req.body;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+    try { 
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!commentId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Comment ID is required'
-        });
+      const commentIdValidation = validateCommentId(req.params.commentId);
+      if (!commentIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, commentIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const validation = validateReplyData(req.body);
+      if (!validation.isValid) {
+        return createHttpErrorResponse(res, 400, validation.errors[0]);
       }
 
-      if (!content || !content.trim()) {
-        return res.status(400).json({
-          done: false,
-          error: 'Reply content is required'
-        });
-      }
-
-      const updatedPost = await SocialFeedService.addReply(companyId, postId, commentId, userId, content.trim());
-
-      res.json({
-        done: true,
-        data: updatedPost,
-        message: 'Reply added successfully'
-      });
+      const updatedPost = await SocialFeedService.addReply(req.companyId, req.params.postId, req.params.commentId, req.user.sub, req.body.content.trim());
+      return createHttpSuccessResponse(res, updatedPost, 'Reply added successfully');
     } catch (error) {
       console.error('Error adding reply:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to add reply'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to add reply');
     }
   },
 
-  // Toggle like on a reply
   toggleReplyLike: async (req, res) => {
     try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId, commentId, replyId } = req.params;
-      const userId = req.user.sub;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!commentId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Comment ID is required'
-        });
+      const commentIdValidation = validateCommentId(req.params.commentId);
+      if (!commentIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, commentIdValidation.error);
       }
 
-      if (!replyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Reply ID is required'
-        });
+      const replyIdValidation = validateCommentId(req.params.replyId);
+      if (!replyIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, 'Reply ID is required');
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
-      }
-
-      const updatedPost = await SocialFeedService.toggleReplyLike(companyId, postId, commentId, replyId, userId);
-
-      res.json({
-        done: true,
-        data: updatedPost,
-        message: 'Reply like toggled successfully'
-      });
+      const updatedPost = await SocialFeedService.toggleReplyLike(req.companyId, req.params.postId, req.params.commentId, req.params.replyId, req.user.sub);
+      return createHttpSuccessResponse(res, updatedPost, 'Reply like toggled successfully');
     } catch (error) {
       console.error('Error toggling reply like:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to toggle reply like'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to toggle reply like');
     }
   },
 
   getCommentReplies: async (req, res) => {
-    try {
-      const { companyId } = req.user.publicMetadata || {};
-      const { postId, commentId } = req.params;
-      const { page = 1, limit = 10 } = req.query;
-
-      if (!postId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Post ID is required'
-        });
+    try { 
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
       }
 
-      if (!commentId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Comment ID is required'
-        });
+      const commentIdValidation = validateCommentId(req.params.commentId);
+      if (!commentIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, commentIdValidation.error);
       }
 
-      if (!companyId) {
-        return res.status(400).json({
-          done: false,
-          error: 'Company ID not found in user metadata'
-        });
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
       }
 
       const result = await SocialFeedService.getCommentReplies(
-        companyId,
-        postId,
-        commentId,
-        parseInt(page),
-        parseInt(limit)
+        req.companyId,
+        req.params.postId,
+        req.params.commentId,
+        pagination.page,
+        pagination.limit
       );
 
-      res.json({
-        done: true,
-        data: result.replies,
+      return createHttpSuccessResponse(res, {
+        replies: result.replies,
         pagination: result.pagination
       });
     } catch (error) {
       console.error('Error getting comment replies:', error);
-      res.status(500).json({
-        done: false,
-        error: error.message || 'Failed to get comment replies'
-      });
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get comment replies');
     }
   }
 };
