@@ -1,6 +1,7 @@
 import { getTenantCollections } from '../../config/db.js';
 import { clerkClient } from '@clerk/clerk-sdk-node';
 import { ObjectId } from 'mongodb';
+import { extractHashtags } from '../../utils/hashtagUtils.js';
 
 export class SocialFeedService {
   static enrichComment(comment, userMap) {
@@ -273,6 +274,12 @@ export class SocialFeedService {
 
       const result = await collections.socialFeeds.insertOne(postToInsert);
       const post = await collections.socialFeeds.findOne({ _id: result.insertedId });
+
+      // Process hashtags from post content
+      if (postData.content) {
+        await this.processHashtags(postData.content, postData.userId, companyId, result.insertedId);
+      }
+
       const enrichedPost = await this.enrichPostsWithUserData([post]);
       return enrichedPost[0];
     } catch (error) {
@@ -306,6 +313,11 @@ export class SocialFeedService {
         throw new Error('Failed to update post');
       }
 
+      // Update hashtags if content changed
+      if (updateData.content) {
+        await this.updatePostHashtags(postId, updateData.content, userId, companyId);
+      }
+
       const updatedPost = await collections.socialFeeds.findOne({ _id: new ObjectId(postId) });
       const enrichedPost = await this.enrichPostsWithUserData([updatedPost]);
       return enrichedPost[0];
@@ -325,6 +337,9 @@ export class SocialFeedService {
       if (deleteResult.deletedCount === 0) {
         throw new Error('Post not found or unauthorized');
       }
+
+      // Remove hashtags associated with this post
+      await this.removePostHashtags(postId, companyId);
 
       return { success: true, message: 'Post deleted successfully' };
     } catch (error) {
@@ -1419,6 +1434,102 @@ export class SocialFeedService {
     } catch (error) {
       console.error('Error getting top posters:', error);
       return [];
+    }
+  }
+
+  static async processHashtags(content, userId, companyId, postId) {
+    try {
+      const hashtags = extractHashtags(content);
+      console.log(`[processHashtags] Extracted hashtags:`, hashtags);
+
+      if (hashtags.length === 0) return;
+
+      const collections = getTenantCollections(companyId);
+      const bulkOps = hashtags.map(tag => ({
+        updateOne: {
+          filter: { tag, companyId },
+          update: {
+            $inc: { count: 1 },
+            $set: {
+              lastUsed: new Date(),
+              updatedAt: new Date()
+            },
+            $push: {
+              posts: {
+                postId,
+                userId,
+                usedAt: new Date()
+              }
+            }
+          },
+          upsert: true
+        }
+      }));
+
+      const result = await collections.hashtags.bulkWrite(bulkOps);
+      console.log(`[processHashtags] Updated ${result.modifiedCount} existing hashtags, inserted ${result.upsertedCount} new hashtags`);
+    } catch (error) {
+      console.error('[processHashtags] Error processing hashtags:', error);
+    }
+  }
+
+  static async getTrendingHashtags(companyId, limit = 10, includeAll = true) {
+    try {
+      console.log(`[getTrendingHashtags] Getting ${limit} trending hashtags for company: ${companyId}`);
+
+      const collections = getTenantCollections(companyId);
+      const trendingHashtags = await collections.hashtags
+        .find({ companyId, count: { $gt: 1 } })
+        .sort({ count: -1, lastUsed: -1 })
+        .limit(limit)
+        .project({ tag: 1, count: 1, lastUsed: 1 })
+        .toArray();
+
+      if (trendingHashtags.length > 0) {
+        return trendingHashtags.map(hashtag => ({
+          tag: hashtag.tag,
+          count: hashtag.count,
+          lastUsed: hashtag.lastUsed
+        }));
+      }
+
+      if (includeAll) {
+        const allHashtags = await collections.hashtags
+          .find({ companyId })
+          .sort({ lastUsed: -1, count: -1 })
+          .limit(limit)
+          .project({ tag: 1, count: 1, lastUsed: 1 })
+          .toArray();
+
+        return allHashtags.map(hashtag => ({
+          tag: hashtag.tag,
+          count: hashtag.count,
+          lastUsed: hashtag.lastUsed
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      console.error('[getTrendingHashtags] Error:', error);
+      return [];
+    }
+  }
+
+  static async removePostHashtags(postId, companyId) {
+    try {
+      const HashtagModel = getHashtagModel(companyId);
+      await HashtagModel.deleteMany({ companyId, count: { $lte: 0 } });
+    } catch (error) {
+      console.error('[removePostHashtags] Error:', error);
+    }
+  }
+
+  static async updatePostHashtags(postId, content, userId, companyId) {
+    try {
+      await this.removePostHashtags(postId, companyId);
+      await this.processHashtags(content, userId, companyId, new ObjectId(postId));
+    } catch (error) {
+      console.error('[updatePostHashtags] Error:', error);
     }
   }
 }

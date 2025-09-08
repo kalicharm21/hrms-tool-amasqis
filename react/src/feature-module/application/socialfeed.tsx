@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Lightbox from 'yet-another-react-lightbox';
 import "yet-another-react-lightbox/styles.css";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import HashtagHighlighter from "../../components/HashtagHighlighter";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
@@ -197,10 +198,12 @@ const SocialFeed = () => {
       try {
         const hashtags = await getTrendingHashtags(10);
         setTrendingHashtags(hashtags);
+
         const users = await getSuggestedUsers(6);
         setSuggestedUsers(users);
       } catch (err) {
         console.error('Failed to fetch sidebar data:', err);
+        setTrendingHashtags([]);
       }
     };
 
@@ -736,7 +739,10 @@ const SocialFeed = () => {
                     </div>
                     <div className="card-body">
                       <div className="mb-2">
-                        <p className="text-dark fw-medium">{post.content}</p>
+                        <HashtagHighlighter
+                          text={post.content}
+                          className="text-dark fw-medium"
+                        />
                       </div>
 
                       {/* Post images */}
@@ -914,7 +920,10 @@ const SocialFeed = () => {
                                     </div>
                                     {!collapsedComments[comment._id] && (
                                       <>
-                                        <p className="mb-2">{comment.content}</p>
+                                        <HashtagHighlighter
+                                          text={comment.content}
+                                          className="mb-2"
+                                        />
 
                                         {/* Comment Actions Footer */}
                                         <div className="d-flex align-items-center justify-content-between pt-1 border-top border-light">
@@ -1068,7 +1077,10 @@ const SocialFeed = () => {
                                               </Link>
                                             </div>
                                           </div>
-                                          <p className="mb-0 fs-14">{reply.content}</p>
+                                          <HashtagHighlighter
+                                            text={reply.content}
+                                            className="mb-0 fs-14"
+                                          />
                                         </div>
                                       </div>
                                     ))}

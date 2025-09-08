@@ -64,25 +64,10 @@ app.get("/", (req, res) => {
   res.send("API is running");
 });
 
-// Health check endpoint to check Mongoose connection
-app.get("/health", async (req, res) => {
-  try {
-    const mongooseState = mongoose.connection.readyState;
-    const mongooseStatus = mongooseState === 1 ? 'connected' : mongooseState === 2 ? 'connecting' : 'disconnected';
-
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      database: {
-        mongoose: mongooseStatus
-      },
-      environment: process.env.NODE_ENV || 'development'
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
+app.get("/health", (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });

@@ -68,6 +68,7 @@ export const getTenantCollections = (tenantDbName) => {
     // Social Feed
     socialFeeds: db.collection("socialFeeds"),
     follows: db.collection("follows"),
+    hashtags: db.collection("hashtags"),
 
   };
 };

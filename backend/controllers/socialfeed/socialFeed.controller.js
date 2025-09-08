@@ -645,5 +645,18 @@ export const socialFeedController = {
       console.error('Error getting top posters:', error);
       return createHttpErrorResponse(res, 500, error.message || 'Failed to get top posters');
     }
+  },
+
+  getTrendingHashtags: async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 10;
+      const finalLimit = Math.min(limit, 20); // Max 20 hashtags
+      const includeAll = req.query.includeAll !== 'false';
+      const trendingHashtags = await SocialFeedService.getTrendingHashtags(req.companyId, finalLimit, includeAll);
+      return createHttpSuccessResponse(res, trendingHashtags);
+    } catch (error) {
+      console.error('Error getting trending hashtags:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get trending hashtags');
+    }
   }
 };
