@@ -7,7 +7,6 @@ const employeeDashboardController = (socket, io) => {
         process.env.NODE_ENV === "development" || process.env.NODE_ENV === "production";
 
     const validateEmployeeAccess = (socket) => {
-        console.log(socket);
         
         if (!socket.companyId) {
             console.error("[Employee] Company ID not found in user metadata", { user: socket.user?.sub });
@@ -558,64 +557,6 @@ const employeeDashboardController = (socket, io) => {
                 error: error.message,
             });
         }
-
-        socket.on( "employees/notes/add",
-            
-            withRateLimit(async (payload) => {
-                try {
-                    const companyId = validateEmployeeAccess(socket);
-                    const employeeId = socket.user?.sub;
-
-
-                    if (!payload || typeof payload !== "object") {
-                        throw new Error("Invalid notes data format.");
-                    }
-
-                    const { title, status, tag, priority, dueDate, description } = payload;
-                    const isTagArray = Array.isArray(tag);
-
-                    if (
-                        !title ||
-                        typeof title !== "string" ||
-                        !status ||
-                        typeof status !== "string" ||
-                        !isTagArray ||
-                        !priority ||
-                        typeof priority !== "string" ||
-                        !dueDate ||
-                        isNaN(Date.parse(dueDate)) ||
-                        !description ||
-                        typeof description !== "string"
-                    ) {
-                        throw new Error("Missing or invalid required note fields.");
-                    }
-
-                    const result = await notesServices.addEmployeeNote(companyId, employeeId, payload);
-
-                    if (!result.done) {
-                        socket.emit("employees/notes/add-response", {
-                            done: false,
-                            message: result.message || "Failed to add note.",
-                        });
-                        return;
-                    }
-
-                    socket.emit("employees/notes/add-response", {
-                        done: true,
-                        insertedId: result.insertedId,
-                    });
-
-                } catch (error) {
-                    console.error("[employees/notes/add] Error:", error);
-
-                    socket.emit("employees/notes/add-response", {
-                        done: false,
-                        message: error.message || "Internal server error",
-                    });
-                }
-            })
-        );
-
     })
 }
 

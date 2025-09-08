@@ -1297,8 +1297,9 @@ const EmployeeDashboard = () => {
                   <div className="d-flex align-items-center">
                     <span className="avatar avatar-lg avatar-rounded border border-white border-2 flex-shrink-0 me-2">
                       <ImageWithBasePath
-                        src={dashboardData?.employeeDetails?.avatar || "C:/Users/hp/Desktop/amasqis/hrms-tool-amasqis/react/public/assets/img/users/user-01.jpg"}
+                        src={dashboardData?.employeeDetails?.avatar || "/assets/img/users/user-01.jpg"}
                         alt="Img"
+                        isLink={Boolean(dashboardData?.employeeDetails?.avatar)}
                       />
                     </span>
                     <div>

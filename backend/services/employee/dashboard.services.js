@@ -9,12 +9,11 @@ import { DateTime } from 'luxon';
 const ALLOWED_STATUSES = ["onHold", "ongoing", "completed", "pending"];
 
 export const getEmployeeDetails = async (companyId, employeeId) => {
-  try {
-    const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
+  try {    
+    const collections = getTenantCollections(companyId); 
     const [employee, companyDetails] = await Promise.all([
       collections.employees.findOne(
-        { _id: empObjectId },
+        { userId: employeeId },
         {
           projection: {
             _id: 0,
