@@ -354,18 +354,14 @@ export class SocialFeedService {
       }
 
       const comment = post.comments[commentIndex];
-
-      // Check if user already liked this comment
       const existingLikeIndex = comment.likes ? comment.likes.findIndex(like => like.userId === userId) : -1;
 
       let updateOperation;
       if (existingLikeIndex !== -1) {
-        // Unlike: Remove the like
         updateOperation = {
           $pull: { [`comments.${commentIndex}.likes`]: { userId: userId } }
         };
       } else {
-        // Like: Add the like
         updateOperation = {
           $push: { [`comments.${commentIndex}.likes`]: { userId: userId, createdAt: new Date() } }
         };
@@ -389,6 +385,366 @@ export class SocialFeedService {
       return enrichedPost[0];
     } catch (error) {
       throw new Error(`Failed to toggle comment like: ${error.message}`);
+    }
+  }
+
+  static async toggleSavePost(companyId, postId, userId) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const post = await collections.socialFeeds.findOne({ _id: new ObjectId(postId) });
+
+      if (!post) {
+        throw new Error('Post not found');
+      }
+
+      const existingSaveIndex = post.savedBy ? post.savedBy.findIndex(save => save.userId === userId) : -1;
+
+      let updateOperation;
+      if (existingSaveIndex !== -1) {
+        updateOperation = {
+          $pull: { savedBy: { userId: userId } }
+        };
+      } else {
+        updateOperation = {
+          $push: { savedBy: { userId: userId, savedAt: new Date() } }
+        };
+      }
+
+      const updateResult = await collections.socialFeeds.updateOne(
+        { _id: new ObjectId(postId) },
+        updateOperation
+      );
+
+      if (updateResult.modifiedCount === 0) {
+        throw new Error('Failed to update post save status');
+      }
+
+      const updatedPost = await collections.socialFeeds.findOne({ _id: new ObjectId(postId) });
+      const enrichedPost = await this.enrichPostsWithUserData([updatedPost]);
+
+      return enrichedPost[0];
+    } catch (error) {
+      throw new Error(`Failed to toggle save post: ${error.message}`);
+    }
+  }
+
+  static async getTrendingHashtags(companyId, limit = 10) {
+    try {
+      const collections = getTenantCollections(companyId);
+
+      const hashtagStats = await collections.socialFeeds.aggregate([
+        {
+          $match: {
+            tags: { $exists: true, $ne: [] },
+            isPublic: true
+          }
+        },
+        {
+          $unwind: "$tags"
+        },
+        {
+          $group: {
+            _id: "$tags",
+            count: { $sum: 1 },
+            lastUsed: { $max: "$createdAt" }
+          }
+        },
+        {
+          $sort: { count: -1, lastUsed: -1 }
+        },
+        {
+          $limit: limit
+        }
+      ]).toArray();
+
+      return hashtagStats.map(stat => ({
+        tag: stat._id,
+        count: stat.count,
+        lastUsed: stat.lastUsed
+      }));
+    } catch (error) {
+      console.error('Error getting trending hashtags:', error);
+      return [];
+    }
+  }
+
+  static async getSuggestedUsers(companyId, currentUserId, limit = 10) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const recentUsers = await collections.socialFeeds.aggregate([
+        {
+          $match: {
+            userId: { $ne: currentUserId },
+            isPublic: true
+          }
+        },
+        {
+          $group: {
+            _id: "$userId",
+            postCount: { $sum: 1 },
+            lastPost: { $max: "$createdAt" }
+          }
+        },
+        {
+          $sort: { lastPost: -1, postCount: -1 }
+        },
+        {
+          $limit: limit
+        }
+      ]).toArray();
+
+      // Get user details from Clerk
+      const userIds = recentUsers.map(user => user._id);
+      const userDetails = await this.getUserDetails(userIds);
+
+      return recentUsers.map(user => ({
+        userId: user._id,
+        postCount: user.postCount,
+        lastPost: user.lastPost,
+        ...userDetails.find(u => u.id === user._id)
+      }));
+    } catch (error) {
+      console.error('Error getting suggested users:', error);
+      return [];
+    }
+  }
+
+  static async getUserDetails(userIds) {
+    try {
+      const userDetails = [];
+
+      for (const userId of userIds) {
+        try {
+          const user = await clerkClient.users.getUser(userId);
+          userDetails.push({
+            id: user.id,
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            imageUrl: user.imageUrl || '',
+            username: user.username || '',
+            publicMetadata: user.publicMetadata || {}
+          });
+        } catch (error) {
+          console.warn(`Failed to get user details for ${userId}:`, error);
+          userDetails.push({
+            id: userId,
+            firstName: 'Unknown',
+            lastName: 'User',
+            imageUrl: '',
+            username: 'unknown',
+            publicMetadata: {}
+          });
+        }
+      }
+
+      return userDetails;
+    } catch (error) {
+      console.error('Error getting user details:', error);
+      return [];
+    }
+  }
+
+  static async followUser(companyId, followerId, followingId) {
+    try {
+      const collections = getTenantCollections(companyId);
+
+      if (followerId === followingId) {
+        throw new Error('Cannot follow yourself');
+      }
+
+      const existingFollow = await collections.follows.findOne({
+        followerId,
+        followingId
+      });
+
+      if (existingFollow) {
+        throw new Error('Already following this user');
+      }
+
+      const followData = {
+        followerId,
+        followingId,
+        createdAt: new Date()
+      };
+
+      const result = await collections.follows.insertOne(followData);
+      return { success: true, followId: result.insertedId };
+    } catch (error) {
+      console.error('Error following user:', error);
+      throw error;
+    }
+  }
+
+  static async unfollowUser(companyId, followerId, followingId) {
+    try {
+      const collections = getTenantCollections(companyId);
+
+      const result = await collections.follows.deleteOne({
+        followerId,
+        followingId
+      });
+
+      if (result.deletedCount === 0) {
+        throw new Error('Follow relationship not found');
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error unfollowing user:', error);
+      throw error;
+    }
+  }
+
+  static async getFollowers(companyId, userId, page = 1, limit = 20) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const skip = (page - 1) * limit;
+
+      const followers = await collections.follows
+        .find({ followingId: userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      const followerIds = followers.map(f => f.followerId);
+      const userDetails = await this.getUserDetails(followerIds);
+
+      return userDetails.map(user => ({
+        ...user,
+        followedAt: followers.find(f => f.followerId === user.id)?.createdAt
+      }));
+    } catch (error) {
+      console.error('Error getting followers:', error);
+      return [];
+    }
+  }
+
+  static async getFollowing(companyId, userId, page = 1, limit = 20) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const skip = (page - 1) * limit;
+
+      const following = await collections.follows
+        .find({ followerId: userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      const followingIds = following.map(f => f.followingId);
+      const userDetails = await this.getUserDetails(followingIds);
+
+      return userDetails.map(user => ({
+        ...user,
+        followedAt: following.find(f => f.followingId === user.id)?.createdAt
+      }));
+    } catch (error) {
+      console.error('Error getting following:', error);
+      return [];
+    }
+  }
+
+  static async getAllFeeds(companyId, page = 1, limit = 20) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const skip = (page - 1) * limit;
+
+      const posts = await collections.socialFeeds
+        .find({ isPublic: true })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      return await this.enrichPostsWithUserData(posts);
+    } catch (error) {
+      console.error('Error getting all feeds:', error);
+      throw error;
+    }
+  }
+
+  static async getUserFeeds(companyId, userId, page = 1, limit = 20) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const skip = (page - 1) * limit;
+
+      const posts = await collections.socialFeeds
+        .find({ userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      return await this.enrichPostsWithUserData(posts);
+    } catch (error) {
+      console.error('Error getting user feeds:', error);
+      throw error;
+    }
+  }
+
+  static async getFilesFromPosts(companyId, page = 1, limit = 20) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const skip = (page - 1) * limit;
+
+      // Get posts that have images or files
+      const postsWithFiles = await collections.socialFeeds
+        .aggregate([
+          {
+            $match: {
+              $or: [
+                { images: { $exists: true, $ne: [] } },
+                { attachments: { $exists: true, $ne: [] } }
+              ]
+            }
+          },
+          {
+            $project: {
+              _id: 1,
+              content: 1,
+              userId: 1,
+              images: 1,
+              attachments: 1,
+              createdAt: 1,
+              updatedAt: 1
+            }
+          },
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit }
+        ])
+        .toArray();
+
+      return await this.enrichPostsWithUserData(postsWithFiles);
+    } catch (error) {
+      console.error('Error getting files from posts:', error);
+      throw error;
+    }
+  }
+
+  static async getSavedPosts(companyId, userId, page = 1, limit = 20) {
+    try {
+      const skip = (page - 1) * limit;
+      const collections = getTenantCollections(companyId);
+      const savedPosts = await collections.socialFeeds
+        .find({
+          'savedBy.userId': userId
+        })
+        .toArray();
+
+      savedPosts.sort((a, b) => {
+        const aSave = a.savedBy.find(save => save.userId === userId);
+        const bSave = b.savedBy.find(save => save.userId === userId);
+        return new Date(bSave.savedAt) - new Date(aSave.savedAt);
+      });
+
+      const paginatedPosts = savedPosts.slice(skip, skip + limit);
+      const enrichedPosts = await this.enrichPostsWithUserData(paginatedPosts);
+
+      return enrichedPosts;
+    } catch (error) {
+      throw new Error(`Failed to get saved posts: ${error.message}`);
     }
   }
 
@@ -775,6 +1131,104 @@ export class SocialFeedService {
       };
     } catch (error) {
       throw new Error(`Failed to get comment replies: ${error.message}`);
+    }
+  }
+
+  static async getUserProfile(companyId, userId) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const followersCount = await collections.follows.countDocuments({ followingId: userId });
+      const followingCount = await collections.follows.countDocuments({ followerId: userId });
+      const postsCount = await collections.socialFeeds.countDocuments({
+        userId,
+        companyId
+      });
+
+      let userDetails = {
+        id: userId,
+        firstName: 'Unknown',
+        lastName: 'User',
+        imageUrl: null,
+        username: 'user',
+        publicMetadata: {}
+      };
+
+      try {
+        const clerkUser = await clerkClient.users.getUser(userId);
+        userDetails = {
+          id: userId,
+          firstName: clerkUser.firstName || '',
+          lastName: clerkUser.lastName || '',
+          imageUrl: clerkUser.imageUrl || null,
+          username: clerkUser.username || '',
+          publicMetadata: clerkUser.publicMetadata || {}
+        };
+      } catch (clerkError) {
+        console.warn(`Failed to fetch user details from Clerk for ${userId}:`, clerkError.message);
+      }
+
+      return {
+        userId,
+        name: `${userDetails.firstName} ${userDetails.lastName}`.trim() || 'User',
+        username: `@${userDetails.username || userDetails.firstName?.toLowerCase() || 'user'}`,
+        avatar: userDetails.imageUrl || 'assets/img/users/user-11.jpg',
+        avatarIsExternal: !!userDetails.imageUrl,
+        followers: followersCount,
+        following: followingCount,
+        posts: postsCount,
+        publicMetadata: userDetails.publicMetadata
+      };
+    } catch (error) {
+      throw new Error(`Failed to get user profile: ${error.message}`);
+    }
+  }
+
+  static async getTotalPostsCount(companyId) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const totalPostsWithCompanyId = await collections.socialFeeds.countDocuments({ companyId });
+      const totalPostsAll = await collections.socialFeeds.countDocuments({});
+
+      // TEMPORARY: If no posts with companyId filter, return all posts
+      if (totalPostsWithCompanyId === 0 && totalPostsAll > 0) {
+        return totalPostsAll;
+      }
+
+      return totalPostsWithCompanyId || totalPostsAll;
+    } catch (error) {
+      console.error('Error getting total posts count:', error);
+      console.error('Error details:', error.message);
+      return 0;
+    }
+  }
+
+  static async getTotalBookmarksCount(companyId) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const totalBookmarks = await collections.socialFeeds.aggregate([
+        {
+          $match: {
+            companyId,
+            savedBy: { $exists: true, $ne: [] }
+          }
+        },
+        {
+          $project: {
+            bookmarkCount: { $size: "$savedBy" }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$bookmarkCount" }
+          }
+        }
+      ]).toArray();
+
+      return totalBookmarks.length > 0 ? totalBookmarks[0].total : 0;
+    } catch (error) {
+      console.error('Error getting total bookmarks count:', error);
+      return 0;
     }
   }
 }

@@ -17,7 +17,23 @@ router.post('/posts/:postId/comments/:commentId/replies', socialFeedController.a
 router.post('/posts/:postId/comments/:commentId/replies/:replyId/like', socialFeedController.toggleReplyLike);
 router.get('/posts/:postId/comments/:commentId/replies', socialFeedController.getCommentReplies);
 router.post('/posts/:postId/bookmark', socialFeedController.toggleBookmark);
+router.post('/posts/:postId/save', socialFeedController.toggleSavePost);
+router.get('/saved-posts', socialFeedController.getSavedPosts);
 router.get('/hashtags/trending', socialFeedController.getTrendingHashtags);
+router.get('/users/suggested', socialFeedController.getSuggestedUsers);
+router.post('/users/:userId/follow', socialFeedController.followUser);
+router.delete('/users/:userId/follow', socialFeedController.unfollowUser);
+router.get('/users/:userId/followers', socialFeedController.getFollowers);
+router.get('/users/:userId/following', socialFeedController.getFollowing);
+router.get('/users/followers', socialFeedController.getFollowers);
+router.get('/users/following', socialFeedController.getFollowing);
+router.get('/users/profile', socialFeedController.getUserProfile);
+router.get('/users/:userId/profile', socialFeedController.getUserProfile);
+router.get('/total-posts-count', socialFeedController.getTotalPostsCount);
+router.get('/total-bookmarks-count', socialFeedController.getTotalBookmarksCount);
+router.get('/feeds', socialFeedController.getAllFeeds);
+router.get('/users/:userId/feeds', socialFeedController.getUserFeeds);
+router.get('/files', socialFeedController.getFiles);
 router.get('/bookmarks', socialFeedController.getBookmarkedPosts);
 router.get('/search', socialFeedController.searchPosts);
 

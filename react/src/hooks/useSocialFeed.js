@@ -18,6 +18,56 @@ export const useSocialFeed = () => {
     return null;
   };
 
+  const fetchTotalPostsCount = async () => {
+    try {
+      console.log('[fetchTotalPostsCount] Starting fetch...');
+      const token = await getAuthToken();
+      console.log('[fetchTotalPostsCount] Token obtained, making request...');
+
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/total-posts-count`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('[fetchTotalPostsCount] Response status:', response.status);
+      const data = await response.json();
+      console.log('[fetchTotalPostsCount] Response data:', data);
+
+      if (data.done) {
+        console.log('[fetchTotalPostsCount] Setting totalPostsCount to:', data.data.totalPosts || 0);
+        setTotalPostsCount(data.data.totalPosts || 0);
+      } else {
+        console.error('Failed to fetch total posts count:', data.error);
+      }
+    } catch (err) {
+      console.error('Error fetching total posts count:', err);
+      console.error('Error details:', err.message);
+    }
+  };
+
+  const fetchTotalBookmarksCount = async () => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/total-bookmarks-count`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      if (data.done) {
+        setTotalBookmarksCount(data.data.totalBookmarks || 0);
+      } else {
+        console.error('Failed to fetch total bookmarks count:', data.error);
+      }
+    } catch (err) {
+      console.error('Error fetching total bookmarks count:', err);
+    }
+  };
+
   const fetchPosts = async (page = 1, limit = 20) => {
     try {
       setLoading(true);
@@ -35,6 +85,8 @@ export const useSocialFeed = () => {
       if (data.done) {
         setPosts(data.data || []);
         setError(null);
+        await fetchTotalPostsCount();
+        await fetchTotalBookmarksCount();
       } else {
         setError(data.error || 'Failed to fetch posts');
       }
@@ -193,6 +245,117 @@ export const useSocialFeed = () => {
     });
   };
 
+  const toggleSavePost = async (postId) => {
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for toggleSavePost');
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:toggle-save-post-response', handleResponse);
+        if (response.done) {
+          console.log('Post save status toggled successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to toggle save post via socket:', response.error);
+          reject(new Error(response.error || 'Failed to toggle save post'));
+        }
+      };
+
+      socket.on('socialfeed:toggle-save-post-response', handleResponse);
+      socket.emit('socialfeed:toggle-save-post', { postId });
+
+      setTimeout(() => {
+        socket.off('socialfeed:toggle-save-post-response', handleResponse);
+        reject(new Error('Toggle save post timeout'));
+      }, 10000);
+    });
+  };
+
+  const getSavedPosts = async (page = 1, limit = 20) => {
+    try {
+      setLoading(true);
+      const token = await getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/saved-posts?page=${page}&limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.done) {
+        return data.data;
+      } else {
+        throw new Error(data.error || 'Failed to fetch saved posts');
+      }
+    } catch (err) {
+      console.error('Error fetching saved posts:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getTrendingHashtags = async (limit = 10) => {
+    try {
+      const token = await getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/hashtags/trending?limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.done) {
+        return data.data;
+      } else {
+        throw new Error(data.error || 'Failed to fetch trending hashtags');
+      }
+    } catch (err) {
+      console.error('Error fetching trending hashtags:', err);
+      throw err;
+    }
+  };
+
+  const getSuggestedUsers = async (limit = 10) => {
+    try {
+      const token = await getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/users/suggested?limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.done) {
+        return data.data;
+      } else {
+        throw new Error(data.error || 'Failed to fetch suggested users');
+      }
+    } catch (err) {
+      console.error('Error fetching suggested users:', err);
+      throw err;
+    }
+  };
+
+
   const deleteComment = async (postId, commentId) => {
     return new Promise((resolve, reject) => {
       if (!socket) {
@@ -336,28 +499,67 @@ export const useSocialFeed = () => {
     });
   };
 
-  const getCurrentUserProfile = () => {
-    if (isLoaded && user) {
-      return {
+  const [userProfile, setUserProfile] = useState({
+    name: 'Loading...',
+    username: '@user',
+    avatar: 'assets/img/users/user-11.jpg',
+    avatarIsExternal: false,
+    followers: 0,
+    following: 0,
+    posts: 0
+  });
+
+  const [totalPostsCount, setTotalPostsCount] = useState(0);
+  const [totalBookmarksCount, setTotalBookmarksCount] = useState(0);
+
+  const fetchUserProfile = async () => {
+    if (!isLoaded || !user) return;
+
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/users/profile`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.done) {
+        const userPostsCount = posts.filter(post => post.userId === user.id).length;
+        setUserProfile({
+          ...data.data,
+          posts: userPostsCount
+        });
+      } else {
+        console.error('Failed to fetch user profile:', data.error);
+        setUserProfile({
+          name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+          username: `@${user.username || user.firstName?.toLowerCase() || 'user'}`,
+          avatar: user.imageUrl || 'assets/img/users/user-11.jpg',
+          avatarIsExternal: !!user.imageUrl,
+          followers: 0,
+          following: 0,
+          posts: posts.filter(post => post.userId === user.id).length
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      setUserProfile({
         name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
         username: `@${user.username || user.firstName?.toLowerCase() || 'user'}`,
         avatar: user.imageUrl || 'assets/img/users/user-11.jpg',
         avatarIsExternal: !!user.imageUrl,
-        followers: 1250,
-        following: 180,
+        followers: 0,
+        following: 0,
         posts: posts.filter(post => post.userId === user.id).length
-      };
+      });
     }
+  };
 
-    return {
-      name: 'Loading...',
-      username: '@user',
-      avatar: 'assets/img/users/user-11.jpg',
-      avatarIsExternal: false,
-      followers: 0,
-      following: 0,
-      posts: 0
-    };
+  const getCurrentUserProfile = () => {
+    return userProfile;
   };
 
   useEffect(() => {
@@ -366,6 +568,7 @@ export const useSocialFeed = () => {
         if (data.done && data.data) {
           console.log('New post received via socket:', data.data);
           setPosts(prevPosts => [data.data, ...prevPosts]);
+          setTotalPostsCount(prev => prev + 1);
         }
       });
 
@@ -377,6 +580,7 @@ export const useSocialFeed = () => {
               post._id === data.data._id ? data.data : post
             )
           );
+          fetchTotalBookmarksCount();
         }
       });
 
@@ -386,6 +590,7 @@ export const useSocialFeed = () => {
           setPosts(prevPosts =>
             prevPosts.filter(post => post._id !== data.data.postId)
           );
+          setTotalPostsCount(prev => prev - 1);
         }
       });
 
@@ -406,13 +611,25 @@ export const useSocialFeed = () => {
   useEffect(() => {
     if (isLoaded) {
       fetchPosts();
+      fetchUserProfile();
     }
   }, [isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && user) {
+      setUserProfile(prev => ({
+        ...prev,
+        posts: posts.filter(post => post.userId === user.id).length
+      }));
+    }
+  }, [posts.length, user?.id]);
 
   return {
     posts,
     loading,
     error,
+    totalPostsCount,
+    totalBookmarksCount,
     fetchPosts,
     createPost,
     toggleLike,
@@ -420,6 +637,10 @@ export const useSocialFeed = () => {
     addReply: useCallback(addReply, []),
     toggleReplyLike,
     toggleCommentLike: useCallback(toggleCommentLike, []),
+    toggleSavePost: useCallback(toggleSavePost, []),
+    getSavedPosts: useCallback(getSavedPosts, []),
+    getTrendingHashtags: useCallback(getTrendingHashtags, []),
+    getSuggestedUsers: useCallback(getSuggestedUsers, []),
     deleteComment: useCallback(deleteComment, []),
     deletePost: useCallback(deletePost, []),
     getCurrentUserProfile

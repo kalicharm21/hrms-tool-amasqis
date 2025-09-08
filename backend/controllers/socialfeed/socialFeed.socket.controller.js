@@ -206,6 +206,25 @@ const socialFeedSocketController = (socket, io) => {
     }
   });
 
+  socket.on("socialfeed:toggle-save-post", async (data) => {
+    try {
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-save-post", postIdValidation.error);
+        return;
+      }
+
+      const updatedPost = await SocialFeedService.toggleSavePost(socket.companyId, data.postId, socket.userId);
+
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", updatedPost, "Post save status updated");
+      createSuccessResponse(socket, "socialfeed:toggle-save-post", updatedPost, "Post save status updated successfully");
+
+    } catch (error) {
+      console.error("Error toggling save post:", error);
+      createErrorResponse(socket, "socialfeed:toggle-save-post", error.message || "Failed to toggle save post");
+    }
+  });
+
   socket.on("socialfeed:toggle-reply-like", async (data) => {
     try {
       const postIdValidation = validatePostId(data.postId);

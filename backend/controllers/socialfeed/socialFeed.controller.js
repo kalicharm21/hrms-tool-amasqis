@@ -298,6 +298,192 @@ export const socialFeedController = {
     }
   },
 
+  toggleSavePost: async (req, res) => {
+    try {
+      const postIdValidation = validatePostId(req.params.postId);
+      if (!postIdValidation.isValid) {
+        return createHttpErrorResponse(res, 400, postIdValidation.error);
+      }
+
+      const updatedPost = await SocialFeedService.toggleSavePost(req.companyId, req.params.postId, req.user.sub);
+      return createHttpSuccessResponse(res, updatedPost, 'Post save status updated successfully');
+    } catch (error) {
+      console.error('Error toggling save post:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to toggle save post');
+    }
+  },
+
+  getSavedPosts: async (req, res) => {
+    try {
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
+      }
+
+      const savedPosts = await SocialFeedService.getSavedPosts(req.companyId, req.user.sub, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        posts: savedPosts,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total: savedPosts.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching saved posts:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch saved posts');
+    }
+  },
+
+  getTrendingHashtags: async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 10;
+      const trendingHashtags = await SocialFeedService.getTrendingHashtags(req.companyId, limit);
+      return createHttpSuccessResponse(res, trendingHashtags);
+    } catch (error) {
+      console.error('Error fetching trending hashtags:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch trending hashtags');
+    }
+  },
+
+  getSuggestedUsers: async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 10;
+      const suggestedUsers = await SocialFeedService.getSuggestedUsers(req.companyId, req.user.sub, limit);
+      return createHttpSuccessResponse(res, suggestedUsers);
+    } catch (error) {
+      console.error('Error fetching suggested users:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch suggested users');
+    }
+  },
+
+  followUser: async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const result = await SocialFeedService.followUser(req.companyId, req.user.sub, userId);
+      return createHttpSuccessResponse(res, result);
+    } catch (error) {
+      console.error('Error following user:', error);
+      return createHttpErrorResponse(res, 400, error.message || 'Failed to follow user');
+    }
+  },
+
+  unfollowUser: async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const result = await SocialFeedService.unfollowUser(req.companyId, req.user.sub, userId);
+      return createHttpSuccessResponse(res, result);
+    } catch (error) {
+      console.error('Error unfollowing user:', error);
+      return createHttpErrorResponse(res, 400, error.message || 'Failed to unfollow user');
+    }
+  },
+
+  getFollowers: async (req, res) => {
+    try {
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
+      }
+
+      const followers = await SocialFeedService.getFollowers(req.companyId, req.params.userId || req.user.sub, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        followers,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching followers:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch followers');
+    }
+  },
+
+  getFollowing: async (req, res) => {
+    try {
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
+      }
+
+      const following = await SocialFeedService.getFollowing(req.companyId, req.params.userId || req.user.sub, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        following,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching following:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch following');
+    }
+  },
+
+  getAllFeeds: async (req, res) => {
+    try {
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
+      }
+
+      const feeds = await SocialFeedService.getAllFeeds(req.companyId, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        posts: feeds,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching all feeds:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch feeds');
+    }
+  },
+
+  getUserFeeds: async (req, res) => {
+    try {
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
+      }
+
+      const feeds = await SocialFeedService.getUserFeeds(req.companyId, req.params.userId, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        posts: feeds,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching user feeds:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch user feeds');
+    }
+  },
+
+  getFiles: async (req, res) => {
+    try {
+      const pagination = validatePagination(req.query);
+      if (!pagination.isValid) {
+        return createHttpErrorResponse(res, 400, pagination.errors[0]);
+      }
+
+      const files = await SocialFeedService.getFilesFromPosts(req.companyId, pagination.page, pagination.limit);
+      return createHttpSuccessResponse(res, {
+        posts: files,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching files:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to fetch files');
+    }
+  },
+
   searchPosts: async (req, res) => {
     try {
       if (!req.query.query || !req.query.query.trim()) {
@@ -372,7 +558,7 @@ export const socialFeedController = {
   },
 
   getCommentReplies: async (req, res) => {
-    try { 
+    try {
       const postIdValidation = validatePostId(req.params.postId);
       if (!postIdValidation.isValid) {
         return createHttpErrorResponse(res, 400, postIdValidation.error);
@@ -403,6 +589,38 @@ export const socialFeedController = {
     } catch (error) {
       console.error('Error getting comment replies:', error);
       return createHttpErrorResponse(res, 500, error.message || 'Failed to get comment replies');
+    }
+  },
+
+  getUserProfile: async (req, res) => {
+    try {
+      const userId = req.params.userId || req.user.sub;
+
+      const userProfile = await SocialFeedService.getUserProfile(req.companyId, userId);
+      return createHttpSuccessResponse(res, userProfile);
+    } catch (error) {
+      console.error('Error getting user profile:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get user profile');
+    }
+  },
+
+  getTotalPostsCount: async (req, res) => {
+    try {
+      const totalPosts = await SocialFeedService.getTotalPostsCount(req.companyId);
+      return createHttpSuccessResponse(res, { totalPosts });
+    } catch (error) {
+      console.error('Error getting total posts count:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get total posts count');
+    }
+  },
+
+  getTotalBookmarksCount: async (req, res) => {
+    try {
+      const totalBookmarks = await SocialFeedService.getTotalBookmarksCount(req.companyId);
+      return createHttpSuccessResponse(res, { totalBookmarks });
+    } catch (error) {
+      console.error('Error getting total bookmarks count:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get total bookmarks count');
     }
   }
 };

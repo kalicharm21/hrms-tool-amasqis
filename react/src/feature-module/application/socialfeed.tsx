@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Lightbox from 'yet-another-react-lightbox';
 import "yet-another-react-lightbox/styles.css";
@@ -28,6 +28,11 @@ interface PostComment {
   createdAt: string;
 }
 
+interface SavedBy {
+  userId: string;
+  savedAt: string;
+}
+
 interface Post {
   _id: string;
   content: string;
@@ -39,6 +44,7 @@ interface Post {
   comments?: PostComment[];
   shares?: any[];
   bookmarks?: any[];
+  savedBy?: SavedBy[];
   isPublic: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -50,13 +56,17 @@ const SocialFeed = () => {
     posts,
     loading,
     error,
-    fetchPosts,
+    totalPostsCount,
+    totalBookmarksCount,
     createPost,
     toggleLike,
     addComment,
     addReply,
     toggleReplyLike,
     toggleCommentLike,
+    toggleSavePost,
+    getTrendingHashtags,
+    getSuggestedUsers,
     deleteComment,
     deletePost,
     getCurrentUserProfile
@@ -71,6 +81,8 @@ const SocialFeed = () => {
   const [showReplyInput, setShowReplyInput] = useState<Record<string, boolean>>({});
   const [collapsedComments, setCollapsedComments] = useState<Record<string, boolean>>({});
   const [collapsedPosts, setCollapsedPosts] = useState<Record<string, boolean>>({});
+  const [trendingHashtags, setTrendingHashtags] = useState<any[]>([]);
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
 
   const settings = {
@@ -139,6 +151,21 @@ const SocialFeed = () => {
       },
     ],
   };
+
+  useEffect(() => {
+    const fetchSidebarData = async () => {
+      try {
+        const hashtags = await getTrendingHashtags(10);
+        setTrendingHashtags(hashtags);
+        const users = await getSuggestedUsers(6);
+        setSuggestedUsers(users);
+      } catch (err) {
+        console.error('Failed to fetch sidebar data:', err);
+      }
+    };
+
+    fetchSidebarData();
+  }, [getTrendingHashtags, getSuggestedUsers]);
 
   const handleCreatePost = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,6 +289,16 @@ const SocialFeed = () => {
     setShowReplies(prev => ({ ...prev, [commentId]: !prev[commentId] }));
   }, []);
 
+  const handleSavePost = useCallback(async (postId: string) => {
+    try {
+      await toggleSavePost(postId);
+      console.log('Post save status toggled successfully');
+    } catch (err) {
+      console.error('Failed to toggle save post:', err);
+    }
+  }, [toggleSavePost]);
+
+
   const handleDeletePost = useCallback(async (postId: string) => {
     if (window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
       try {
@@ -380,15 +417,20 @@ const SocialFeed = () => {
                         All Feeds
                       </span>
                       <span className="badge badge-danger badge-xs rounded-pill">
-                        56
+                        {totalPostsCount}
                       </span>
                     </Link>
                     <Link
                       to="#"
-                      className="d-flex align-items-center fw-medium p-2"
+                      className="d-flex align-items-center justify-content-between fw-medium p-2"
                     >
-                      <i className="ti ti-bookmark me-2" />
-                      Bookmark
+                      <span>
+                        <i className="ti ti-bookmark me-2" />
+                        Bookmark
+                      </span>
+                      <span className="badge badge-warning badge-xs rounded-pill">
+                        {totalBookmarksCount}
+                      </span>
                     </Link>
                     <Link
                       to="#"
@@ -707,7 +749,7 @@ const SocialFeed = () => {
                             style={{ cursor: 'pointer' }}
                           >
                             <i className={`ti ${post.likes?.includes(user?.id || '') ? 'ti-heart-filled' : 'ti-heart'} me-2`}
-                               title={post.likes?.includes(user?.id || '') ? 'Unlike' : 'Like'} />
+                              title={post.likes?.includes(user?.id || '') ? 'Unlike' : 'Like'} />
                             {post.likes?.length || 0} Likes
                           </Link>
                           <Link
@@ -729,14 +771,19 @@ const SocialFeed = () => {
                           </Link>
                         </div>
                         <div className="d-flex align-items-center">
+                          <Link
+                            to="#"
+                            className="btn btn-icon btn-sm rounded-circle"
+                            onClick={() => handleSavePost(post._id)}
+                            title={post.savedBy?.some(save => save.userId === (user?.id || '')) ? 'Unsave post' : 'Save post'}
+                          >
+                            <i className={`ti ${post.savedBy?.some(save => save.userId === (user?.id || '')) ? 'ti-bookmark-filled text-warning' : 'ti-bookmark'}`} />
+                          </Link>
                           <Link to="#" className="btn btn-icon btn-sm rounded-circle">
                             <i className="ti ti-share" />
                           </Link>
                           <Link to="#" className="btn btn-icon btn-sm rounded-circle">
                             <i className="ti ti-message-star" />
-                          </Link>
-                          <Link to="#" className="btn btn-icon btn-sm rounded-circle">
-                            <i className="ti ti-bookmark" />
                           </Link>
                         </div>
                       </div>
@@ -774,7 +821,7 @@ const SocialFeed = () => {
                                           onClick={() => handleToggleCommentLike(post._id, comment._id)}
                                         >
                                           <i className={`ti ti-heart me-1 ${comment.likes?.includes(user?.id || '') ? 'ti-heart-filled' : 'ti-heart'}`}
-                                             title={comment.likes?.includes(user?.id || '') ? 'Unlike comment' : 'Like comment'} />
+                                            title={comment.likes?.includes(user?.id || '') ? 'Unlike comment' : 'Like comment'} />
                                           <span>{comment.likes?.length || 0}</span>
                                         </Link>
 
@@ -975,7 +1022,7 @@ const SocialFeed = () => {
                                                 onClick={() => handleToggleReplyLike(post._id, comment._id, reply._id)}
                                               >
                                                 <i className={`ti ti-heart ${reply.likes?.includes(user?.id || '') ? 'ti-heart-filled' : 'ti-heart'}`}
-                                                   title={reply.likes?.includes(user?.id || '') ? 'Unlike reply' : 'Like reply'} />
+                                                  title={reply.likes?.includes(user?.id || '') ? 'Unlike reply' : 'Like reply'} />
                                                 <span className="ms-1">{reply.likes?.length || 0}</span>
                                               </Link>
                                             </div>
@@ -1109,117 +1156,48 @@ const SocialFeed = () => {
                               <i className="ti ti-user-x" />
                             </Link>
                           </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-01.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Harvey Smith</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Ukrain</span>
+                          {suggestedUsers.length > 0 ? (
+                            suggestedUsers.slice(0, 5).map((suggestedUser: any, index: number) => (
+                              <div key={suggestedUser.userId || index} className="d-flex align-items-center justify-content-between mb-3">
+                                <div className="d-flex align-items-center">
+                                  <Link
+                                    to="#"
+                                    className="avatar avatar-rounded flex-shrink-0 me-2"
+                                  >
+                                    <ImageWithBasePath
+                                      src={suggestedUser.imageUrl || userProfile.avatar}
+                                      alt="Img"
+                                      isLink={isExternalImage(suggestedUser.imageUrl || userProfile.avatar)}
+                                    />
+                                  </Link>
+                                  <div>
+                                    <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                      <Link to="#">{suggestedUser.firstName} {suggestedUser.lastName}</Link>
+                                      {suggestedUser.publicMetadata?.isVerified && (
+                                        <i className="ti ti-circle-check-filled text-success ms-1" />
+                                      )}
+                                    </h6>
+                                    <span className="fs-12 d-block">
+                                      {suggestedUser.postCount || 0} posts • {suggestedUser.publicMetadata?.country || 'Unknown'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <Link
+                                  to="#"
+                                  className="btn btn-sm btn-icon"
+                                  title="Follow user"
+                                >
+                                  <i className="ti ti-user-plus" />
+                                </Link>
                               </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-3">
+                              <i className="ti ti-users text-muted fs-1 mb-2" />
+                              <p className="text-muted mb-0">No suggested users</p>
+                              <small className="text-muted">More users will appear as they post</small>
                             </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-33.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Stephan Peralt</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Isreal</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-34.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Doglas Martini</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Belgium</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-09.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Brian Villalobos</Link>
-                                  <i className="ti ti-circle-check-filled text-success ms-1" />
-                                </h6>
-                                <span className="fs-12 d-block">United Kingdom</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-02.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Linda Ray</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Argentina</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
+                          )}
                         </div>
                         <div>
                           <Link
@@ -1388,145 +1366,112 @@ const SocialFeed = () => {
                 </div>
                 <div className="card">
                   <div className="card-body">
-                    <h5 className="mb-3">Saved Feeds</h5>
-                    <div className="bg-light-500 rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between mb-1">
-                        <Link
-                          to="#"
-                          className="d-flex align-items-center"
-                        >
-                          <span>
-                            <ImageWithBasePath
-                              src="assets/img/icons/feeds-01.svg"
-                              className="me-2"
-                              alt="Img"
-                            />
-                          </span>
-                          <p className="fs-12 fw-medium">World Health</p>
-                        </Link>
-                        <Link to="#">
-                          <i className="ti ti-bookmark-filled text-warning" />
-                        </Link>
-                      </div>
-                      <p className="text-dark fw-medium">
-                        <Link to="#">
-                          Retail investor party continues even as
-                        </Link>
-                      </p>
-                    </div>
-                    <div className="bg-light-500 rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between mb-1">
-                        <Link
-                          to="#"
-                          className="d-flex align-items-center"
-                        >
-                          <span>
-                            <ImageWithBasePath
-                              src="assets/img/icons/feeds-02.svg"
-                              className="me-2"
-                              alt="Img"
-                            />
-                          </span>
-                          <p className="fs-12 fw-medium">T3 Tech</p>
-                        </Link>
-                        <Link to="#">
-                          <i className="ti ti-bookmark-filled text-warning" />
-                        </Link>
-                      </div>
-                      <p className="text-dark fw-medium">
-                        <Link to="#">
-                          Ipad Air (2020) vs Samsung Galaxy Tab
-                        </Link>
-                      </p>
-                    </div>
-                    <div className="bg-light-500 rounded p-2 mb-2">
-                      <div className="d-flex align-items-center justify-content-between mb-1">
-                        <Link
-                          to="#"
-                          className="d-flex align-items-center"
-                        >
-                          <span>
-                            <ImageWithBasePath
-                              src="assets/img/icons/feeds-03.svg"
-                              className="me-2"
-                              alt="Img"
-                            />
-                          </span>
-                          <p className="fs-12 fw-medium">Fstoppers</p>
-                        </Link>
-                        <Link to="#">
-                          <i className="ti ti-bookmark-filled text-warning" />
-                        </Link>
-                      </div>
-                      <p className="text-dark fw-medium">
-                        <Link to="#">
-                          Beyond capital gains tax! Top 50 stock
-                        </Link>
-                      </p>
-                    </div>
-                    <div className="bg-light-500 rounded p-2">
-                      <div className="d-flex align-items-center justify-content-between mb-1">
-                        <Link
-                          to="#"
-                          className="d-flex align-items-center"
-                        >
-                          <span>
-                            <ImageWithBasePath
-                              src="assets/img/icons/feeds-04.svg"
-                              className="me-2"
-                              alt="Img"
-                            />
-                          </span>
-                          <p className="fs-12 fw-medium">Evernote</p>
-                        </Link>
-                        <Link to="#">
-                          <i className="ti ti-bookmark-filled text-warning" />
-                        </Link>
-                      </div>
-                      <p className="text-dark fw-medium">
-                        <Link to="#">
-                          Sony Just Destroyed the Competition
-                        </Link>
-                      </p>
-                    </div>
-                    <div className="mt-3">
-                      <Link
-                        to="#"
-                        className="btn btn-outline-light w-100 border"
-                      >
-                        View All <i className="ti ti-arrow-right ms-2" />
-                      </Link>
-                    </div>
+                    <h5 className="mb-3">Saved Posts</h5>
+                    {(() => {
+                      const savedPosts = posts.filter((post: Post) =>
+                        post.savedBy?.some((save: SavedBy) => save.userId === (user?.id || ''))
+                      );
+
+                      if (savedPosts.length === 0) {
+                        return (
+                          <div className="text-center py-3">
+                            <i className="ti ti-bookmark text-muted fs-1 mb-2" />
+                            <p className="text-muted mb-0">No saved posts yet</p>
+                            <small className="text-muted">Save posts to view them here</small>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <>
+                          {savedPosts.slice(0, 3).map((savedPost: Post) => (
+                            <div key={savedPost._id} className="bg-light-500 rounded p-2 mb-2">
+                              <div className="d-flex align-items-center justify-content-between mb-1">
+                                <div className="d-flex align-items-center">
+                                  <Link to="#" className="avatar avatar-sm avatar-rounded me-2">
+                                    <ImageWithBasePath
+                                      src={savedPost.user?.imageUrl || userProfile.avatar}
+                                      alt="Img"
+                                      isLink={isExternalImage(savedPost.user?.imageUrl || userProfile.avatar)}
+                                    />
+                                  </Link>
+                                  <div>
+                                    <p className="fs-12 fw-medium mb-0">
+                                      {savedPost.user ? `${savedPost.user.firstName} ${savedPost.user.lastName || ''}`.trim() || 'User' : 'User'}
+                                    </p>
+                                    <small className="text-muted">
+                                      {formatTimeAgo(savedPost.createdAt)}
+                                    </small>
+                                  </div>
+                                </div>
+                                <Link
+                                  to="#"
+                                  onClick={() => handleSavePost(savedPost._id)}
+                                  title="Remove from saved"
+                                >
+                                  <i className="ti ti-bookmark-filled text-warning" />
+                                </Link>
+                              </div>
+                              <p className="text-dark fw-medium mb-1">
+                                {savedPost.content.length > 80
+                                  ? `${savedPost.content.substring(0, 80)}...`
+                                  : savedPost.content
+                                }
+                              </p>
+                              <div className="d-flex align-items-center gap-2">
+                                <Link
+                                  to="#"
+                                  className="text-muted fs-12 d-flex align-items-center"
+                                  onClick={() => handleLikePost(savedPost._id)}
+                                >
+                                  <i className={`ti ti-heart me-1 ${savedPost.likes?.includes(user?.id || '') ? 'ti-heart-filled text-danger' : 'ti-heart'}`} />
+                                  {savedPost.likes?.length || 0}
+                                </Link>
+                                <Link to="#" className="text-muted fs-12 d-flex align-items-center">
+                                  <i className="ti ti-message-dots me-1" />
+                                  {savedPost.comments?.length || 0}
+                                </Link>
+                              </div>
+                            </div>
+                          ))}
+
+                          {savedPosts.length > 3 && (
+                            <div className="mt-3">
+                              <Link
+                                to="#"
+                                className="btn btn-outline-light w-100 border"
+                              >
+                                View All Saved Posts ({savedPosts.length}) <i className="ti ti-arrow-right ms-2" />
+                              </Link>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="card">
                   <div className="card-body">
-                    <h5 className="mb-3">Trending Hastags</h5>
+                    <h5 className="mb-3">Trending Hashtags</h5>
                     <div className="d-flex align-items-center flex-wrap gap-1">
-                      <Link
-                        to="#"
-                        className="text-info d-inline-flex link-hover"
-                      >
-                        #HealthTips
-                      </Link>
-                      <Link
-                        to="#"
-                        className="text-info d-inline-flex link-hover"
-                      >
-                        #Wellness
-                      </Link>
-                      <Link
-                        to="#"
-                        className="text-info d-inline-flex link-hover"
-                      >
-                        #Motivation
-                      </Link>
-                      <Link
-                        to="#"
-                        className="text-info d-inline-flex link-hover"
-                      >
-                        #Inspiration{" "}
-                      </Link>
+                      {trendingHashtags.length > 0 ? (
+                        trendingHashtags.slice(0, 8).map((hashtag: any, index: number) => (
+                          <Link
+                            key={index}
+                            to="#"
+                            className="text-info d-inline-flex link-hover"
+                            title={`${hashtag.count} posts`}
+                          >
+                            #{hashtag.tag}
+                          </Link>
+                        ))
+                      ) : (
+                        <div className="text-center py-3 w-100">
+                          <i className="ti ti-hash text-muted fs-1 mb-2" />
+                          <p className="text-muted mb-0">No trending hashtags</p>
+                          <small className="text-muted">Add hashtags to your posts to see trends</small>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
