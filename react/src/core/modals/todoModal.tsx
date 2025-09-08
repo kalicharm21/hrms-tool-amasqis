@@ -418,7 +418,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                       />
                     </div>
                   </div>
-                  <div className="col-12">
+                  <div className="col-6">
                     <div className="mb-3">
                       <label className="form-label">Assignee</label>
                       <CommonSelect
@@ -427,6 +427,21 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                         defaultValue={assignees.find(option => option.value === formData.assignee)}
                         onChange={(selectedOption) => handleSelectChange('assignee', selectedOption)}
                       />
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="mb-3">
+                      <label className="form-label">Due Date</label>
+                      <div className="input-groupicon calender-input">
+                        <input
+                          type="date"
+                          className="form-control"
+                          name="dueDate"
+                          value={formData.dueDate || ''}
+                          onChange={handleInputChange}
+                          placeholder="Select date"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="col-12">

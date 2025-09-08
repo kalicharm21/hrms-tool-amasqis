@@ -504,7 +504,7 @@ const Todo = () => {
                   </div>
                   <div className="col-lg-6">
                     <div className="d-flex align-items-center justify-content-lg-end flex-wrap row-gap-3 mb-3">
-                      <div className="input-icon w-120 position-relative me-2">
+                      <div className="input-icon w-120 position-relative me-2 d-flex align-items-center">
                         <span className="input-icon-addon">
                           <i className="ti ti-calendar text-gray-9" />
                         </span>
@@ -523,6 +523,41 @@ const Todo = () => {
                             }
                           }}
                         />
+                        {dueDateFilter && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-light border-0 ms-2 d-flex align-items-center justify-content-center"
+                            onClick={() => handleDueDateChange(null)}
+                            title="Clear due date filter"
+                            style={{ 
+                              fontSize: '14px', 
+                              width: '28px', 
+                              height: '28px', 
+                              padding: '0', 
+                              lineHeight: '1',
+                              borderRadius: '50%',
+                              backgroundColor: '#f8f9fa',
+                              border: '1px solid #dee2e6',
+                              color: '#6c757d',
+                              transition: 'all 0.2s ease',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                            }}
+                            onMouseEnter={(e) => {
+                              const target = e.target as HTMLButtonElement;
+                              target.style.backgroundColor = '#e9ecef';
+                              target.style.color = '#495057';
+                              target.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={(e) => {
+                              const target = e.target as HTMLButtonElement;
+                              target.style.backgroundColor = '#f8f9fa';
+                              target.style.color = '#6c757d';
+                              target.style.transform = 'scale(1)';
+                            }}
+                          >
+                            <i className="ti ti-x" style={{ fontSize: '12px' }}></i>
+                          </button>
+                        )}
                       </div>
                       <div className="dropdown me-2">
                         <Link
