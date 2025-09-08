@@ -10,9 +10,11 @@ import { Socket } from "socket.io-client";
 
 interface TodoModalProps {
   onTodoAdded?: () => void;
+  selectedTodoToDelete?: string | null;
+  onDeleteTodo?: (todoId: string) => void;
 }
 
-const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
+const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete, onDeleteTodo }) => {
   const socket = useSocket() as Socket | null;
   const [isLoading, setIsLoading] = useState(false);
   const [tags, setTags] = useState([
@@ -29,10 +31,10 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
   ]);
   const [formData, setFormData] = useState({
     title: "",
-    tag: "",
-    priority: "",
+    tag: "Personal", // Set default tag
+    priority: "Medium", // Set default priority
     description: "",
-    assignee: "",
+    assignee: "Self", // Set default assignee
     status: "Pending"
   });
 
@@ -55,14 +57,22 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
     if (!socket) return;
 
     const handleTagsResponse = (response: any) => {
+      console.log("Tags response received:", response);
       if (response.done) {
         setTags(response.data);
+        console.log("Tags updated:", response.data);
+      } else {
+        console.error("Failed to fetch tags:", response.error);
       }
     };
 
     const handleAssigneesResponse = (response: any) => {
+      console.log("Assignees response received:", response);
       if (response.done) {
         setAssignees(response.data);
+        console.log("Assignees updated:", response.data);
+      } else {
+        console.error("Failed to fetch assignees:", response.error);
       }
     };
 
@@ -71,6 +81,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
     socket.on("admin/dashboard/get-todo-assignees-response", handleAssigneesResponse);
 
     // Request initial data
+    console.log("Requesting tags and assignees from backend");
     socket.emit("admin/dashboard/get-todo-tags");
     socket.emit("admin/dashboard/get-todo-assignees");
 
@@ -92,10 +103,15 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
   };
 
   const handleSelectChange = (field: string, selectedOption: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: selectedOption ? selectedOption.value : ''
-    }));
+    console.log(`Select change - Field: ${field}, Selected:`, selectedOption);
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [field]: selectedOption ? selectedOption.value : ''
+      };
+      console.log(`Updated form data:`, newData);
+      return newData;
+    });
   };
 
   const handleDescriptionChange = (value: string) => {
@@ -121,18 +137,22 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
     setIsLoading(true);
 
     try {
+      console.log("Form data before submission:", formData);
       const todoData = {
         title: formData.title,
         tag: formData.tag || 'Personal',
-        priority: formData.priority || 'Medium',
+        priority: (formData.priority || 'Medium').toLowerCase(), // Convert to lowercase for backend
         description: formData.description || '',
         assignee: formData.assignee || 'Self',
         status: formData.status || 'Pending',
       };
+      console.log("Todo data being sent:", todoData);
 
       const handleResponse = (response: any) => {
+        console.log("Add todo response received:", response);
         setIsLoading(false);
         if (response.done) {
+          console.log("Todo added successfully");
           resetForm();
 
           const modal = document.getElementById('add_todo');
@@ -187,6 +207,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
             }
           }, 200);
         } else {
+          console.error("Failed to add todo:", response.error);
           alert('Failed to add todo: ' + response.error);
         }
 
@@ -196,6 +217,16 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
 
       socket.on("admin/dashboard/add-todo-response", handleResponse);
       socket.emit("admin/dashboard/add-todo", todoData);
+
+      // Add timeout to prevent infinite loading
+      setTimeout(() => {
+        if (isLoading) {
+          console.error("Add todo request timed out");
+          setIsLoading(false);
+          alert('Request timed out. Please try again.');
+          socket.off("admin/dashboard/add-todo-response", handleResponse);
+        }
+      }, 10000); // 10 second timeout
     } catch (error) {
       console.error('Error adding todo:', error);
       alert('An error occurred while adding the todo');
@@ -501,7 +532,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
       {/* /Edit Note */}
 
       {/* Delete Note */}
-      <div className="modal fade" id="delete-note-units">
+      <div className="modal fade" id="delete_modal">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="page-wrapper-new p-0">
@@ -529,7 +560,23 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded }) => {
                     >
                       Cancel
                     </Link>
-                    <Link to="#" className="btn btn-submit">
+                    <Link 
+                      to="#" 
+                      className="btn btn-submit"
+                      data-bs-dismiss="modal"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        console.log("Delete button in modal clicked");
+                        console.log("selectedTodoToDelete:", selectedTodoToDelete);
+                        console.log("onDeleteTodo function:", !!onDeleteTodo);
+                        if (selectedTodoToDelete && onDeleteTodo) {
+                          console.log("Calling onDeleteTodo with:", selectedTodoToDelete);
+                          onDeleteTodo(selectedTodoToDelete);
+                        } else {
+                          console.error("Missing selectedTodoToDelete or onDeleteTodo function");
+                        }
+                      }}
+                    >
                       Delete
                     </Link>
                   </div>
