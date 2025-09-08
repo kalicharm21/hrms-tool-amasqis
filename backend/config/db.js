@@ -64,7 +64,9 @@ export const getTenantCollections = (tenantDbName) => {
     //Pipeline Collections
     pipelines: db.collection("pipelines"),
     stages: db.collection("stages"),
-    
+
+    // Social Feed
+    socialFeeds: db.collection("socialFeeds"),
 
   };
 };

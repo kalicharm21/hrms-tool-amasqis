@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Lightbox from 'yet-another-react-lightbox';
 import "yet-another-react-lightbox/styles.css";
@@ -6,10 +6,59 @@ import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+import { useSocialFeed } from "../../hooks/useSocialFeed";
+import { useSocket } from "../../SocketContext";
+import { useUser } from "@clerk/clerk-react";
+
+interface PostUser {
+  _id: string;
+  name: string;
+  username: string;
+  avatar: string;
+  isVerified?: boolean;
+}
+
+interface PostComment {
+  _id: string;
+  content: string;
+  user: PostUser;
+  createdAt: string;
+}
+
+interface Post {
+  _id: string;
+  content: string;
+  user: PostUser;
+  images?: string[];
+  tags?: string[];
+  likes?: string[];
+  comments?: PostComment[];
+  shares?: number;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 const SocialFeed = () => {
-  const [open1, setOpen1] = React.useState(false);
-  const [toggle2, setToggle2] = React.useState(false);
+  const { user } = useUser();
+  const socket = useSocket() as any;
+  const {
+    posts,
+    loading,
+    error,
+    fetchPosts,
+    createPost,
+    toggleLike,
+    addComment,
+    getCurrentUserProfile
+  } = useSocialFeed();
+
+  const [open1, setOpen1] = useState(false);
+  const [toggle2, setToggle2] = useState(false);
+  const [newPostContent, setNewPostContent] = useState("");
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
+
   const settings = {
     dots: false,
     autoplay: false,
@@ -76,6 +125,95 @@ const SocialFeed = () => {
       },
     ],
   };
+
+  // Socket integration for real-time updates
+  useEffect(() => {
+    if (socket) {
+      // Listen for new posts
+      socket.on('socialfeed:newPost', (newPost: any) => {
+        fetchPosts(); // Refresh posts
+      });
+
+      // Listen for post updates (likes, comments)
+      socket.on('socialfeed:postUpdate', (updatedPost: any) => {
+        fetchPosts(); // Refresh posts
+      });
+
+      return () => {
+        socket.off('socialfeed:newPost');
+        socket.off('socialfeed:postUpdate');
+      };
+    }
+  }, [socket, fetchPosts]);
+
+  // Handle creating a new post
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPostContent.trim()) return;
+
+    try {
+      await createPost({
+        content: newPostContent,
+        images: [],
+        tags: [],
+        isPublic: true
+      });
+      setNewPostContent("");
+    } catch (err) {
+      console.error('Failed to create post:', err);
+    }
+  };
+
+  // Handle liking a post
+  const handleLikePost = async (postId: string) => {
+    try {
+      await toggleLike(postId);
+    } catch (err) {
+      console.error('Failed to toggle like:', err);
+    }
+  };
+
+  // Handle adding a comment
+  const handleAddComment = async (postId: string, commentContent: string) => {
+    if (!commentContent.trim()) return;
+
+    try {
+      await addComment(postId, commentContent);
+      setCommentInputs(prev => ({ ...prev, [postId]: "" }));
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    }
+  };
+
+  // Handle comment input changes
+  const handleCommentInputChange = (postId: string, value: string) => {
+    setCommentInputs(prev => ({ ...prev, [postId]: value }));
+  };
+
+  // Open lightbox with images
+  const openLightbox = (images?: string[]) => {
+    if (!images || images.length === 0) return;
+    setLightboxImages(images.map((img: string) => ({ src: img })));
+    setOpen1(true);
+  };
+
+  // Get user profile data
+  const userProfile = getCurrentUserProfile();
+
+  // Format time ago
+  const formatTimeAgo = (date: string) => {
+    const now = new Date();
+    const diff = now.getTime() - new Date(date).getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+  };
+
   return (
     <>
       {/* Page Wrapper */}
@@ -91,29 +229,29 @@ const SocialFeed = () => {
                         to="#"
                         className="avatar avatar-xl online avatar-rounded"
                       >
-                        <ImageWithBasePath src="assets/img/users/user-11.jpg" alt="Img" />
+                        <ImageWithBasePath src={userProfile.avatar} alt="Img" />
                       </Link>
                       <h5 className="mb-1">
-                        <Link to="#">James Hong </Link>
+                        <Link to="#">{userProfile.name}</Link>
                       </h5>
-                      <p className="fs-12">@James Hong324</p>
+                      <p className="fs-12">{userProfile.username}</p>
                     </div>
                     <div className="row g-1">
                       <div className="col-sm-4">
                         <div className="rounded bg-white text-center py-1">
-                          <h4 className="mb-1">89K</h4>
+                          <h4 className="mb-1">{userProfile.followers.toLocaleString()}</h4>
                           <p className="fs-12">Followers</p>
                         </div>
                       </div>
                       <div className="col-sm-4">
                         <div className="rounded bg-white text-center py-1">
-                          <h4 className="mb-1">45</h4>
+                          <h4 className="mb-1">{userProfile.following}</h4>
                           <p className="fs-12">Follows</p>
                         </div>
                       </div>
                       <div className="col-sm-4">
                         <div className="rounded bg-white text-center py-1">
-                          <h4 className="mb-1">45</h4>
+                          <h4 className="mb-1">{userProfile.posts}</h4>
                           <p className="fs-12">Post</p>
                         </div>
                       </div>
@@ -175,7 +313,7 @@ const SocialFeed = () => {
               <div>
                 <div className="card">
                   <div className="card-body">
-                    <form >
+                    <form onSubmit={handleCreatePost}>
                       <div className="mb-3">
                         <label className="form-label fs-16">Create Post</label>
                         <div className="position-relative">
@@ -183,10 +321,11 @@ const SocialFeed = () => {
                             className="form-control post-textarea"
                             rows={3}
                             placeholder="What's on your mind?"
-                            defaultValue={""}
+                            value={newPostContent}
+                            onChange={(e) => setNewPostContent(e.target.value)}
                           />
                           <span className="avatar avatar-lg avatar-rounded text-area-avatar">
-                            <ImageWithBasePath src="assets/img/users/user-11.jpg" alt="Img" />
+                            <ImageWithBasePath src={userProfile.avatar} alt="Img" />
                           </span>
                         </div>
                       </div>
@@ -255,11 +394,12 @@ const SocialFeed = () => {
                             <i className="ti ti-world fs-16" />
                           </Link>
                           <button
-                            type="button"
+                            type="submit"
                             className="btn btn-primary d-inline-flex align-items-center ms-2"
+                            disabled={!newPostContent.trim() || loading}
                           >
                             <i className="ti ti-circle-plus fs-16 me-2" />
-                            Share Post
+                            {loading ? 'Posting...' : 'Share Post'}
                           </button>
                         </div>
                       </div>
@@ -300,1327 +440,748 @@ const SocialFeed = () => {
                     </Slider>
                   </div>
                 </div>
-                <div className="card">
-                  <div className="card-header border-0 pb-0">
-                    <div className="d-flex align-items-center justify-content-between border-bottom flex-wrap row-gap-3 pb-3">
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="avatar avatar-lg avatar-rounded flex-shrink-0 me-2"
-                        >
-                          <ImageWithBasePath src="assets/img/users/user-03.jpg" alt="Img" />
-                        </Link>
-                        <div>
-                          <h5 className="mb-1">
-                            <Link to="#">
-                              Richard Smith{" "}
-                              <i className="ti ti-circle-check-filled text-success" />
-                            </Link>
-                          </h5>
-                          <p className="d-flex align-items-center">
-                            <span className="text-info">@richard442</span>
-                            <i className="ti ti-circle-filled fs-5 mx-2" />
-                            United Kingdom
-                          </p>
-                        </div>
+                {/* Loading state */}
+                {loading && (
+                  <div className="card">
+                    <div className="card-body text-center py-5">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
                       </div>
-                      <div className="d-flex align-items-center">
-                        <p className="mb-0 text-dark">About 1 hr ago</p>
-                        <div className="dropdown ms-3 me-1">
-                          <button
-                            className="btn btn-icon dropdown-toggle bg-transparent d-flex align-items-center text-dark border-0 p-0 btn-sm"
-                            type="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                          >
-                            <i className="ti ti-world pe-1" />
-                          </button>
-                          <ul className="dropdown-menu dropdown-menu-end">
-                            <li>
-                              <Link
-                                className="dropdown-item"
-                                to="#"
-                              >
-                                Private
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                className="dropdown-item"
-                                to="#"
-                              >
-                                Public
-                              </Link>
-                            </li>
-                          </ul>
-                        </div>
-                        <div className="dropdown">
-                          <Link
-                            to="#"
-                            className="d-inline-flex align-items-center show"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="true"
-                          >
-                            <i className="ti ti-dots-vertical" />
-                          </Link>
-                          <ul className="dropdown-menu dropdown-menu-end p-3">
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-edit me-2" />
-                                Edit
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-eye me-2" />
-                                Hide Post
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-report me-2" />
-                                Report
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-trash-x me-2" />
-                                Delete
-                              </Link>
-                            </li>
-                          </ul>
-                        </div>
+                      <p className="mt-2">Loading posts...</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error state */}
+                {error && (
+                  <div className="card">
+                    <div className="card-body text-center py-5">
+                      <div className="text-danger">
+                        <i className="ti ti-alert-circle fs-1" />
+                        <p className="mt-2">{error}</p>
                       </div>
                     </div>
                   </div>
-                  <div className="card-body">
-                    <div className="mb-2">
-                      <p className="text-dark fw-medium">
-                        "Believe in yourself and all that you are. Know that there
-                        is something inside you that is greater than any obstacle.
-                        <Link
-                          to="#"
-                          className="text-info link-hover"
-                        >
-                          #MotivationMonday
-                        </Link>
-                        <Link
-                          to="#"
-                          className="text-info link-hover"
-                        >
-                          #Inspiration
-                        </Link>
-                        🌟"
-                      </p>
+                )}
+
+                {/* Posts */}
+                {posts && posts.length > 0 ? posts.map((post: Post) => (
+                  <div key={post._id} className="card">
+                    <div className="card-header border-0 pb-0">
+                      <div className="d-flex align-items-center justify-content-between border-bottom flex-wrap row-gap-3 pb-3">
+                        <div className="d-flex align-items-center">
+                          <Link
+                            to="#"
+                            className="avatar avatar-lg avatar-rounded flex-shrink-0 me-2"
+                          >
+                            <ImageWithBasePath src={post.user?.avatar || userProfile.avatar} alt="Img" />
+                          </Link>
+                          <div>
+                            <h5 className="mb-1">
+                              <Link to="#">
+                                {post.user?.name || 'User'}
+                                {post.user?.isVerified && <i className="ti ti-circle-check-filled text-success ms-1" />}
+                              </Link>
+                            </h5>
+                            <p className="d-flex align-items-center">
+                              <span className="text-info">@{post.user?.username || 'user'}</span>
+                              <i className="ti ti-circle-filled fs-5 mx-2" />
+                              {formatTimeAgo(post.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="d-flex align-items-center">
+                          <div className="dropdown ms-3 me-1">
+                            <button
+                              className="btn btn-icon dropdown-toggle bg-transparent d-flex align-items-center text-dark border-0 p-0 btn-sm"
+                              type="button"
+                              data-bs-toggle="dropdown"
+                              aria-expanded="false"
+                            >
+                              <i className="ti ti-world pe-1" />
+                            </button>
+                            <ul className="dropdown-menu dropdown-menu-end">
+                              <li>
+                                <Link className="dropdown-item" to="#">
+                                  {post.isPublic ? 'Public' : 'Private'}
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                          <div className="dropdown">
+                            <Link
+                              to="#"
+                              className="d-inline-flex align-items-center show"
+                              data-bs-toggle="dropdown"
+                              aria-expanded="true"
+                            >
+                              <i className="ti ti-dots-vertical" />
+                            </Link>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link to="#" className="dropdown-item rounded-1">
+                                  <i className="ti ti-edit me-2" />
+                                  Edit
+                                </Link>
+                              </li>
+                              <li>
+                                <Link to="#" className="dropdown-item rounded-1">
+                                  <i className="ti ti-eye me-2" />
+                                  Hide Post
+                                </Link>
+                              </li>
+                              <li>
+                                <Link to="#" className="dropdown-item rounded-1">
+                                  <i className="ti ti-report me-2" />
+                                  Report
+                                </Link>
+                              </li>
+                              <li>
+                                <Link to="#" className="dropdown-item rounded-1">
+                                  <i className="ti ti-trash-x me-2" />
+                                  Delete
+                                </Link>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="mb-2">
-                      <ImageWithBasePath
-                        src="assets/img/social/social-feed-01.jpg"
-                        className="rounded"
-                        alt="Img"
-                      />
-                    </div>
-                    <Lightbox
+                    <div className="card-body">
+                      <div className="mb-2">
+                        <p className="text-dark fw-medium">{post.content}</p>
+                      </div>
+
+                      {/* Post images */}
+                      {post.images && post.images.length > 0 && (
+                        <>
+                          {post.images.length === 1 ? (
+                            <div className="mb-2">
+                              <ImageWithBasePath
+                                src={post.images[0]}
+                                className="rounded"
+                                alt="Img"
+                              />
+                            </div>
+                          ) : (
+                            <Slider {...settings2} className="social-gallery-slider owl-carousel mb-3">
+                              {post.images.map((image: string, index: number) => (
+                                <Link
+                                  key={index}
+                                  to="#"
+                                  onClick={() => openLightbox(post.images)}
+                                  className="gallery-item"
+                                >
+                                  <ImageWithBasePath
+                                    src={image}
+                                    className="rounded"
+                                    alt="img"
+                                  />
+                                  <span className="avatar avatar-md avatar-rounded">
+                                    <i className="ti ti-eye" />
+                                  </span>
+                                </Link>
+                              ))}
+                            </Slider>
+                          )}
+                        </>
+                      )}
+
+                      {/* Lightbox for images */}
+                      <Lightbox
                         open={open1}
                         close={() => setOpen1(false)}
-                        slides={[
-                            { src: "assets/img/social/gallery-big-01.jpg" },
-                            { src: "assets/img/social/gallery-big-02.jpg" },
-                            { src: "assets/img/social/gallery-big-03.jpg" },
-                            { src: "assets/img/social/gallery-big-04.jpg" },
-                            { src: "assets/img/social/gallery-big-01.jpg" },
-                        ]}
-                    />
-                    <Slider {...settings2} className="social-gallery-slider owl-carousel mb-3">
-                      <Link
-                         to="#"
-                         onClick={() => setOpen1(true)}
-                        className="gallery-item"
-                      >
-                        <ImageWithBasePath
-                          src="assets/img/social/gallery-01.jpg"
-                          className="rounded"
-                          alt="img"
-                        />
-                        <span className="avatar avatar-md avatar-rounded">
-                          <i className="ti ti-eye" />
-                        </span>
-                      </Link>
-                      <Link
-                         to="#"
-                         onClick={() => setOpen1(true)}
-                        className="gallery-item"
-                      >
-                        <ImageWithBasePath
-                          src="assets/img/social/gallery-02.jpg"
-                          className="rounded"
-                          alt="img"
-                        />
-                        <span className="avatar avatar-md avatar-rounded">
-                          <i className="ti ti-eye" />
-                        </span>
-                      </Link>
-                      <Link
-                         to="#"
-                         onClick={() => setOpen1(true)}
-                        className="gallery-item"
-                      >
-                        <ImageWithBasePath
-                          src="assets/img/social/gallery-03.jpg"
-                          className="rounded"
-                          alt="img"
-                        />
-                        <span className="avatar avatar-md avatar-rounded">
-                          <i className="ti ti-eye" />
-                        </span>
-                      </Link>
-                      <Link
-                         to="#"
-                         onClick={() => setOpen1(true)}
-                        className="gallery-item"
-                      >
-                        <ImageWithBasePath
-                          src="assets/img/social/gallery-04.jpg"
-                          className="rounded"
-                          alt="img"
-                        />
-                        <span className="avatar avatar-md avatar-rounded">
-                          <i className="ti ti-eye" />
-                        </span>
-                      </Link>
-                      <Link
-                        to="#"
-                        onClick={() => setOpen1(true)}
-                        className="gallery-item"
-                      >
-                        <ImageWithBasePath
-                          src="assets/img/social/gallery-01.jpg"
-                          className="rounded"
-                          alt="img"
-                        />
-                        <span className="avatar avatar-md avatar-rounded">
-                          <i className="ti ti-eye" />
-                        </span>
-                      </Link>
-                    </Slider>
-                    <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3 mb-3">
-                      <div className="d-flex align-items-center flex-wrap row-gap-3">
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center me-3"
-                        >
-                          <i className="ti ti-heart me-2" />
-                          340K Likes
-                        </Link>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center me-3"
-                        >
-                          <i className="ti ti-message-dots me-2" />
-                          45 Comments
-                        </Link>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center"
-                        >
-                          <i className="ti ti-share-3 me-2" />
-                          28 Share
-                        </Link>
-                      </div>
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-heart-filled text-danger" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-share" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-message-star" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-bookmark-filled text-warning" />
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-start">
-                      <Link
-                        to="#"
-                        className="avatar avatar-rounded me-2 flex-shrink-0"
-                      >
-                        <ImageWithBasePath src="assets/img/users/user-11.jpg" alt="Img" />
-                      </Link>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Enter Comments"
+                        slides={lightboxImages}
                       />
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-header border-0 pb-0">
-                    <div className="d-flex align-items-center justify-content-between border-bottom flex-wrap row-gap-3 pb-3">
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="avatar avatar-lg avatar-rounded flex-shrink-0 me-2"
-                        >
-                          <ImageWithBasePath src="assets/img/users/user-05.jpg" alt="Img" />
-                        </Link>
-                        <div>
-                          <h5 className="mb-1">
-                            <Link to="#">
-                              Jason Heier{" "}
-                              <i className="ti ti-circle-check-filled text-success" />
-                            </Link>
-                          </h5>
-                          <p className="d-flex align-items-center">
-                            <span className="text-info">@jason118</span>
-                            <i className="ti ti-circle-filled fs-5 mx-2" />
-                            United Kingdom
-                          </p>
+
+                      <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3 mb-3">
+                        <div className="d-flex align-items-center flex-wrap row-gap-3">
+                          <Link to="#" className="d-inline-flex align-items-center me-3">
+                            <i className="ti ti-heart me-2" />
+                            {post.likes?.length || 0} Likes
+                          </Link>
+                          <Link to="#" className="d-inline-flex align-items-center me-3">
+                            <i className="ti ti-message-dots me-2" />
+                            {post.comments?.length || 0} Comments
+                          </Link>
+                          <Link to="#" className="d-inline-flex align-items-center">
+                            <i className="ti ti-share-3 me-2" />
+                            {post.shares || 0} Share
+                          </Link>
                         </div>
-                      </div>
-                      <div className="d-flex align-items-center">
-                        <p className="mb-0 text-dark">About 1 hr ago</p>
-                        <div className="dropdown ms-3 me-1">
-                          <button
-                            className="btn btn-icon dropdown-toggle bg-transparent d-flex align-items-center text-dark border-0 p-0 btn-sm"
-                            type="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                          >
-                            <i className="ti ti-world pe-1" />
-                          </button>
-                          <ul className="dropdown-menu dropdown-menu-end">
-                            <li>
-                              <Link
-                                className="dropdown-item"
-                                to="#"
-                              >
-                                Private
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                className="dropdown-item"
-                                to="#"
-                              >
-                                Public
-                              </Link>
-                            </li>
-                          </ul>
-                        </div>
-                        <div className="dropdown">
+                        <div className="d-flex align-items-center">
                           <Link
                             to="#"
-                            className="d-inline-flex align-items-center show"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="true"
+                            className="btn btn-icon btn-sm rounded-circle"
+                            onClick={() => handleLikePost(post._id)}
                           >
-                            <i className="ti ti-dots-vertical" />
+                            <i className={`ti ${post.likes?.includes(user?.id || '') ? 'ti-heart-filled text-danger' : 'ti-heart'}`} />
                           </Link>
-                          <ul className="dropdown-menu dropdown-menu-end p-3">
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-edit me-2" />
-                                Edit
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-eye me-2" />
-                                Hide Post
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-report me-2" />
-                                Report
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-trash-x me-2" />
-                                Delete
-                              </Link>
-                            </li>
-                          </ul>
+                          <Link to="#" className="btn btn-icon btn-sm rounded-circle">
+                            <i className="ti ti-share" />
+                          </Link>
+                          <Link to="#" className="btn btn-icon btn-sm rounded-circle">
+                            <i className="ti ti-message-star" />
+                          </Link>
+                          <Link to="#" className="btn btn-icon btn-sm rounded-circle">
+                            <i className="ti ti-bookmark" />
+                          </Link>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="card-body">
-                    <div className="mb-2">
-                      <p className="text-dark fw-medium">
-                        Drinking water boosts skin health and beauty. Stay hydrated!
-                        <Link
-                          to="#"
-                          className="text-info link-hover"
-                        >
-                          #HealthTips{" "}
+
+                      {/* Comments section */}
+                      {post.comments && post.comments.length > 0 && (
+                        <div className="mb-3">
+                          {post.comments.slice(0, toggle2 ? post.comments.length : 2).map((comment: PostComment, index: number) => (
+                            <div key={comment._id || index} className="d-flex align-items-start mb-3">
+                              <Link to="#" className="avatar avatar-rounded me-2 flex-shrink-0">
+                                <ImageWithBasePath src={comment.user?.avatar || userProfile.avatar} alt="Img" />
+                              </Link>
+                              <div className="bg-light rounded flex-fill p-2">
+                                <div className="d-flex align-items-center mb-1">
+                                  <h6 className="mb-0">{comment.user?.name || 'User'}</h6>
+                                  <span className="ms-2 text-muted fs-12">{formatTimeAgo(comment.createdAt)}</span>
+                                </div>
+                                <p className="mb-0">{comment.content}</p>
+                              </div>
+                            </div>
+                          ))}
+
+                          {post.comments.length > 2 && (
+                            <div className="view-all text-center mb-3">
+                              <Link
+                                to="#"
+                                className="viewall-button text-primary fw-medium"
+                                onClick={() => setToggle2(!toggle2)}
+                              >
+                                <span>View {toggle2 ? 'Less' : `All ${post.comments.length}`} Comments</span>
+                                <i className="fa fa-chevron-down fs-10 ms-2" />
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Comment input */}
+                      <div className="d-flex align-items-start">
+                        <Link to="#" className="avatar avatar-rounded me-2 flex-shrink-0">
+                          <ImageWithBasePath src={userProfile.avatar} alt="Img" />
                         </Link>
-                        <Link
-                          to="#"
-                          className="text-info link-hover"
-                        >
-                          {" "}
-                          #Wellness
-                        </Link>
-                        💧
-                      </p>
-                    </div>
-                    <div className="card shadow-none mb-3">
-                      <div className="card-img card-img-hover rounded-0">
-                        <Link to="#" className="rounded-top">
-                          <ImageWithBasePath
-                            src="assets/img/social/social-feed-02.jpg"
-                            className="rounded-top"
-                            alt="Img"
+                        <div className="flex-fill">
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Enter Comments"
+                            value={commentInputs[post._id] || ''}
+                            onChange={(e) => handleCommentInputChange(post._id, e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                handleAddComment(post._id, commentInputs[post._id] || '');
+                              }
+                            }}
                           />
-                        </Link>
-                      </div>
-                      <div className="card-body p-2">
-                        <h6 className="mb-1 text-truncate">
-                          <Link to="#">
-                            Drinking water boosts skin health and beauty. Stay
-                            hydrated!💧
-                          </Link>
-                        </h6>
-                        <Link to="#">Health.com</Link>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3">
-                      <div className="d-flex align-items-center flex-wrap row-gap-3">
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center me-3"
-                        >
-                          <i className="ti ti-heart me-2" />
-                          340K Likes
-                        </Link>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center me-3"
-                        >
-                          <i className="ti ti-message-dots me-2" />
-                          45 Comments
-                        </Link>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center"
-                        >
-                          <i className="ti ti-share-3 me-2" />
-                          28 Share
-                        </Link>
-                      </div>
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-heart" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-share" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-message-star" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-bookmark" />
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-header border-0 pb-0">
-                    <div className="d-flex align-items-center justify-content-between border-bottom flex-wrap row-gap-3 pb-3">
-                      <div className="d-flex align-items-center">
-                        <span className="avatar avatar-lg avatar-rounded flex-shrink-0 me-2">
-                          <ImageWithBasePath src="assets/img/users/user-04.jpg" alt="Img" />
-                        </span>
-                        <div>
-                          <h5 className="mb-1">
-                            <Link to="#">
-                              Sophie Headrick{" "}
-                              <i className="ti ti-circle-check-filled text-success" />
-                            </Link>
-                          </h5>
-                          <p className="d-flex align-items-center">
-                            <span className="text-info">@sophie241</span>
-                            <i className="ti ti-circle-filled fs-5 mx-2" />
-                            United Kingdom
-                          </p>
-                        </div>
-                      </div>
-                      <div className="d-flex align-items-center">
-                        <p className="mb-0 text-dark">About 1 hr ago</p>
-                        <div className="dropdown ms-3 me-1">
-                          <button
-                            className="btn btn-icon dropdown-toggle bg-transparent d-flex align-items-center text-dark border-0 p-0 btn-sm"
-                            type="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                          >
-                            <i className="ti ti-world pe-1" />
-                          </button>
-                          <ul className="dropdown-menu dropdown-menu-end">
-                            <li>
-                              <Link
-                                className="dropdown-item"
-                                to="#"
-                              >
-                                Private
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                className="dropdown-item"
-                                to="#"
-                              >
-                                Public
-                              </Link>
-                            </li>
-                          </ul>
-                        </div>
-                        <div className="dropdown">
-                          <Link
-                            to="#"
-                            className="d-inline-flex align-items-center show"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="true"
-                          >
-                            <i className="ti ti-dots-vertical" />
-                          </Link>
-                          <ul className="dropdown-menu dropdown-menu-end p-3">
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-edit me-2" />
-                                Edit
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-eye me-2" />
-                                Hide Post
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-report me-2" />
-                                Report
-                              </Link>
-                            </li>
-                            <li>
-                              <Link
-                                to="#"
-                                className="dropdown-item rounded-1"
-                              >
-                                <i className="ti ti-trash-x me-2" />
-                                Delete
-                              </Link>
-                            </li>
-                          </ul>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="card-body">
-                    <div className="mb-2">
-                      <p className="text-dark fw-medium">
-                        Excited to announce the launch of our new product! Get yours
-                        now and enjoy a special discount.
-                        <Link
-                          to="#"
-                          className="text-info link-hover"
-                        >
-                          #NewRelease{" "}
-                        </Link>
-                        <Link
-                          to="#"
-                          className="text-info link-hover"
-                        >
-                          {" "}
-                          #Innovation
-                        </Link>
-                        🎉
-                      </p>
-                    </div>
-                    <div className="mb-2">
-                      <ImageWithBasePath
-                        src="assets/img/social/social-feed-03.jpg"
-                        className="rounded"
-                        alt="Img"
-                      />
-                    </div>
-                    <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3 mb-3">
-                      <div className="d-flex align-items-center flex-wrap row-gap-3">
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center me-3"
-                        >
-                          <i className="ti ti-heart me-2" />
-                          340K Likes
-                        </Link>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center me-3"
-                        >
-                          <i className="ti ti-message-dots me-2" />
-                          45 Comments
-                        </Link>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center"
-                        >
-                          <i className="ti ti-share-3 me-2" />
-                          28 Share
-                        </Link>
-                      </div>
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-heart-filled text-danger" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-share" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-message-star" />
-                        </Link>
-                        <Link
-                          to="#"
-                          className="btn btn-icon btn-sm rounded-circle"
-                        >
-                          <i className="ti ti-bookmark-filled text-warning" />
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-start mb-3">
-                      <Link
-                        to="#"
-                        className="avatar avatar-rounded flex-shrink-0 me-2"
-                      >
-                        <ImageWithBasePath src="assets/img/profiles/avatar-02.jpg" alt="Img" />
-                      </Link>
-                      <div className="bg-light rounded flex-fill p-2">
-                        <div className="d-flex align-items-center mb-1">
-                          <h5>
-                            <Link to="#">Frank Hoffman</Link>
-                          </h5>
-                          <span className="ms-2">12:45 PM</span>
-                        </div>
-                        <p className="mb-1">
-                          Congratulations on the launch! I've been eagerly waiting
-                          for this product, and the special discount makes it even
-                          more exciting.
-                        </p>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center"
-                        >
-                          <i className="ti ti-share-3 me-2" />
-                          Reply
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-start mb-3 ms-4 ps-2">
-                      <Link
-                        to="#"
-                        className="avatar avatar-rounded flex-shrink-0 me-2"
-                      >
-                        <ImageWithBasePath src="assets/img/profiles/avatar-01.jpg" alt="Img" />
-                      </Link>
-                      <div className="bg-light rounded flex-fill p-2">
-                        <div className="d-flex align-items-center mb-1">
-                          <h5>
-                            <Link to="#">Sophie Headrick</Link>
-                          </h5>
-                          <span className="ms-2">12:45 PM</span>
-                        </div>
-                        <p className="mb-1">
-                          Thank you so much for your enthusiasm and support!
-                        </p>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center"
-                        >
-                          <i className="ti ti-share-3 me-2" />
-                          Reply
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-start mb-3">
-                      <Link
-                        to="#"
-                        className="avatar avatar-rounded flex-shrink-0 me-2"
-                      >
-                        <ImageWithBasePath src="assets/img/profiles/avatar-04.jpg" alt="Img" />
-                      </Link>
-                      <div className="bg-light rounded flex-fill p-2">
-                        <div className="d-flex align-items-center mb-1">
-                          <h5>
-                            <Link to="#">Samuel Butler</Link>
-                          </h5>
-                          <span className="ms-2">12:40 PM</span>
-                        </div>
-                        <p className="mb-1">
-                          So thrilled to see this product finally launched! I've
-                          heard amazing things about it and am excited to see how it
-                          lives up to the hype.
-                        </p>
-                        <Link
-                          to="#"
-                          className="d-inline-flex align-items-center"
-                        >
-                          <i className="ti ti-share-3 me-2" />
-                          Reply
-                        </Link>
-                      </div>
-                    </div>
-                    <div>
-                      <div className={`more-menu ${toggle2 ? 'd-block':'d-none'}`} >
-                        <div className="d-flex align-items-start mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-05.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <div className="bg-light rounded flex-fill p-2">
-                            <div className="d-flex align-items-center mb-1">
-                              <h5>
-                                <Link to="#">Samuel Butler</Link>
-                              </h5>
-                              <span className="ms-2">12:40 PM</span>
-                            </div>
-                            <p className="mb-1">
-                              So thrilled to see this product finally launched! I've
-                              heard amazing things about it and am excited to see
-                              how it lives up to the hype.
-                            </p>
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                            >
-                              <i className="ti ti-share-3 me-2" />
-                              Reply
-                            </Link>
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-start mb-3">
-                          <Link
-                            to="#"
-                            className="avatar avatar-rounded flex-shrink-0 me-2"
-                          >
-                            <ImageWithBasePath
-                              src="assets/img/profiles/avatar-06.jpg"
-                              alt="Img"
-                            />
-                          </Link>
-                          <div className="bg-light rounded flex-fill p-2">
-                            <div className="d-flex align-items-center mb-1">
-                              <h5>
-                                <Link to="#">Samuel Butler</Link>
-                              </h5>
-                              <span className="ms-2">12:40 PM</span>
-                            </div>
-                            <p className="mb-1">
-                              So thrilled to see this product finally launched! I've
-                              heard amazing things about it and am excited to see
-                              how it lives up to the hype.
-                            </p>
-                            <Link
-                              to="#"
-                              className="d-inline-flex align-items-center"
-                            >
-                              <i className="ti ti-share-3 me-2" />
-                              Reply
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="view-all text-center mb-3">
-                        <Link
-                          to="#"
-                          className="viewall-button text-primary fw-medium"
-                          onClick={()=>setToggle2(!toggle2)}
-                        >
-                          <span>View {toggle2 ? 'Less':'All 200'}  Comments</span>
-                          <i className="fa fa-chevron-down fs-10 ms-2" />
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="d-flex align-items-start">
-                      <span className="avatar avatar-rounded me-2 flex-shrink-0">
-                        <ImageWithBasePath src="assets/img/users/user-11.jpg" alt="Img" />
-                      </span>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Enter Comments"
-                      />
+                )) : !loading && !error && (
+                  <div className="card">
+                    <div className="card-body text-center py-5">
+                      <p>No posts available yet. Be the first to create a post!</p>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
             <div className="col-xl-3 theiaStickySidebar">
               <div className="sticky-class">
-              <div className="card ">
-                <div className="card-body">
-                  <h5 className="mb-3">Peoples</h5>
-                  <ul
-                    className="nav nav-pills border d-flex p-2 rounded mb-3"
-                    id="pills-tab"
-                    role="tablist"
-                  >
-                    <li className="nav-item flex-fill" role="presentation">
-                      <button
-                        className="nav-link btn active w-100"
-                        data-bs-toggle="pill"
-                        data-bs-target="#pills-home"
-                        type="button"
-                        role="tab"
-                        aria-selected="true"
-                      >
-                        General
-                      </button>
-                    </li>
-                    <li className="nav-item flex-fill" role="presentation">
-                      <button
-                        className="nav-link btn w-100"
-                        data-bs-toggle="pill"
-                        data-bs-target="#pills-profile"
-                        type="button"
-                        role="tab"
-                        aria-selected="false"
-                      >
-                        Primary
-                      </button>
-                    </li>
-                  </ul>
-                  <div className="tab-content">
-                    <div
-                      className="tab-pane fade show active"
-                      id="pills-home"
-                      role="tabpanel"
+                <div className="card ">
+                  <div className="card-body">
+                    <h5 className="mb-3">Peoples</h5>
+                    <ul
+                      className="nav nav-pills border d-flex p-2 rounded mb-3"
+                      id="pills-tab"
+                      role="tablist"
                     >
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
+                      <li className="nav-item flex-fill" role="presentation">
+                        <button
+                          className="nav-link btn active w-100"
+                          data-bs-toggle="pill"
+                          data-bs-target="#pills-home"
+                          type="button"
+                          role="tab"
+                          aria-selected="true"
+                        >
+                          General
+                        </button>
+                      </li>
+                      <li className="nav-item flex-fill" role="presentation">
+                        <button
+                          className="nav-link btn w-100"
+                          data-bs-toggle="pill"
+                          data-bs-target="#pills-profile"
+                          type="button"
+                          role="tab"
+                          aria-selected="false"
+                        >
+                          Primary
+                        </button>
+                      </li>
+                    </ul>
+                    <div className="tab-content">
+                      <div
+                        className="tab-pane fade show active"
+                        id="pills-home"
+                        role="tabpanel"
+                      >
+                        <div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath
+                                  src="assets/img/profiles/avatar-29.jpg"
+                                  alt="Img"
+                                />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Anthony Lewis</Link>
+                                  <i className="ti ti-circle-check-filled text-success ms-1" />
+                                </h6>
+                                <span className="fs-12 d-block">United States</span>
+                              </div>
+                            </div>
                             <Link
                               to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
+                              className="btn btn-sm btn-icon"
                             >
-                              <ImageWithBasePath
-                                src="assets/img/profiles/avatar-29.jpg"
-                                alt="Img"
-                              />
+                              <i className="ti ti-user-x" />
                             </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Anthony Lewis</Link>
-                                <i className="ti ti-circle-check-filled text-success ms-1" />
-                              </h6>
-                              <span className="fs-12 d-block">United States</span>
-                            </div>
                           </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-01.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Harvey Smith</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Ukrain</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-33.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Stephan Peralt</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Isreal</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-34.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Doglas Martini</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Belgium</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-09.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Brian Villalobos</Link>
+                                  <i className="ti ti-circle-check-filled text-success ms-1" />
+                                </h6>
+                                <span className="fs-12 d-block">United Kingdom</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-02.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Linda Ray</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Argentina</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
                         </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-01.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Harvey Smith</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Ukrain</span>
-                            </div>
-                          </div>
+                        <div>
                           <Link
                             to="#"
-                            className="btn btn-sm btn-icon"
+                            className="btn btn-outline-light w-100 border"
                           >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-33.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Stephan Peralt</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Isreal</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-34.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Doglas Martini</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Belgium</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-09.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Brian Villalobos</Link>
-                                <i className="ti ti-circle-check-filled text-success ms-1" />
-                              </h6>
-                              <span className="fs-12 d-block">United Kingdom</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-02.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Linda Ray</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Argentina</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
+                            View All <i className="ti ti-arrow-right ms-2" />
                           </Link>
                         </div>
                       </div>
-                      <div>
+                      <div
+                        className="tab-pane fade"
+                        id="pills-profile"
+                        role="tabpanel"
+                      >
+                        <div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath
+                                  src="assets/img/profiles/avatar-11.jpg"
+                                  alt="Img"
+                                />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Anthony Lewis</Link>
+                                  <i className="ti ti-circle-check-filled text-success ms-1" />
+                                </h6>
+                                <span className="fs-12 d-block">United States</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-12.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Harvey Smith</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Ukrain</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-13.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Stephan Peralt</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Isreal</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-14.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Doglas Martini</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Belgium</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-15.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Brian Villalobos</Link>
+                                  <i className="ti ti-circle-check-filled text-success ms-1" />
+                                </h6>
+                                <span className="fs-12 d-block">United Kingdom</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <div className="d-flex align-items-center">
+                              <Link
+                                to="#"
+                                className="avatar avatar-rounded flex-shrink-0 me-2"
+                              >
+                                <ImageWithBasePath src="assets/img/users/user-16.jpg" alt="Img" />
+                              </Link>
+                              <div>
+                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
+                                  <Link to="#">Linda Ray</Link>
+                                </h6>
+                                <span className="fs-12 d-block">Argentina</span>
+                              </div>
+                            </div>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                            >
+                              <i className="ti ti-user-x" />
+                            </Link>
+                          </div>
+                        </div>
+                        <div>
+                          <Link
+                            to="#"
+                            className="btn btn-outline-light w-100 border"
+                          >
+                            View All <i className="ti ti-arrow-right ms-2" />
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <h5 className="mb-3">Saved Feeds</h5>
+                    <div className="bg-light-500 rounded p-2 mb-2">
+                      <div className="d-flex align-items-center justify-content-between mb-1">
                         <Link
                           to="#"
-                          className="btn btn-outline-light w-100 border"
+                          className="d-flex align-items-center"
                         >
-                          View All <i className="ti ti-arrow-right ms-2" />
+                          <span>
+                            <ImageWithBasePath
+                              src="assets/img/icons/feeds-01.svg"
+                              className="me-2"
+                              alt="Img"
+                            />
+                          </span>
+                          <p className="fs-12 fw-medium">World Health</p>
+                        </Link>
+                        <Link to="#">
+                          <i className="ti ti-bookmark-filled text-warning" />
                         </Link>
                       </div>
+                      <p className="text-dark fw-medium">
+                        <Link to="#">
+                          Retail investor party continues even as
+                        </Link>
+                      </p>
                     </div>
-                    <div
-                      className="tab-pane fade"
-                      id="pills-profile"
-                      role="tabpanel"
-                    >
-                      <div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath
-                                src="assets/img/profiles/avatar-11.jpg"
-                                alt="Img"
-                              />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Anthony Lewis</Link>
-                                <i className="ti ti-circle-check-filled text-success ms-1" />
-                              </h6>
-                              <span className="fs-12 d-block">United States</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-12.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Harvey Smith</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Ukrain</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-13.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Stephan Peralt</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Isreal</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-14.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Doglas Martini</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Belgium</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-15.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Brian Villalobos</Link>
-                                <i className="ti ti-circle-check-filled text-success ms-1" />
-                              </h6>
-                              <span className="fs-12 d-block">United Kingdom</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div className="d-flex align-items-center">
-                            <Link
-                              to="#"
-                              className="avatar avatar-rounded flex-shrink-0 me-2"
-                            >
-                              <ImageWithBasePath src="assets/img/users/user-16.jpg" alt="Img" />
-                            </Link>
-                            <div>
-                              <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                <Link to="#">Linda Ray</Link>
-                              </h6>
-                              <span className="fs-12 d-block">Argentina</span>
-                            </div>
-                          </div>
-                          <Link
-                            to="#"
-                            className="btn btn-sm btn-icon"
-                          >
-                            <i className="ti ti-user-x" />
-                          </Link>
-                        </div>
-                      </div>
-                      <div>
+                    <div className="bg-light-500 rounded p-2 mb-2">
+                      <div className="d-flex align-items-center justify-content-between mb-1">
                         <Link
                           to="#"
-                          className="btn btn-outline-light w-100 border"
+                          className="d-flex align-items-center"
                         >
-                          View All <i className="ti ti-arrow-right ms-2" />
+                          <span>
+                            <ImageWithBasePath
+                              src="assets/img/icons/feeds-02.svg"
+                              className="me-2"
+                              alt="Img"
+                            />
+                          </span>
+                          <p className="fs-12 fw-medium">T3 Tech</p>
+                        </Link>
+                        <Link to="#">
+                          <i className="ti ti-bookmark-filled text-warning" />
                         </Link>
                       </div>
+                      <p className="text-dark fw-medium">
+                        <Link to="#">
+                          Ipad Air (2020) vs Samsung Galaxy Tab
+                        </Link>
+                      </p>
+                    </div>
+                    <div className="bg-light-500 rounded p-2 mb-2">
+                      <div className="d-flex align-items-center justify-content-between mb-1">
+                        <Link
+                          to="#"
+                          className="d-flex align-items-center"
+                        >
+                          <span>
+                            <ImageWithBasePath
+                              src="assets/img/icons/feeds-03.svg"
+                              className="me-2"
+                              alt="Img"
+                            />
+                          </span>
+                          <p className="fs-12 fw-medium">Fstoppers</p>
+                        </Link>
+                        <Link to="#">
+                          <i className="ti ti-bookmark-filled text-warning" />
+                        </Link>
+                      </div>
+                      <p className="text-dark fw-medium">
+                        <Link to="#">
+                          Beyond capital gains tax! Top 50 stock
+                        </Link>
+                      </p>
+                    </div>
+                    <div className="bg-light-500 rounded p-2">
+                      <div className="d-flex align-items-center justify-content-between mb-1">
+                        <Link
+                          to="#"
+                          className="d-flex align-items-center"
+                        >
+                          <span>
+                            <ImageWithBasePath
+                              src="assets/img/icons/feeds-04.svg"
+                              className="me-2"
+                              alt="Img"
+                            />
+                          </span>
+                          <p className="fs-12 fw-medium">Evernote</p>
+                        </Link>
+                        <Link to="#">
+                          <i className="ti ti-bookmark-filled text-warning" />
+                        </Link>
+                      </div>
+                      <p className="text-dark fw-medium">
+                        <Link to="#">
+                          Sony Just Destroyed the Competition
+                        </Link>
+                      </p>
+                    </div>
+                    <div className="mt-3">
+                      <Link
+                        to="#"
+                        className="btn btn-outline-light w-100 border"
+                      >
+                        View All <i className="ti ti-arrow-right ms-2" />
+                      </Link>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="mb-3">Saved Feeds</h5>
-                  <div className="bg-light-500 rounded p-2 mb-2">
-                    <div className="d-flex align-items-center justify-content-between mb-1">
+                <div className="card">
+                  <div className="card-body">
+                    <h5 className="mb-3">Trending Hastags</h5>
+                    <div className="d-flex align-items-center flex-wrap gap-1">
                       <Link
                         to="#"
-                        className="d-flex align-items-center"
+                        className="text-info d-inline-flex link-hover"
                       >
-                        <span>
-                          <ImageWithBasePath
-                            src="assets/img/icons/feeds-01.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                        </span>
-                        <p className="fs-12 fw-medium">World Health</p>
+                        #HealthTips
                       </Link>
-                      <Link to="#">
-                        <i className="ti ti-bookmark-filled text-warning" />
-                      </Link>
-                    </div>
-                    <p className="text-dark fw-medium">
-                      <Link to="#">
-                        Retail investor party continues even as
-                      </Link>
-                    </p>
-                  </div>
-                  <div className="bg-light-500 rounded p-2 mb-2">
-                    <div className="d-flex align-items-center justify-content-between mb-1">
                       <Link
                         to="#"
-                        className="d-flex align-items-center"
+                        className="text-info d-inline-flex link-hover"
                       >
-                        <span>
-                          <ImageWithBasePath
-                            src="assets/img/icons/feeds-02.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                        </span>
-                        <p className="fs-12 fw-medium">T3 Tech</p>
+                        #Wellness
                       </Link>
-                      <Link to="#">
-                        <i className="ti ti-bookmark-filled text-warning" />
-                      </Link>
-                    </div>
-                    <p className="text-dark fw-medium">
-                      <Link to="#">
-                        Ipad Air (2020) vs Samsung Galaxy Tab
-                      </Link>
-                    </p>
-                  </div>
-                  <div className="bg-light-500 rounded p-2 mb-2">
-                    <div className="d-flex align-items-center justify-content-between mb-1">
                       <Link
                         to="#"
-                        className="d-flex align-items-center"
+                        className="text-info d-inline-flex link-hover"
                       >
-                        <span>
-                          <ImageWithBasePath
-                            src="assets/img/icons/feeds-03.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                        </span>
-                        <p className="fs-12 fw-medium">Fstoppers</p>
+                        #Motivation
                       </Link>
-                      <Link to="#">
-                        <i className="ti ti-bookmark-filled text-warning" />
-                      </Link>
-                    </div>
-                    <p className="text-dark fw-medium">
-                      <Link to="#">
-                        Beyond capital gains tax! Top 50 stock
-                      </Link>
-                    </p>
-                  </div>
-                  <div className="bg-light-500 rounded p-2">
-                    <div className="d-flex align-items-center justify-content-between mb-1">
                       <Link
                         to="#"
-                        className="d-flex align-items-center"
+                        className="text-info d-inline-flex link-hover"
                       >
-                        <span>
-                          <ImageWithBasePath
-                            src="assets/img/icons/feeds-04.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                        </span>
-                        <p className="fs-12 fw-medium">Evernote</p>
-                      </Link>
-                      <Link to="#">
-                        <i className="ti ti-bookmark-filled text-warning" />
+                        #Inspiration{" "}
                       </Link>
                     </div>
-                    <p className="text-dark fw-medium">
-                      <Link to="#">
-                        Sony Just Destroyed the Competition
-                      </Link>
-                    </p>
-                  </div>
-                  <div className="mt-3">
-                    <Link
-                      to="#"
-                      className="btn btn-outline-light w-100 border"
-                    >
-                      View All <i className="ti ti-arrow-right ms-2" />
-                    </Link>
                   </div>
                 </div>
-              </div>
-              <div className="card">
-                <div className="card-body">
-                  <h5 className="mb-3">Trending Hastags</h5>
-                  <div className="d-flex align-items-center flex-wrap gap-1">
-                    <Link
-                      to="#"
-                      className="text-info d-inline-flex link-hover"
-                    >
-                      #HealthTips
-                    </Link>
-                    <Link
-                      to="#"
-                      className="text-info d-inline-flex link-hover"
-                    >
-                      #Wellness
-                    </Link>
-                    <Link
-                      to="#"
-                      className="text-info d-inline-flex link-hover"
-                    >
-                      #Motivation
-                    </Link>
-                    <Link
-                      to="#"
-                      className="text-info d-inline-flex link-hover"
-                    >
-                      #Inspiration{" "}
-                    </Link>
-                  </div>
-                </div>
-              </div>
               </div>
             </div>
           </div>

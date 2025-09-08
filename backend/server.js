@@ -6,9 +6,9 @@ import fs from "fs";
 import { config } from "dotenv";
 import { connectDB } from "./config/db.js";
 import { socketHandler } from "./socket/index.js";
-import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import socialFeedRoutes from "./routes/socialfeed.routes.js";
 
 config();
 
@@ -39,15 +39,50 @@ if (!fs.existsSync(tempDir)) {
 // Connect to database
 connectDB();
 
-// Setup socket handlers
-socketHandler(httpServer);
+const initializeServer = async () => {
+  try {
+    await connectDB();
+    console.log("Database connections established successfully");
+    app.use('/api/socialfeed', socialFeedRoutes);
+    socketHandler(httpServer);
+
+    const PORT = process.env.PORT || 5000;
+    httpServer.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+
+  } catch (error) {
+    console.error("Failed to initialize server:", error);
+    process.exit(1);
+  }
+};
+
+initializeServer();
 
 app.get("/", (req, res) => {
   res.send("API is running");
 });
 
-// Server Listen
-const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
+// Health check endpoint to check Mongoose connection
+app.get("/health", async (req, res) => {
+  try {
+    const mongooseState = mongoose.connection.readyState;
+    const mongooseStatus = mongooseState === 1 ? 'connected' : mongooseState === 2 ? 'connecting' : 'disconnected';
+
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: {
+        mongoose: mongooseStatus
+      },
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
