@@ -115,10 +115,10 @@ export const socketHandler = (httpServer) => {
         let role = user.publicMetadata?.role;
         let companyId = user.publicMetadata?.companyId || null;
         
-        // In development, set a default companyId if none exists
-        if (isDevelopment && !companyId) {
-          companyId = "dev_company_123";
-          console.log(`[Development] Setting default companyId: ${companyId}`);
+        // TEMPORARY FIX: Auto-assign companyId for admin users in development
+        if (isDevelopment && role === "admin" && !companyId) {
+          companyId = "68443081dcdfe43152aebf80";
+          console.log(`🔧 Development fix: Auto-assigning companyId ${companyId} to admin user`);
         }
 
         console.log(`User ${user.id} metadata:`, {
