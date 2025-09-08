@@ -647,6 +647,21 @@ export const socialFeedController = {
     }
   },
 
+  editPost: async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const updateData = req.body;
+
+      validatePostId(postId);
+
+      const updatedPost = await SocialFeedService.editPost(req.companyId, postId, req.user.sub, updateData);
+      return createHttpSuccessResponse(res, updatedPost);
+    } catch (error) {
+      console.error('Error editing post:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to edit post');
+    }
+  },
+
   getTrendingHashtags: async (req, res) => {
     try {
       const limit = parseInt(req.query.limit) || 10;

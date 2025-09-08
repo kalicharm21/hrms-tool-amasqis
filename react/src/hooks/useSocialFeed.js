@@ -192,6 +192,38 @@ export const useSocialFeed = () => {
     });
   };
 
+  const editPost = async (postId, updateData) => {
+    try {
+      const token = await getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/posts/${postId}/edit`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      const data = await response.json();
+
+      if (data.done) {
+        setPosts(prevPosts =>
+          prevPosts.map(post =>
+            post._id === postId ? { ...post, ...data.data } : post
+          )
+        );
+        console.log('Post edited successfully');
+        return data.data;
+      } else {
+        throw new Error(data.error || 'Failed to edit post');
+      }
+    } catch (error) {
+      console.error('Error editing post:', error);
+      throw error;
+    }
+  };
+
   const toggleLike = async (postId) => {
     return new Promise((resolve, reject) => {
       if (!socket) {
@@ -687,6 +719,7 @@ export const useSocialFeed = () => {
     topPosters,
     fetchPosts,
     createPost,
+    editPost,
     toggleLike,
     addComment,
     addReply: useCallback(addReply, []),

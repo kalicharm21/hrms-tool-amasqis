@@ -62,6 +62,7 @@ const SocialFeed = () => {
     companyEmployees,
     topPosters,
     createPost,
+    editPost,
     toggleLike,
     addComment,
     addReply,
@@ -88,6 +89,8 @@ const SocialFeed = () => {
   const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
   const [showPeopleDialog, setShowPeopleDialog] = useState(false);
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editContent, setEditContent] = useState('');
 
   const settings = {
     dots: false,
@@ -527,25 +530,25 @@ const SocialFeed = () => {
                         <div className="d-flex align-items-center">
                           <Link
                             to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
+                            className="btn btn-icon btn-sm disabled border-0"
                           >
                             <i className="ti ti-photo fs-16" />
                           </Link>
                           <Link
                             to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
+                            className="btn btn-icon btn-sm disabled border-0"
                           >
                             <i className="ti ti-link fs-16" />
                           </Link>
                           <Link
                             to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
+                            className="btn btn-icon btn-sm disabled border-0"
                           >
                             <i className="ti ti-paperclip fs-16" />
                           </Link>
                           <Link
                             to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
+                            className="btn btn-icon btn-sm disabled border-0"
                           >
                             <i className="ti ti-mood-smile fs-16" />
                           </Link>
@@ -553,13 +556,13 @@ const SocialFeed = () => {
                         <div className="d-flex align-items-center">
                           <Link
                             to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
+                            className="btn btn-icon btn-sm disabled border-0"
                           >
                             <i className="ti ti-refresh fs-16" />
                           </Link>
                           <Link
                             to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
+                            className="btn btn-icon btn-sm disabled border-0"
                           >
                             <i className="ti ti-trash fs-16" />
                           </Link>
@@ -700,21 +703,17 @@ const SocialFeed = () => {
                             </Link>
                             <ul className="dropdown-menu dropdown-menu-end p-3">
                               <li>
-                                <Link to="#" className="dropdown-item rounded-1">
+                                <Link
+                                  to="#"
+                                  className="dropdown-item rounded-1"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setEditingPost(post);
+                                    setEditContent(post.content);
+                                  }}
+                                >
                                   <i className="ti ti-edit me-2" />
                                   Edit
-                                </Link>
-                              </li>
-                              <li>
-                                <Link to="#" className="dropdown-item rounded-1">
-                                  <i className="ti ti-eye me-2" />
-                                  Hide Post
-                                </Link>
-                              </li>
-                              <li>
-                                <Link to="#" className="dropdown-item rounded-1">
-                                  <i className="ti ti-report me-2" />
-                                  Report
                                 </Link>
                               </li>
                               {post.userId === user?.id && (
@@ -812,8 +811,8 @@ const SocialFeed = () => {
                             {post.comments?.length || 0} {collapsedPosts[post._id] ? 'Comments' : 'Comments'}
                             {collapsedPosts[post._id] && <i className="ti ti-chevron-down ms-1 fs-12" />}
                           </Link>
-                          <Link to="#" className="d-inline-flex align-items-center">
-                            <i className="ti ti-share-3 me-2" />
+                          <Link to="#" className="d-inline-flex align-items-center disabled">
+                            <i className="ti ti-share-3 me-2 disabled" />
                             {post.shares || 0} Share
                           </Link>
                         </div>
@@ -1407,6 +1406,72 @@ const SocialFeed = () => {
                   onClick={() => setShowPeopleDialog(false)}
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Post Modal */}
+      {editingPost && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Post</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setEditingPost(null);
+                    setEditContent('');
+                  }}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <textarea
+                    className="form-control"
+                    rows={4}
+                    placeholder="What's on your mind?"
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setEditingPost(null);
+                    setEditContent('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    try {
+                      if (!editContent.trim()) return;
+
+                      await editPost(editingPost._id, {
+                        content: editContent.trim()
+                      });
+
+                      setEditingPost(null);
+                      setEditContent('');
+                    } catch (error) {
+                      console.error('Failed to edit post:', error);
+                      alert('Failed to edit post. Please try again.');
+                    }
+                  }}
+                  disabled={!editContent.trim() || editContent.trim() === editingPost.content}
+                >
+                  Save Changes
                 </button>
               </div>
             </div>

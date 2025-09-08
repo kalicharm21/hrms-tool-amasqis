@@ -260,6 +260,14 @@ export class SocialFeedService {
 
   static async createPost(companyId, postData) {
     try {
+      console.log('Creating post with data:', {
+        companyId,
+        userId: postData.userId,
+        content: postData.content,
+        imagesCount: postData.images ? postData.images.length : 0,
+        images: postData.images
+      });
+
       const collections = getTenantCollections(companyId);
 
       const postToInsert = {
@@ -275,12 +283,25 @@ export class SocialFeedService {
       const result = await collections.socialFeeds.insertOne(postToInsert);
       const post = await collections.socialFeeds.findOne({ _id: result.insertedId });
 
+      console.log('Post retrieved from database:', {
+        id: post._id,
+        content: post.content,
+        imagesCount: post.images ? post.images.length : 0,
+        images: post.images
+      });
+
       // Process hashtags from post content
       if (postData.content) {
         await this.processHashtags(postData.content, postData.userId, companyId, result.insertedId);
       }
 
       const enrichedPost = await this.enrichPostsWithUserData([post]);
+      console.log('Enriched post for return:', {
+        id: enrichedPost[0]._id,
+        content: enrichedPost[0].content,
+        imagesCount: enrichedPost[0].images ? enrichedPost[0].images.length : 0,
+        images: enrichedPost[0].images
+      });
       return enrichedPost[0];
     } catch (error) {
       throw new Error(`Failed to create post: ${error.message}`);
@@ -1517,10 +1538,65 @@ export class SocialFeedService {
 
   static async removePostHashtags(postId, companyId) {
     try {
-      const HashtagModel = getHashtagModel(companyId);
-      await HashtagModel.deleteMany({ companyId, count: { $lte: 0 } });
+      console.log(`[removePostHashtags] Removing hashtags for post: ${postId}`);
+
+      const collections = getTenantCollections(companyId);
+      const updateResult = await collections.hashtags.updateMany(
+        { companyId, 'posts.postId': new ObjectId(postId) },
+        {
+          $inc: { count: -1 },
+          $pull: { posts: { postId: new ObjectId(postId) } },
+          $set: { lastUsed: new Date(), updatedAt: new Date() }
+        }
+      );
+
+      await collections.hashtags.deleteMany({
+        companyId,
+        count: { $lte: 0 }
+      });
+
+      console.log(`[removePostHashtags] Updated ${updateResult.modifiedCount} hashtags`);
     } catch (error) {
       console.error('[removePostHashtags] Error:', error);
+    }
+  }
+
+  static async editPost(companyId, postId, userId, updateData) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const originalPost = await collections.socialFeeds.findOne({
+        _id: new ObjectId(postId),
+        userId: userId
+      });
+
+      if (!originalPost) {
+        throw new Error('Post not found or unauthorized');
+      }
+
+      const updateResult = await collections.socialFeeds.updateOne(
+        { _id: new ObjectId(postId), userId: userId },
+        {
+          $set: {
+            ...updateData,
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      if (updateResult.modifiedCount === 0) {
+        throw new Error('Failed to update post');
+      }
+
+      if (updateData.content && updateData.content !== originalPost.content) {
+        await this.updatePostHashtags(postId, updateData.content, userId, companyId);
+      }
+
+      const updatedPost = await collections.socialFeeds.findOne({ _id: new ObjectId(postId) });
+      const enrichedPost = await this.enrichPostsWithUserData([updatedPost]);
+
+      return enrichedPost[0];
+    } catch (error) {
+      throw new Error(`Failed to edit post: ${error.message}`);
     }
   }
 

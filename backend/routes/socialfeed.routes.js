@@ -9,6 +9,7 @@ router.get('/posts', socialFeedController.getAllPosts);
 router.get('/posts/user/:userId', socialFeedController.getPostsByUser);
 router.post('/posts', socialFeedController.createPost);
 router.put('/posts/:postId', socialFeedController.updatePost);
+router.put('/posts/:postId/edit', socialFeedController.editPost);
 router.delete('/posts/:postId', socialFeedController.deletePost);
 router.post('/posts/:postId/like', socialFeedController.toggleLike);
 router.post('/posts/:postId/comments', socialFeedController.addComment);
