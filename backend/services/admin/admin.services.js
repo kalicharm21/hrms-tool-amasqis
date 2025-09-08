@@ -1039,7 +1039,7 @@ export const getTodos = async (
     let query = {
       isDeleted: { $ne: true }
     };
-    
+
     // Only filter by userId for non-admin users (if needed in the future)
     // For now, admin users see all todos in the company
 
@@ -1100,6 +1100,34 @@ export const getTodos = async (
     };
   } catch (error) {
     console.error("Error fetching todos:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+export const deleteTodoPermanently = async (companyId, todoId) => {
+  try {
+    const collections = getTenantCollections(companyId);
+    if (!todoId || !ObjectId.isValid(todoId)) {
+      return { done: false, error: "Invalid todo ID format" };
+    }
+
+    const result = await collections.todos.deleteOne({
+      _id: new ObjectId(todoId)
+    });
+
+    if (result.deletedCount === 0) {
+      return { done: false, error: "Todo not found or already deleted" };
+    }
+
+    console.log(`[DELETE TODO] Successfully deleted todo: ${todoId}`);
+
+    return {
+      done: true,
+      message: "Todo deleted permanently",
+      data: { deletedId: todoId }
+    };
+  } catch (error) {
+    console.error("Error deleting todo permanently:", error);
     return { done: false, error: error.message };
   }
 };

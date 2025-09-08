@@ -1,15 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { all_routes } from "../router/all_routes";
 import Lightbox from 'yet-another-react-lightbox';
 import "yet-another-react-lightbox/styles.css";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+
 const SocialFeed = () => {
   const [open1, setOpen1] = React.useState(false);
-  const [toggle, setToggle] = React.useState(false);
   const [toggle2, setToggle2] = React.useState(false);
   const settings = {
     dots: false,
@@ -129,7 +128,7 @@ const SocialFeed = () => {
                       Create Post
                     </Link>
                   </div>
-                  <div className="files-list border-bottom pb-2 mb-4">
+                  <div className="files-list pb-2">
                     <Link
                       to="#"
                       className="d-flex align-items-center justify-content-between active fw-medium p-2"
@@ -146,36 +145,8 @@ const SocialFeed = () => {
                       to="#"
                       className="d-flex align-items-center fw-medium p-2"
                     >
-                      <i className="ti ti-mood-search me-2" />
-                      Explore
-                    </Link>
-                    <Link
-                      to="#"
-                      className="d-flex align-items-center fw-medium p-2"
-                    >
-                      <i className="ti ti-mail-check me-2" />
-                      Messages
-                    </Link>
-                    <Link
-                      to="#"
-                      className="d-flex align-items-center fw-medium p-2"
-                    >
-                      <i className="ti ti-list me-2" />
-                      Lists
-                    </Link>
-                    <Link
-                      to="#"
-                      className="d-flex align-items-center fw-medium p-2"
-                    >
                       <i className="ti ti-bookmark me-2" />
                       Bookmark
-                    </Link>
-                    <Link
-                      to="#"
-                      className="d-flex align-items-center fw-medium p-2"
-                    >
-                      <i className="ti ti-coffee me-2" />
-                      Marketplace
                     </Link>
                     <Link
                       to="#"
@@ -193,101 +164,9 @@ const SocialFeed = () => {
                       to="#"
                       className="d-flex align-items-center fw-medium p-2"
                     >
-                      <i className="ti ti-music me-2" />
-                      Media
-                    </Link>
-                    <Link
-                      to="#"
-                      className="d-flex align-items-center fw-medium p-2"
-                    >
                       <i className="ti ti-user-share me-2" />
                       Profile
                     </Link>
-                  </div>
-                  <div>
-                    <div className="mb-2">
-                      <h5>Pages You Liked</h5>
-                    </div>
-                    <div>
-                      <Link
-                        to="#"
-                        className="fw-medium d-flex align-items-center justify-content-between text-dark py-1 mb-2"
-                      >
-                        <span className="d-inline-flex align-items-center">
-                          <ImageWithBasePath
-                            src="assets/img/icons/liked-page-01.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                          Dribble
-                        </span>
-                        <span className="btn btn-icon btn-sm">
-                          <i className="ti ti-thumb-down" />
-                        </span>
-                      </Link>
-                      <Link
-                        to="#"
-                        className="fw-medium d-flex align-items-center justify-content-between text-dark py-1 mb-2"
-                      >
-                        <span className="d-inline-flex align-items-center">
-                          <ImageWithBasePath
-                            src="assets/img/icons/liked-page-02.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                          UI/UX Designs
-                        </span>
-                        <span className="btn btn-icon btn-sm">
-                          <i className="ti ti-thumb-down" />
-                        </span>
-                      </Link>
-                      <Link
-                        to="#"
-                        className="fw-medium d-flex align-items-center justify-content-between text-dark py-1"
-                      >
-                        <span className="d-inline-flex align-items-center">
-                          <ImageWithBasePath
-                            src="assets/img/icons/liked-page-03.svg"
-                            className="me-2"
-                            alt="Img"
-                          />
-                          Figma Update
-                        </span>
-                        <span className="btn btn-icon btn-sm">
-                          <i className="ti ti-thumb-down" />
-                        </span>
-                      </Link>
-                      <div>
-                        <div className={`more-menu-3 ${toggle ? 'd-block':'d-none'}`} >
-                          <Link
-                            to="#"
-                            className="fw-medium d-flex align-items-center justify-content-between text-dark py-1 mb-2"
-                          >
-                            <span className="d-inline-flex align-items-center">
-                              <ImageWithBasePath
-                                src="assets/img/icons/liked-page-04.svg"
-                                className="me-2"
-                                alt="Img"
-                              />
-                              I Am Techie
-                            </span>
-                            <span className="btn btn-icon btn-sm">
-                              <i className="ti ti-thumb-down" />
-                            </span>
-                          </Link>
-                        </div>
-                        <div className="view-all mt-2">
-                          <Link
-                            to="#"
-                            className="viewall-button-3 fw-medium"
-                            onClick={()=>setToggle(!toggle)}
-                          >
-                            <span>Show {toggle ? 'Less':'More'}</span>
-                            <i className="fa fa-chevron-down fs-10 ms-2" />
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -390,7 +269,7 @@ const SocialFeed = () => {
                 <div className="card">
                   <div className="card-body">
                     <div className="d-flex align-items-center mb-3">
-                      <h5 className="me-2">Popular Channels</h5>
+                      <h5 className="me-2">Popular</h5>
                       <div className="owl-nav custom-nav nav-control" />
                     </div>
                     <Slider {...settings} className="channels-slider owl-carousel">
@@ -1742,64 +1621,12 @@ const SocialFeed = () => {
                   </div>
                 </div>
               </div>
-              <div className="card">
-                <div className="card-body">
-                  <div className="card-img card-img-hover mb-3">
-                    <Link to="#" className="rounded">
-                      <ImageWithBasePath
-                        src="assets/img/social/social-feed-04.jpg"
-                        className="rounded"
-                        alt="Img"
-                      />
-                    </Link>
-                  </div>
-                  <h6 className="text-center">
-                    <Link to="#">
-                      Enjoy Unlimited Access on a small price monthly.
-                    </Link>
-                  </h6>
-                  <div className="mt-3">
-                    <Link
-                      to="#"
-                      className="btn btn-outline-light w-100 border"
-                    >
-                      Upgrade Now <i className="ti ti-arrow-right ms-2" />
-                    </Link>
-                  </div>
-                </div>
               </div>
-              <div className="d-flex align-items-center flex-wrap justify-content-center template-more-links mb-4">
-                <Link to="#" className="d-inline-flex">
-                  About
-                </Link>
-                <Link to="#" className="d-inline-flex">
-                  Privacy
-                </Link>
-                <Link to="#" className="d-inline-flex">
-                  Terms
-                </Link>
-                <Link to="#" className="d-inline-flex">
-                  Help
-                </Link>
-              </div>
-              </div>
-              
             </div>
           </div>
         </div>
-        <div className="footer d-sm-flex align-items-center justify-content-between bg-white border-top p-3">
-          <p className="mb-0">2014 - 2025 © SmartHR.</p>
-          <p>
-            Designed &amp; Developed By{" "}
-            <Link to="#" className="text-primary">
-              Dreams
-            </Link>
-          </p>
-        </div>
       </div>
-      {/* /Page Wrapper */}
     </>
-
   );
 };
 
