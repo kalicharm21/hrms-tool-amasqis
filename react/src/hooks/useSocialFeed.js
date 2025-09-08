@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
+import { useSocket } from '../SocketContext';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -8,6 +9,7 @@ export const useSocialFeed = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { user, isLoaded } = useUser();
+  const socket = useSocket();
 
   const getAuthToken = () => {
     if (typeof window !== 'undefined' && window.Clerk) {
@@ -45,91 +47,115 @@ export const useSocialFeed = () => {
   };
 
   const createPost = async (postData) => {
-    try {
-      const token = await getAuthToken();
+    return new Promise((resolve, reject) => {
 
-      const response = await fetch(`${API_BASE_URL}/api/socialfeed/posts`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(postData)
-      });
-
-      const data = await response.json();
-
-      if (data.done) {
-        await fetchPosts();
-        return data.data;
-      } else {
-        throw new Error(data.error || 'Failed to create post');
+      if (!socket) {
+        console.error('Socket not connected for createPost');
+        reject(new Error('Socket not connected'));
+        return;
       }
-    } catch (err) {
-      console.error('Error creating post:', err);
-      throw err;
-    }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        socket.off('socialfeed:create-post-response', handleResponse);
+        reject(new Error('Create post timeout - no response from server'));
+      }, 15000);
+
+      const handleResponse = (response) => {
+        clearTimeout(timeout);
+        socket.off('socialfeed:create-post-response', handleResponse);
+        if (response.done) {
+          console.log('Post created successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to create post via socket:', response.error);
+          reject(new Error(response.error || 'Failed to create post'));
+        }
+      };
+
+      socket.on('socialfeed:create-post-response', handleResponse);
+      socket.emit('socialfeed:create-post', postData);
+
+      setTimeout(() => {
+        socket.off('socialfeed:create-post-response', handleResponse);
+        reject(new Error('Create post timeout'));
+      }, 10000);
+    });
   };
 
   const toggleLike = async (postId) => {
-    try {
-      const token = await getAuthToken();
-
-      const response = await fetch(`${API_BASE_URL}/api/socialfeed/posts/${postId}/like`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const data = await response.json();
-
-      if (data.done) {
-        setPosts(prevPosts =>
-          prevPosts.map(post =>
-            post._id === data.data._id ? data.data : post
-          )
-        );
-        return data.data;
-      } else {
-        throw new Error(data.error || 'Failed to toggle like');
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for toggleLike');
+        reject(new Error('Socket not connected'));
+        return;
       }
-    } catch (err) {
-      console.error('Error toggling like:', err);
-      throw err;
-    }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:toggle-like-response', handleResponse);
+        if (response.done) {
+          console.log('Like toggled successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to toggle like via socket:', response.error);
+          reject(new Error(response.error || 'Failed to toggle like'));
+        }
+      };
+
+      socket.on('socialfeed:toggle-like-response', handleResponse);
+      socket.emit('socialfeed:toggle-like', { postId });
+
+      setTimeout(() => {
+        socket.off('socialfeed:toggle-like-response', handleResponse);
+        reject(new Error('Toggle like timeout'));
+      }, 10000);
+    });
   };
 
   const addComment = async (postId, content) => {
-    try {
-      const token = await getAuthToken();
-
-      const response = await fetch(`${API_BASE_URL}/api/socialfeed/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ content })
-      });
-
-      const data = await response.json();
-
-      if (data.done) {
-        setPosts(prevPosts =>
-          prevPosts.map(post =>
-            post._id === data.data._id ? data.data : post
-          )
-        );
-        return data.data;
-      } else {
-        throw new Error(data.error || 'Failed to add comment');
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for addComment');
+        reject(new Error('Socket not connected'));
+        return;
       }
-    } catch (err) {
-      console.error('Error adding comment:', err);
-      throw err;
-    }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:add-comment-response', handleResponse);
+        if (response.done) {
+          console.log('Comment added successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to add comment via socket:', response.error);
+          reject(new Error(response.error || 'Failed to add comment'));
+        }
+      };
+
+      socket.on('socialfeed:add-comment-response', handleResponse);
+      socket.emit('socialfeed:add-comment', { postId, content });
+
+      setTimeout(() => {
+        socket.off('socialfeed:add-comment-response', handleResponse);
+        reject(new Error('Add comment timeout'));
+      }, 10000);
+    });
   };
 
   const getCurrentUserProfile = () => {
@@ -138,6 +164,7 @@ export const useSocialFeed = () => {
         name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
         username: `@${user.username || user.firstName?.toLowerCase() || 'user'}`,
         avatar: user.imageUrl || 'assets/img/users/user-11.jpg',
+        avatarIsExternal: !!user.imageUrl,
         followers: 1250,
         following: 180,
         posts: posts.filter(post => post.userId === user.id).length
@@ -148,11 +175,60 @@ export const useSocialFeed = () => {
       name: 'Loading...',
       username: '@user',
       avatar: 'assets/img/users/user-11.jpg',
+      avatarIsExternal: false,
       followers: 0,
       following: 0,
       posts: 0
     };
   };
+
+  useEffect(() => {
+    if (socket) {
+      const handleNewPost = (data) => {
+        console.log('New post received via socket:', data);
+        if (data.done && data.data) {
+          setPosts(prevPosts => [data.data, ...prevPosts]);
+        }
+      };
+
+      const handlePostUpdate = (data) => {
+        console.log('Post update received via socket:', data);
+        if (data.done && data.data) {
+          setPosts(prevPosts =>
+            prevPosts.map(post =>
+              post._id === data.data._id ? data.data : post
+            )
+          );
+        }
+      };
+
+      const handlePostDeleted = (data) => {
+        console.log('Post deleted via socket:', data);
+        if (data.done && data.data?.postId) {
+          setPosts(prevPosts =>
+            prevPosts.filter(post => post._id !== data.data.postId)
+          );
+        }
+      };
+
+      const handleSocialFeedError = (error) => {
+        console.error('Social feed error:', error);
+        setError(error.error || 'Social feed error occurred');
+      };
+
+      socket.on('socialfeed:newPost', handleNewPost);
+      socket.on('socialfeed:postUpdate', handlePostUpdate);
+      socket.on('socialfeed:postDeleted', handlePostDeleted);
+      socket.on('socialfeed:error', handleSocialFeedError);
+
+      return () => {
+        socket.off('socialfeed:newPost', handleNewPost);
+        socket.off('socialfeed:postUpdate', handlePostUpdate);
+        socket.off('socialfeed:postDeleted', handlePostDeleted);
+        socket.off('socialfeed:error', handleSocialFeedError);
+      };
+    }
+  }, [socket]);
 
   useEffect(() => {
     if (isLoaded) {

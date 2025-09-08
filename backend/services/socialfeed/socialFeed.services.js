@@ -8,7 +8,7 @@ export class SocialFeedService {
     let enrichedComment = { ...comment };
 
     if (!commentUser) {
-      const fallbackUsername = comment.userId.includes('user_') ? comment.userId.replace('user_', '') : comment.userId;
+      const fallbackUsername = comment.userId && comment.userId.includes ? (comment.userId.includes('user_') ? comment.userId.replace('user_', '') : comment.userId) : 'Unknown';
       enrichedComment.user = {
         id: comment.userId,
         firstName: fallbackUsername,
@@ -24,7 +24,7 @@ export class SocialFeedService {
       enrichedComment.likes = comment.likes.map((like) => {
         const likeUser = userMap[like.userId];
         if (!likeUser) {
-          const fallbackUsername = like.userId.includes('user_') ? like.userId.replace('user_', '') : like.userId;
+          const fallbackUsername = like.userId && like.userId.includes ? (like.userId.includes('user_') ? like.userId.replace('user_', '') : like.userId) : 'Unknown';
           return {
             ...like,
             user: {
@@ -52,7 +52,7 @@ export class SocialFeedService {
 
   static async enrichPostsWithUserData(posts) {
     try {
-      const userIds = [...new Set([
+      const rawUserIds = [
         ...posts.map(post => post.userId),
         ...posts.flatMap(post => post.likes?.map(like => like.userId) || []),
         ...posts.flatMap(post => post.comments?.map(comment => comment.userId) || []),
@@ -60,10 +60,13 @@ export class SocialFeedService {
         ...posts.flatMap(post => post.comments?.flatMap(comment => comment.replies?.flatMap(reply => reply.likes?.map(like => like.userId) || []) || []) || []),
         ...posts.flatMap(post => post.shares?.map(share => share.userId) || []),
         ...posts.flatMap(post => post.bookmarks?.map(bookmark => bookmark.userId) || [])
-      ])];
+      ];
+
+      const userIds = [...new Set(rawUserIds.filter(userId => userId && typeof userId === 'string' && userId.trim().length > 0))]; // Filter out null, undefined, and empty userIds
 
       const userPromises = userIds.map(async (userId) => {
         try {
+          console.log(`Fetching user data for ${userId}`);
           const user = await clerkClient.users.getUser(userId);
           return {
             id: userId,
@@ -74,7 +77,7 @@ export class SocialFeedService {
             publicMetadata: user.publicMetadata || {}
           };
         } catch (error) {
-          console.error(`Failed to fetch user ${userId}:`, error);
+          console.error(`Failed to fetch user ${userId}:`, error.message);
           const fallbackUsername = userId.includes('user_') ? userId.replace('user_', '') : userId;
 
           return {
@@ -94,7 +97,7 @@ export class SocialFeedService {
       return posts.map(post => {
         const userData = userMap[post.userId];
         if (!userData) {
-          const fallbackUsername = post.userId.includes('user_') ? post.userId.replace('user_', '') : post.userId;
+          const fallbackUsername = post.userId && post.userId.includes ? (post.userId.includes('user_') ? post.userId.replace('user_', '') : post.userId) : 'Unknown';
           return {
             ...post,
             user: {
@@ -114,7 +117,7 @@ export class SocialFeedService {
           likes: post.likes?.map(like => {
             const likeUser = userMap[like.userId];
             if (!likeUser) {
-              const fallbackUsername = like.userId.includes('user_') ? like.userId.replace('user_', '') : like.userId;
+              const fallbackUsername = like.userId && like.userId.includes ? (like.userId.includes('user_') ? like.userId.replace('user_', '') : like.userId) : 'Unknown';
               return {
                 ...like,
                 user: {
@@ -135,7 +138,7 @@ export class SocialFeedService {
           shares: post.shares?.map(share => {
             const shareUser = userMap[share.userId];
             if (!shareUser) {
-              const fallbackUsername = share.userId.includes('user_') ? share.userId.replace('user_', '') : share.userId;
+              const fallbackUsername = share.userId && share.userId.includes ? (share.userId.includes('user_') ? share.userId.replace('user_', '') : share.userId) : 'Unknown';
               return {
                 ...share,
                 user: {
@@ -155,7 +158,7 @@ export class SocialFeedService {
           bookmarks: post.bookmarks?.map(bookmark => {
             const bookmarkUser = userMap[bookmark.userId];
             if (!bookmarkUser) {
-              const fallbackUsername = bookmark.userId.includes('user_') ? bookmark.userId.replace('user_', '') : bookmark.userId;
+              const fallbackUsername = bookmark.userId && bookmark.userId.includes ? (bookmark.userId.includes('user_') ? bookmark.userId.replace('user_', '') : bookmark.userId) : 'Unknown';
               return {
                 ...bookmark,
                 user: {

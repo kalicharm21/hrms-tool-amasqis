@@ -5,6 +5,7 @@ import clientController from "../controllers/client/client.controllers.js";
 import activityController from "../controllers/activities/activities.controllers.js";
 
 import userSocketController from "../controllers/user/user.socket.controller.js";
+import socialFeedSocketController from "../controllers/socialfeed/socialFeed.socket.controller.js";
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -19,6 +20,12 @@ const router = (socket, io, role) => {
     case "superadmin":
       console.log("Attaching superadmin controller...");
       superAdminController(socket, io);
+      console.log("Attaching social feed controller for superadmin...");
+      socialFeedSocketController(socket, io);
+      break;
+    case "guest":
+      console.log("Attaching social feed controller for guest...");
+      socialFeedSocketController(socket, io);
       break;
     case "admin":
       console.log("Attaching admin controller...");
@@ -30,8 +37,10 @@ const router = (socket, io, role) => {
       console.log("Attaching activity controller for admin...");
       activityController(socket, io);
       userSocketController(socket, io);
+      console.log("Attaching social feed controller for admin...");
+      socialFeedSocketController(socket, io);
       break;
-      
+
     case "hr":
       console.log("Attaching HR controller...");
       console.log("Attaching lead controller for hr...");
@@ -41,17 +50,24 @@ const router = (socket, io, role) => {
       console.log("Attaching activity controller for hr...");
       activityController(socket, io);
       userSocketController(socket, io);
+      console.log("Attaching social feed controller for hr...");
+      socialFeedSocketController(socket, io);
       break;
     case "leads":
       console.log("Attaching leads controller...");
       leadController(socket, io);
       userSocketController(socket, io);
+      console.log("Attaching social feed controller for leads...");
+      socialFeedSocketController(socket, io);
       break;
     case "employee":
       console.log("Employee controller not implemented yet");
+      console.log("Attaching social feed controller for employee...");
+      socialFeedSocketController(socket, io);
       break;
     default:
-      console.log(`No controller available for role: ${role}`);
+      console.log(`No controller available for role: ${role}, attaching basic social feed for public access`);
+      socialFeedSocketController(socket, io);
       break;
   }
 

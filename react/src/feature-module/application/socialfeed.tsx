@@ -11,29 +11,35 @@ import { useSocket } from "../../SocketContext";
 import { useUser } from "@clerk/clerk-react";
 
 interface PostUser {
-  _id: string;
-  name: string;
-  username: string;
-  avatar: string;
-  isVerified?: boolean;
+  id: string;
+  firstName: string;
+  lastName: string;
+  imageUrl?: string | null;
+  email?: string | null;
+  publicMetadata?: any;
 }
 
 interface PostComment {
   _id: string;
   content: string;
+  userId: string;
   user: PostUser;
+  likes?: any[];
+  replies?: PostComment[];
   createdAt: string;
 }
 
 interface Post {
   _id: string;
   content: string;
+  userId: string;
   user: PostUser;
   images?: string[];
   tags?: string[];
-  likes?: string[];
+  likes?: any[];
   comments?: PostComment[];
-  shares?: number;
+  shares?: any[];
+  bookmarks?: any[];
   isPublic: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -129,14 +135,12 @@ const SocialFeed = () => {
   // Socket integration for real-time updates
   useEffect(() => {
     if (socket) {
-      // Listen for new posts
       socket.on('socialfeed:newPost', (newPost: any) => {
-        fetchPosts(); // Refresh posts
+        fetchPosts();
       });
 
-      // Listen for post updates (likes, comments)
       socket.on('socialfeed:postUpdate', (updatedPost: any) => {
-        fetchPosts(); // Refresh posts
+        fetchPosts();
       });
 
       return () => {
@@ -146,7 +150,6 @@ const SocialFeed = () => {
     }
   }, [socket, fetchPosts]);
 
-  // Handle creating a new post
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostContent.trim()) return;
@@ -164,7 +167,6 @@ const SocialFeed = () => {
     }
   };
 
-  // Handle liking a post
   const handleLikePost = async (postId: string) => {
     try {
       await toggleLike(postId);
@@ -173,7 +175,6 @@ const SocialFeed = () => {
     }
   };
 
-  // Handle adding a comment
   const handleAddComment = async (postId: string, commentContent: string) => {
     if (!commentContent.trim()) return;
 
@@ -185,22 +186,18 @@ const SocialFeed = () => {
     }
   };
 
-  // Handle comment input changes
   const handleCommentInputChange = (postId: string, value: string) => {
     setCommentInputs(prev => ({ ...prev, [postId]: value }));
   };
 
-  // Open lightbox with images
   const openLightbox = (images?: string[]) => {
     if (!images || images.length === 0) return;
     setLightboxImages(images.map((img: string) => ({ src: img })));
     setOpen1(true);
   };
 
-  // Get user profile data
   const userProfile = getCurrentUserProfile();
 
-  // Format time ago
   const formatTimeAgo = (date: string) => {
     const now = new Date();
     const diff = now.getTime() - new Date(date).getTime();
@@ -212,6 +209,10 @@ const SocialFeed = () => {
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     return `${days}d ago`;
+  };
+
+  const isExternalImage = (src: string): boolean => {
+    return !!(src && (src.startsWith('http://') || src.startsWith('https://')));
   };
 
   return (
@@ -229,7 +230,11 @@ const SocialFeed = () => {
                         to="#"
                         className="avatar avatar-xl online avatar-rounded"
                       >
-                        <ImageWithBasePath src={userProfile.avatar} alt="Img" />
+                        <ImageWithBasePath
+                          src={userProfile.avatar}
+                          alt="Img"
+                          isLink={userProfile.avatarIsExternal}
+                        />
                       </Link>
                       <h5 className="mb-1">
                         <Link to="#">{userProfile.name}</Link>
@@ -325,7 +330,11 @@ const SocialFeed = () => {
                             onChange={(e) => setNewPostContent(e.target.value)}
                           />
                           <span className="avatar avatar-lg avatar-rounded text-area-avatar">
-                            <ImageWithBasePath src={userProfile.avatar} alt="Img" />
+                            <ImageWithBasePath
+                              src={userProfile.avatar}
+                              alt="Img"
+                              isLink={userProfile.avatarIsExternal}
+                            />
                           </span>
                         </div>
                       </div>
@@ -474,17 +483,21 @@ const SocialFeed = () => {
                             to="#"
                             className="avatar avatar-lg avatar-rounded flex-shrink-0 me-2"
                           >
-                            <ImageWithBasePath src={post.user?.avatar || userProfile.avatar} alt="Img" />
+                            <ImageWithBasePath
+                              src={post.user?.imageUrl || userProfile.avatar}
+                              alt="Img"
+                              isLink={isExternalImage(post.user?.imageUrl || userProfile.avatar)}
+                            />
                           </Link>
                           <div>
                             <h5 className="mb-1">
                               <Link to="#">
-                                {post.user?.name || 'User'}
-                                {post.user?.isVerified && <i className="ti ti-circle-check-filled text-success ms-1" />}
+                                {post.user ? `${post.user.firstName} ${post.user.lastName || ''}`.trim() || 'User' : 'User'}
+                                {post.user?.publicMetadata?.isVerified && <i className="ti ti-circle-check-filled text-success ms-1" />}
                               </Link>
                             </h5>
                             <p className="d-flex align-items-center">
-                              <span className="text-info">@{post.user?.username || 'user'}</span>
+                              <span className="text-info">@{post.user?.firstName?.toLowerCase() || 'user'}</span>
                               <i className="ti ti-circle-filled fs-5 mx-2" />
                               {formatTimeAgo(post.createdAt)}
                             </p>
@@ -635,11 +648,15 @@ const SocialFeed = () => {
                           {post.comments.slice(0, toggle2 ? post.comments.length : 2).map((comment: PostComment, index: number) => (
                             <div key={comment._id || index} className="d-flex align-items-start mb-3">
                               <Link to="#" className="avatar avatar-rounded me-2 flex-shrink-0">
-                                <ImageWithBasePath src={comment.user?.avatar || userProfile.avatar} alt="Img" />
+                                <ImageWithBasePath
+                                  src={comment.user?.imageUrl || userProfile.avatar}
+                                  alt="Img"
+                                  isLink={isExternalImage(comment.user?.imageUrl || userProfile.avatar)}
+                                />
                               </Link>
                               <div className="bg-light rounded flex-fill p-2">
                                 <div className="d-flex align-items-center mb-1">
-                                  <h6 className="mb-0">{comment.user?.name || 'User'}</h6>
+                                  <h6 className="mb-0">{comment.user ? `${comment.user.firstName} ${comment.user.lastName || ''}`.trim() || 'User' : 'User'}</h6>
                                   <span className="ms-2 text-muted fs-12">{formatTimeAgo(comment.createdAt)}</span>
                                 </div>
                                 <p className="mb-0">{comment.content}</p>
@@ -665,7 +682,11 @@ const SocialFeed = () => {
                       {/* Comment input */}
                       <div className="d-flex align-items-start">
                         <Link to="#" className="avatar avatar-rounded me-2 flex-shrink-0">
-                          <ImageWithBasePath src={userProfile.avatar} alt="Img" />
+                          <ImageWithBasePath
+                            src={userProfile.avatar}
+                            alt="Img"
+                            isLink={userProfile.avatarIsExternal}
+                          />
                         </Link>
                         <div className="flex-fill">
                           <input
