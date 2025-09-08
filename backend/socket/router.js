@@ -3,6 +3,8 @@ import adminController from "../controllers/admin/admin.controller.js";
 import leadController from "../controllers/lead/lead.controller.js";
 import clientController from "../controllers/client/client.controllers.js";
 import activityController from "../controllers/activities/activities.controllers.js";
+import { ChatController } from "../controllers/chat/chat.controller.js";
+import { ChatUsersController } from "../controllers/chat/users.controller.js";
 
 import userSocketController from "../controllers/user/user.socket.controller.js";
 
@@ -14,6 +16,14 @@ const router = (socket, io, role) => {
     companyId: socket.companyId,
     userMetadata: socket.userMetadata
   });
+
+  // Initialize chat controller for all authenticated users
+  if (socket.companyId) {
+    console.log("Attaching chat controller...");
+    new ChatController(socket, io);
+    new ChatUsersController(socket, io);
+  }
+
 
   switch (role) {
     case "superadmin":

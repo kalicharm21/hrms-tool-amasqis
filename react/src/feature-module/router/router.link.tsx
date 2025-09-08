@@ -44,6 +44,7 @@ import Error500 from "../pages/error/error-500";
 import UnderMaintenance from "../pages/underMaintenance";
 import Email from "../application/email";
 import Chat from "../application/chat";
+import FunctionalChat from "../application/functional-chat";
 import CallHistory from "../application/call/callHistory";
 import FileManager from "../application/fileManager";
 import MembershipTransaction from "../membership/membershiptrasaction";
@@ -378,7 +379,7 @@ export const publicRoutes = [
   //Application
   {
     path: routes.chat,
-    element: <Chat />,
+    element: <FunctionalChat />,
     route: Route,
     roles: ["public"],
   },
@@ -733,7 +734,7 @@ export const publicRoutes = [
   },
   {
     path: routes.chat,
-    element: <Chat />,
+    element: <FunctionalChat />,
     route: Route,
     roles: ["public"],
   },
