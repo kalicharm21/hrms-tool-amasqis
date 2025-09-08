@@ -31,6 +31,8 @@ router.get('/users/profile', socialFeedController.getUserProfile);
 router.get('/users/:userId/profile', socialFeedController.getUserProfile);
 router.get('/total-posts-count', socialFeedController.getTotalPostsCount);
 router.get('/total-bookmarks-count', socialFeedController.getTotalBookmarksCount);
+router.get('/company-employees', socialFeedController.getCompanyEmployees);
+router.get('/top-posters', socialFeedController.getTopPosters);
 router.get('/feeds', socialFeedController.getAllFeeds);
 router.get('/users/:userId/feeds', socialFeedController.getUserFeeds);
 router.get('/files', socialFeedController.getFiles);

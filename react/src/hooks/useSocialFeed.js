@@ -68,6 +68,56 @@ export const useSocialFeed = () => {
     }
   };
 
+  const fetchCompanyEmployees = async (limit = 10) => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/company-employees?limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.done) {
+        setCompanyEmployees(data.data || []);
+      } else {
+        console.error('Failed to fetch company employees:', data.error);
+        setCompanyEmployees([]);
+      }
+    } catch (err) {
+      console.error('Error fetching company employees:', err);
+      setCompanyEmployees([]);
+    }
+  };
+
+  const fetchTopPosters = async (limit = 8) => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/top-posters?limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      if (data.done) {
+        const uniquePosters = data.data ? data.data.filter((poster, index, self) =>
+          index === self.findIndex((p) => p.userId === poster.userId)
+        ) : [];
+        setTopPosters(uniquePosters);
+      } else {
+        console.error('Failed to fetch top posters:', data.error);
+        setTopPosters([]);
+      }
+    } catch (err) {
+      console.error('Error fetching top posters:', err);
+      setTopPosters([]);
+    }
+  };
+
   const fetchPosts = async (page = 1, limit = 20) => {
     try {
       setLoading(true);
@@ -87,6 +137,8 @@ export const useSocialFeed = () => {
         setError(null);
         await fetchTotalPostsCount();
         await fetchTotalBookmarksCount();
+        await fetchCompanyEmployees();
+        await fetchTopPosters();
       } else {
         setError(data.error || 'Failed to fetch posts');
       }
@@ -511,6 +563,8 @@ export const useSocialFeed = () => {
 
   const [totalPostsCount, setTotalPostsCount] = useState(0);
   const [totalBookmarksCount, setTotalBookmarksCount] = useState(0);
+  const [companyEmployees, setCompanyEmployees] = useState([]);
+  const [topPosters, setTopPosters] = useState([]);
 
   const fetchUserProfile = async () => {
     if (!isLoaded || !user) return;
@@ -528,33 +582,31 @@ export const useSocialFeed = () => {
 
       if (data.done) {
         const userPostsCount = posts.filter(post => post.userId === user.id).length;
-        setUserProfile({
+        setUserProfile(prev => ({
           ...data.data,
+          name: data.data.name || prev.name,
+          username: data.data.username || prev.username,
+          avatar: data.data.avatar || prev.avatar,
+          avatarIsExternal: data.data.avatarIsExternal ?? prev.avatarIsExternal,
+          followers: data.data.followers || 0,
+          following: data.data.following || 0,
           posts: userPostsCount
-        });
+        }));
       } else {
         console.error('Failed to fetch user profile:', data.error);
-        setUserProfile({
-          name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
-          username: `@${user.username || user.firstName?.toLowerCase() || 'user'}`,
-          avatar: user.imageUrl || 'assets/img/users/user-11.jpg',
-          avatarIsExternal: !!user.imageUrl,
-          followers: 0,
-          following: 0,
-          posts: posts.filter(post => post.userId === user.id).length
-        });
+        const userPostsCount = posts.filter(post => post.userId === user.id).length;
+        setUserProfile(prev => ({
+          ...prev,
+          posts: userPostsCount
+        }));
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      setUserProfile({
-        name: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
-        username: `@${user.username || user.firstName?.toLowerCase() || 'user'}`,
-        avatar: user.imageUrl || 'assets/img/users/user-11.jpg',
-        avatarIsExternal: !!user.imageUrl,
-        followers: 0,
-        following: 0,
-        posts: posts.filter(post => post.userId === user.id).length
-      });
+      const userPostsCount = posts.filter(post => post.userId === user.id).length;
+      setUserProfile(prev => ({
+        ...prev,
+        posts: userPostsCount
+      }));
     }
   };
 
@@ -617,12 +669,13 @@ export const useSocialFeed = () => {
 
   useEffect(() => {
     if (isLoaded && user) {
+      const userPostsCount = posts.filter(post => post.userId === user.id).length;
       setUserProfile(prev => ({
         ...prev,
-        posts: posts.filter(post => post.userId === user.id).length
+        posts: userPostsCount
       }));
     }
-  }, [posts.length, user?.id]);
+  }, [posts.length, user?.id, isLoaded]);
 
   return {
     posts,
@@ -630,6 +683,8 @@ export const useSocialFeed = () => {
     error,
     totalPostsCount,
     totalBookmarksCount,
+    companyEmployees,
+    topPosters,
     fetchPosts,
     createPost,
     toggleLike,

@@ -58,6 +58,8 @@ const SocialFeed = () => {
     error,
     totalPostsCount,
     totalBookmarksCount,
+    companyEmployees,
+    topPosters,
     createPost,
     toggleLike,
     addComment,
@@ -84,6 +86,7 @@ const SocialFeed = () => {
   const [trendingHashtags, setTrendingHashtags] = useState<any[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
+  const [showPeopleDialog, setShowPeopleDialog] = useState(false);
 
   const settings = {
     dots: false,
@@ -151,6 +154,43 @@ const SocialFeed = () => {
       },
     ],
   };
+
+  const topPostersSettings = useMemo(() => ({
+    dots: false,
+    autoplay: false,
+    slidesToShow: Math.min(6, topPosters.length || 6),
+    slidesToScroll: 1,
+    margin: 12,
+    speed: 500,
+    infinite: false,
+    variableWidth: false,
+    responsive: [
+      {
+        breakpoint: 1200,
+        settings: {
+          slidesToShow: Math.min(5, topPosters.length || 5),
+        },
+      },
+      {
+        breakpoint: 992,
+        settings: {
+          slidesToShow: Math.min(4, topPosters.length || 4),
+        },
+      },
+      {
+        breakpoint: 768,
+        settings: {
+          slidesToShow: Math.min(3, topPosters.length || 3),
+        },
+      },
+      {
+        breakpoint: 576,
+        settings: {
+          slidesToShow: Math.min(2, topPosters.length || 2),
+        },
+      },
+    ],
+  }), [topPosters.length]);
 
   useEffect(() => {
     const fetchSidebarData = async () => {
@@ -465,18 +505,19 @@ const SocialFeed = () => {
                         <div className="position-relative">
                           <textarea
                             className="form-control post-textarea"
-                            rows={3}
+                            rows={1}
                             placeholder="What's on your mind?"
                             value={newPostContent}
                             onChange={(e) => setNewPostContent(e.target.value)}
+                            style={{ paddingLeft: '65px', paddingBottom: '20px', paddingTop: '12px' }}
                           />
-                          <span className="avatar avatar-lg avatar-rounded text-area-avatar">
+                          <div className="avatar avatar-lg avatar-rounded position-absolute" style={{ top: '8px', left: '12px' }}>
                             <ImageWithBasePath
                               src={userProfile.avatar}
                               alt="Img"
                               isLink={userProfile.avatarIsExternal}
                             />
-                          </span>
+                          </div>
                         </div>
                       </div>
                       <div className="d-flex align-items-center justify-content-between flex-wrap row-gap-3">
@@ -503,24 +544,6 @@ const SocialFeed = () => {
                             to="#"
                             className="btn btn-icon btn-sm rounded-circle"
                           >
-                            <i className="ti ti-video fs-16" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
-                          >
-                            <i className="ti ti-hash fs-16" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
-                          >
-                            <i className="ti ti-map-pin-heart fs-16" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
-                          >
                             <i className="ti ti-mood-smile fs-16" />
                           </Link>
                         </div>
@@ -536,12 +559,6 @@ const SocialFeed = () => {
                             className="btn btn-icon btn-sm rounded-circle"
                           >
                             <i className="ti ti-trash fs-16" />
-                          </Link>
-                          <Link
-                            to="#"
-                            className="btn btn-icon btn-sm rounded-circle"
-                          >
-                            <i className="ti ti-world fs-16" />
                           </Link>
                           <button
                             type="submit"
@@ -559,35 +576,59 @@ const SocialFeed = () => {
                 <div className="card">
                   <div className="card-body">
                     <div className="d-flex align-items-center mb-3">
-                      <h5 className="me-2">Popular</h5>
+                      <h5 className="me-2">Top Posters</h5>
                       <div className="owl-nav custom-nav nav-control" />
                     </div>
-                    <Slider {...settings} className="channels-slider owl-carousel">
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-01.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-02.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-03.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-04.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-05.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-06.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-07.svg" alt="Img" />
-                      </Link>
-                      <Link to="#">
-                        <ImageWithBasePath src="assets/img/icons/channel-08.svg" alt="Img" />
-                      </Link>
-                    </Slider>
+                    {topPosters.length > 0 ? (
+                      topPosters.length === 1 ? (
+                        <div className="text-start">
+                          {(() => {
+                            const poster = topPosters[0] as any;
+                            return (
+                              <Link to="#" className="d-block">
+                                <div className="avatar avatar-lg avatar-rounded mb-2 mx-2">
+                                  <ImageWithBasePath
+                                    src={poster?.avatar || userProfile.avatar}
+                                    alt="Img"
+                                    isLink={isExternalImage(poster?.avatar || userProfile.avatar)}
+                                  />
+                                </div>
+                                <div>
+                                  <h6 className="fs-12 fw-medium mb-1">{poster?.name || 'Unknown'}</h6>
+                                  <span className="fs-11 text-muted d-block mx-2">{poster?.postCount || 0} posts</span>
+                                </div>
+                              </Link>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <Slider {...topPostersSettings} className="top-posters-slider owl-carousel">
+                          {topPosters.map((poster: any, index: number) => (
+                            <div key={poster.userId || `poster-${index}`} className="item text-center" style={{ minWidth: '80px', maxWidth: '100px' }}>
+                              <Link to="#" className="d-block">
+                                <div className="avatar avatar-md avatar-rounded mx-auto mb-2">
+                                  <ImageWithBasePath
+                                    src={poster.avatar || userProfile.avatar}
+                                    alt="Img"
+                                    isLink={isExternalImage(poster.avatar || userProfile.avatar)}
+                                  />
+                                </div>
+                                <h6 className="fs-12 fw-medium text-truncate mb-1" title={poster.name}>
+                                  {poster.name}
+                                </h6>
+                                <span className="fs-11 text-muted d-block">{poster.postCount} posts</span>
+                              </Link>
+                            </div>
+                          ))}
+                        </Slider>
+                      )
+                    ) : (
+                      <div className="text-center py-4">
+                        <i className="ti ti-users text-muted fs-2 mb-2" />
+                        <p className="text-muted fs-12">No active posters yet</p>
+                        <small className="text-muted">Top posters will appear here</small>
+                      </div>
+                    )}
                   </div>
                 </div>
                 {/* Loading state */}
@@ -1093,274 +1134,61 @@ const SocialFeed = () => {
                 <div className="card ">
                   <div className="card-body">
                     <h5 className="mb-3">Peoples</h5>
-                    <ul
-                      className="nav nav-pills border d-flex p-2 rounded mb-3"
-                      id="pills-tab"
-                      role="tablist"
-                    >
-                      <li className="nav-item flex-fill" role="presentation">
-                        <button
-                          className="nav-link btn active w-100"
-                          data-bs-toggle="pill"
-                          data-bs-target="#pills-home"
-                          type="button"
-                          role="tab"
-                          aria-selected="true"
-                        >
-                          General
-                        </button>
-                      </li>
-                      <li className="nav-item flex-fill" role="presentation">
-                        <button
-                          className="nav-link btn w-100"
-                          data-bs-toggle="pill"
-                          data-bs-target="#pills-profile"
-                          type="button"
-                          role="tab"
-                          aria-selected="false"
-                        >
-                          Primary
-                        </button>
-                      </li>
-                    </ul>
-                    <div className="tab-content">
-                      <div
-                        className="tab-pane fade show active"
-                        id="pills-home"
-                        role="tabpanel"
-                      >
-                        <div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                      {companyEmployees.length > 0 ? (
+                        companyEmployees.slice(0, 5).map((employee: any, index: number) => (
+                          <div key={employee.employeeId || index} className="d-flex align-items-center justify-content-between mb-3">
                             <div className="d-flex align-items-center">
                               <Link
                                 to="#"
                                 className="avatar avatar-rounded flex-shrink-0 me-2"
                               >
                                 <ImageWithBasePath
-                                  src="assets/img/profiles/avatar-29.jpg"
+                                  src={employee.avatar || userProfile.avatar}
                                   alt="Img"
+                                  isLink={isExternalImage(employee.avatar || userProfile.avatar)}
                                 />
                               </Link>
                               <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Anthony Lewis</Link>
-                                  <i className="ti ti-circle-check-filled text-success ms-1" />
+                                <h6 className="fw-medium mb-1">
+                                  <Link to="#">{employee.name}</Link>
                                 </h6>
-                                <span className="fs-12 d-block">United States</span>
+                                <span className="fs-12 d-block text-muted mb-1">
+                                  {employee.role || employee.designation || 'Employee'}
+                                </span>
+                                <span className="fs-12 d-block">
+                                  {employee.postCount || 0} posts • {employee.department || 'General'}
+                                </span>
                               </div>
                             </div>
                             <Link
                               to="#"
                               className="btn btn-sm btn-icon"
+                              title="View profile"
                             >
-                              <i className="ti ti-user-x" />
+                              <i className="ti ti-eye" />
                             </Link>
                           </div>
-                          {suggestedUsers.length > 0 ? (
-                            suggestedUsers.slice(0, 5).map((suggestedUser: any, index: number) => (
-                              <div key={suggestedUser.userId || index} className="d-flex align-items-center justify-content-between mb-3">
-                                <div className="d-flex align-items-center">
-                                  <Link
-                                    to="#"
-                                    className="avatar avatar-rounded flex-shrink-0 me-2"
-                                  >
-                                    <ImageWithBasePath
-                                      src={suggestedUser.imageUrl || userProfile.avatar}
-                                      alt="Img"
-                                      isLink={isExternalImage(suggestedUser.imageUrl || userProfile.avatar)}
-                                    />
-                                  </Link>
-                                  <div>
-                                    <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                      <Link to="#">{suggestedUser.firstName} {suggestedUser.lastName}</Link>
-                                      {suggestedUser.publicMetadata?.isVerified && (
-                                        <i className="ti ti-circle-check-filled text-success ms-1" />
-                                      )}
-                                    </h6>
-                                    <span className="fs-12 d-block">
-                                      {suggestedUser.postCount || 0} posts • {suggestedUser.publicMetadata?.country || 'Unknown'}
-                                    </span>
-                                  </div>
-                                </div>
-                                <Link
-                                  to="#"
-                                  className="btn btn-sm btn-icon"
-                                  title="Follow user"
-                                >
-                                  <i className="ti ti-user-plus" />
-                                </Link>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="text-center py-3">
-                              <i className="ti ti-users text-muted fs-1 mb-2" />
-                              <p className="text-muted mb-0">No suggested users</p>
-                              <small className="text-muted">More users will appear as they post</small>
-                            </div>
-                          )}
+                        ))
+                      ) : (
+                        <div className="text-center py-3">
+                          <i className="ti ti-users text-muted fs-1 mb-2" />
+                          <p className="text-muted mb-0">No employees found</p>
+                          <small className="text-muted">Employees will appear here once added to the system</small>
                         </div>
-                        <div>
-                          <Link
-                            to="#"
-                            className="btn btn-outline-light w-100 border"
-                          >
-                            View All <i className="ti ti-arrow-right ms-2" />
-                          </Link>
-                        </div>
-                      </div>
-                      <div
-                        className="tab-pane fade"
-                        id="pills-profile"
-                        role="tabpanel"
+                      )}
+                    </div>
+                    <div className="mt-3">
+                      <Link
+                        to="#"
+                        className="btn btn-outline-light w-100 border"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setShowPeopleDialog(true);
+                        }}
                       >
-                        <div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath
-                                  src="assets/img/profiles/avatar-11.jpg"
-                                  alt="Img"
-                                />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Anthony Lewis</Link>
-                                  <i className="ti ti-circle-check-filled text-success ms-1" />
-                                </h6>
-                                <span className="fs-12 d-block">United States</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-12.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Harvey Smith</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Ukrain</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-13.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Stephan Peralt</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Isreal</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-14.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Doglas Martini</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Belgium</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-15.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Brian Villalobos</Link>
-                                  <i className="ti ti-circle-check-filled text-success ms-1" />
-                                </h6>
-                                <span className="fs-12 d-block">United Kingdom</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                          <div className="d-flex align-items-center justify-content-between mb-3">
-                            <div className="d-flex align-items-center">
-                              <Link
-                                to="#"
-                                className="avatar avatar-rounded flex-shrink-0 me-2"
-                              >
-                                <ImageWithBasePath src="assets/img/users/user-16.jpg" alt="Img" />
-                              </Link>
-                              <div>
-                                <h6 className="d-inline-flex align-items-center fw-medium mb-1">
-                                  <Link to="#">Linda Ray</Link>
-                                </h6>
-                                <span className="fs-12 d-block">Argentina</span>
-                              </div>
-                            </div>
-                            <Link
-                              to="#"
-                              className="btn btn-sm btn-icon"
-                            >
-                              <i className="ti ti-user-x" />
-                            </Link>
-                          </div>
-                        </div>
-                        <div>
-                          <Link
-                            to="#"
-                            className="btn btn-outline-light w-100 border"
-                          >
-                            View All <i className="ti ti-arrow-right ms-2" />
-                          </Link>
-                        </div>
-                      </div>
+                        View All People <i className="ti ti-arrow-right ms-2" />
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -1480,6 +1308,99 @@ const SocialFeed = () => {
           </div>
         </div>
       </div>
+
+      {/* People Dialog */}
+      {showPeopleDialog && (
+        <div
+          className="modal fade show d-block"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowPeopleDialog(false)}
+        >
+          <div className="modal-dialog modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">All People</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowPeopleDialog(false)}
+                >
+                  <i className="ti ti-x" />
+                </button>
+              </div>
+              <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                {companyEmployees.length > 0 ? (
+                  <div className="row g-3">
+                    {companyEmployees.map((employee: any, index: number) => (
+                      <div key={employee.employeeId || index} className="col-12">
+                        <div className="d-flex align-items-center justify-content-between p-3 border rounded">
+                          <div className="d-flex align-items-center">
+                            <Link
+                              to="#"
+                              className="avatar avatar-rounded flex-shrink-0 me-3"
+                            >
+                              <ImageWithBasePath
+                                src={employee.avatar || userProfile.avatar}
+                                alt="Img"
+                                isLink={isExternalImage(employee.avatar || userProfile.avatar)}
+                              />
+                            </Link>
+                            <div>
+                              <h6 className="fw-medium mb-1">
+                                <Link to="#">{employee.name}</Link>
+                              </h6>
+                              <span className="fs-12 d-block text-muted mb-1">
+                                {employee.role || employee.designation || 'Employee'}
+                              </span>
+                              <span className="fs-12 d-block">
+                                {employee.postCount || 0} posts • {employee.department || 'General'}
+                                {employee.email && (
+                                  <span className="ms-2">• {employee.email}</span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="d-flex gap-2">
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                              title="Message"
+                            >
+                              <i className="ti ti-message-circle" />
+                            </Link>
+                            <Link
+                              to="#"
+                              className="btn btn-sm btn-icon"
+                              title="View profile"
+                            >
+                              <i className="ti ti-eye" />
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-5">
+                    <i className="ti ti-users text-muted fs-2 mb-3" />
+                    <h6 className="text-muted">No employees found</h6>
+                    <p className="text-muted fs-12">Employees will appear here once added to the system</p>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowPeopleDialog(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

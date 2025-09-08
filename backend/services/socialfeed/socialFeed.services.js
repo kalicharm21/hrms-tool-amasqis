@@ -1231,4 +1231,194 @@ export class SocialFeedService {
       return 0;
     }
   }
+
+  static async getCompanyEmployees(companyId, limit = 10) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const employees = await collections.employees
+        .find({})
+        .project({
+          _id: 1,
+          name: 1,
+          email: 1,
+          avatar: 1,
+          role: 1,
+          department: 1,
+          designation: 1,
+          joiningDate: 1,
+          firstName: 1,
+          lastName: 1
+        })
+        .limit(limit)
+        .toArray();
+
+      return employees.map(employee => {
+        const name = employee.name ||
+                    `${employee.firstName || ''} ${employee.lastName || ''}`.trim() ||
+                    `User ${employee._id.toString().slice(-4)}`;
+
+        return {
+          employeeId: employee._id.toString(),
+          name: name,
+          email: employee.email || '',
+          avatar: employee.avatar || null,
+          role: employee.role || 'Employee',
+          department: employee.department || 'General',
+          designation: employee.designation || '',
+          joiningDate: employee.joiningDate,
+          postCount: 0
+        };
+      });
+    } catch (error) {
+      console.error('Error getting company employees:', error);
+      return [];
+    }
+  }
+
+  static async getEmployeesWithPostCounts(companyId, limit = 10) {
+    try {
+      const employees = await this.getCompanyEmployees(companyId, limit);
+
+      if (employees.length === 0) {
+        const collections = getTenantCollections(companyId);
+        const posts = await collections.socialFeeds.find({}).limit(50).toArray();
+
+        if (posts.length === 0) {
+          return [];
+        }
+
+        const userIds = [...new Set(posts.map(post => post.userId))];
+        const fallbackUsers = [];
+        for (const userId of userIds.slice(0, limit)) {
+          try {
+            const clerkUser = await clerkClient.users.getUser(userId);
+            const postCount = posts.filter(post => post.userId === userId).length;
+
+            fallbackUsers.push({
+              employeeId: userId,
+              name: clerkUser.firstName && clerkUser.lastName
+                ? `${clerkUser.firstName} ${clerkUser.lastName}`.trim()
+                : clerkUser.firstName || clerkUser.username || `User ${userId.slice(-4)}`,
+              email: clerkUser.primaryEmailAddress?.emailAddress || '',
+              avatar: clerkUser.imageUrl || null,
+              role: 'User',
+              department: 'General',
+              designation: '',
+              joiningDate: null,
+              postCount: postCount
+            });
+          } catch (clerkError) {
+            console.warn(`Failed to get Clerk user ${userId}:`, clerkError.message);
+            const postCount = posts.filter(post => post.userId === userId).length;
+            fallbackUsers.push({
+              employeeId: userId,
+              name: `User ${userId.slice(-4)}`,
+              email: '',
+              avatar: null,
+              role: 'User',
+              department: 'General',
+              designation: '',
+              joiningDate: null,
+              postCount: postCount
+            });
+          }
+        }
+
+        return fallbackUsers.sort((a, b) => b.postCount - a.postCount);
+      }
+
+      const postCounts = await Promise.all(
+        employees.map(async (employee) => {
+          const collections = getTenantCollections(companyId);
+          const count = await collections.socialFeeds.countDocuments({
+            userId: employee.employeeId
+          });
+          return count;
+        })
+      );
+
+      const employeesWithCounts = employees.map((employee, index) => ({
+        ...employee,
+        postCount: postCounts[index]
+      })).sort((a, b) => b.postCount - a.postCount);
+
+      return employeesWithCounts;
+
+    } catch (error) {
+      console.error('Error getting employees with post counts:', error);
+      return [];
+    }
+  }
+
+  static async getTopPosters(companyId, limit = 8) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const topPosters = await collections.socialFeeds.aggregate([
+        {
+          $match: {
+            companyId,
+            isPublic: true
+          }
+        },
+        {
+          $group: {
+            _id: "$userId",
+            postCount: { $sum: 1 },
+            lastPostDate: { $max: "$createdAt" }
+          }
+        },
+        {
+          $match: {
+            postCount: { $gte: 1 },
+            _id: { $ne: null }
+          }
+        },
+        {
+          $sort: {
+            postCount: -1,
+            lastPostDate: -1
+          }
+        },
+        {
+          $limit: limit
+        }
+      ]).toArray();
+
+      if (topPosters.length === 0) {
+        return [];
+      }
+
+      const topPostersWithDetails = [];
+      for (const poster of topPosters) {
+        try {
+          const clerkUser = await clerkClient.users.getUser(poster._id);
+          topPostersWithDetails.push({
+            userId: poster._id,
+            name: clerkUser.firstName && clerkUser.lastName
+              ? `${clerkUser.firstName} ${clerkUser.lastName}`.trim()
+              : clerkUser.firstName || clerkUser.username || `User ${poster._id.slice(-4)}`,
+            avatar: clerkUser.imageUrl || null,
+            postCount: poster.postCount,
+            lastPostDate: poster.lastPostDate
+          });
+        } catch (clerkError) {
+          console.warn(`Failed to get Clerk user ${poster._id}:`, clerkError.message);
+          topPostersWithDetails.push({
+            userId: poster._id,
+            name: `User ${poster._id.slice(-4)}`,
+            avatar: null,
+            postCount: poster.postCount,
+            lastPostDate: poster.lastPostDate
+          });
+        }
+      }
+
+      console.log(`[getTopPosters] Returning ${topPostersWithDetails.length} top posters with details`);
+      return topPostersWithDetails;
+
+    } catch (error) {
+      console.error('Error getting top posters:', error);
+      return [];
+    }
+  }
 }

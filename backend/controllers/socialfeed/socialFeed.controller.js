@@ -622,5 +622,28 @@ export const socialFeedController = {
       console.error('Error getting total bookmarks count:', error);
       return createHttpErrorResponse(res, 500, error.message || 'Failed to get total bookmarks count');
     }
+  },
+
+  getCompanyEmployees: async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 10;
+      const employees = await SocialFeedService.getEmployeesWithPostCounts(req.companyId, limit);
+      return createHttpSuccessResponse(res, employees);
+    } catch (error) {
+      console.error('Error getting company employees:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get company employees');
+    }
+  },
+
+  getTopPosters: async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 8;
+      const finalLimit = Math.min(limit, 8);
+      const topPosters = await SocialFeedService.getTopPosters(req.companyId, finalLimit);
+      return createHttpSuccessResponse(res, topPosters);
+    } catch (error) {
+      console.error('Error getting top posters:', error);
+      return createHttpErrorResponse(res, 500, error.message || 'Failed to get top posters');
+    }
   }
 };
