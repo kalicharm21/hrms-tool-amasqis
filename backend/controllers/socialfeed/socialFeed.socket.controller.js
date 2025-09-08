@@ -145,6 +145,8 @@ const socialFeedSocketController = (socket, io) => {
   });
 
   socket.on("socialfeed:add-reply", async (data) => {
+    console.log(`[socialfeed:add-reply] Received data:`, data);
+
     try {
       const postIdValidation = validatePostId(data.postId);
       if (!postIdValidation.isValid) {
@@ -154,6 +156,10 @@ const socialFeedSocketController = (socket, io) => {
 
       const commentIdValidation = validateCommentId(data.commentId);
       if (!commentIdValidation.isValid) {
+        console.error(`[socialfeed:add-reply] Comment ID validation failed:`, {
+          commentId: data.commentId,
+          validation: commentIdValidation
+        });
         createErrorResponse(socket, "socialfeed:add-reply", commentIdValidation.error);
         return;
       }
@@ -172,6 +178,31 @@ const socialFeedSocketController = (socket, io) => {
     } catch (error) {
       console.error("Error adding reply:", error);
       createErrorResponse(socket, "socialfeed:add-reply", error.message || "Failed to add reply");
+    }
+  });
+
+  socket.on("socialfeed:toggle-comment-like", async (data) => {
+    try {
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-comment-like", postIdValidation.error);
+        return;
+      }
+
+      const commentIdValidation = validateCommentId(data.commentId);
+      if (!commentIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-comment-like", commentIdValidation.error);
+        return;
+      }
+
+      const updatedPost = await SocialFeedService.toggleCommentLike(socket.companyId, data.postId, data.commentId, socket.userId);
+
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", updatedPost, "Comment like updated");
+      createSuccessResponse(socket, "socialfeed:toggle-comment-like", updatedPost, "Comment like updated successfully");
+
+    } catch (error) {
+      console.error("Error toggling comment like:", error);
+      createErrorResponse(socket, "socialfeed:toggle-comment-like", error.message || "Failed to toggle comment like");
     }
   });
 

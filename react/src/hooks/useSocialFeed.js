@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useSocket } from '../SocketContext';
 
@@ -158,6 +158,184 @@ export const useSocialFeed = () => {
     });
   };
 
+  const toggleCommentLike = async (postId, commentId) => {
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for toggleCommentLike');
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:toggle-comment-like-response', handleResponse);
+        if (response.done) {
+          console.log('Comment like toggled successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to toggle comment like via socket:', response.error);
+          reject(new Error(response.error || 'Failed to toggle comment like'));
+        }
+      };
+
+      socket.on('socialfeed:toggle-comment-like-response', handleResponse);
+      socket.emit('socialfeed:toggle-comment-like', { postId, commentId });
+
+      setTimeout(() => {
+        socket.off('socialfeed:toggle-comment-like-response', handleResponse);
+        reject(new Error('Toggle comment like timeout'));
+      }, 10000);
+    });
+  };
+
+  const deleteComment = async (postId, commentId) => {
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for deleteComment');
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:delete-comment-response', handleResponse);
+        if (response.done) {
+          console.log('Comment deleted successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to delete comment via socket:', response.error);
+          reject(new Error(response.error || 'Failed to delete comment'));
+        }
+      };
+
+      socket.on('socialfeed:delete-comment-response', handleResponse);
+      socket.emit('socialfeed:delete-comment', { postId, commentId });
+
+      setTimeout(() => {
+        socket.off('socialfeed:delete-comment-response', handleResponse);
+        reject(new Error('Delete comment timeout'));
+      }, 10000);
+    });
+  };
+
+  const deletePost = async (postId) => {
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for deletePost');
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:delete-post-response', handleResponse);
+        if (response.done) {
+          console.log('Post deleted successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to delete post via socket:', response.error);
+          reject(new Error(response.error || 'Failed to delete post'));
+        }
+      };
+
+      socket.on('socialfeed:delete-post-response', handleResponse);
+      socket.emit('socialfeed:delete-post', { postId });
+
+      setTimeout(() => {
+        socket.off('socialfeed:delete-post-response', handleResponse);
+        reject(new Error('Delete post timeout'));
+      }, 10000);
+    });
+  };
+
+  const addReply = async (postId, commentId, content) => {
+    console.log('addReply function called with:', { postId, commentId, content });
+
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for addReply');
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:add-reply-response', handleResponse);
+        if (response.done) {
+          console.log('Reply added successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to add reply via socket:', response.error);
+          reject(new Error(response.error || 'Failed to add reply'));
+        }
+      };
+
+      socket.on('socialfeed:add-reply-response', handleResponse);
+      console.log('Emitting add-reply with data:', { postId, commentId, content });
+      socket.emit('socialfeed:add-reply', { postId, commentId, content });
+
+      setTimeout(() => {
+        socket.off('socialfeed:add-reply-response', handleResponse);
+        reject(new Error('Add reply timeout'));
+      }, 10000);
+    });
+  };
+
+  const toggleReplyLike = async (postId, commentId, replyId) => {
+    return new Promise((resolve, reject) => {
+      if (!socket) {
+        console.error('Socket not connected for toggleReplyLike');
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      if (!socket.connected) {
+        console.error('Socket not connected to server');
+        reject(new Error('Socket not connected to server'));
+        return;
+      }
+
+      const handleResponse = (response) => {
+        socket.off('socialfeed:toggle-reply-like-response', handleResponse);
+        if (response.done) {
+          console.log('Reply like toggled successfully via socket');
+          resolve(response.data);
+        } else {
+          console.error('Failed to toggle reply like via socket:', response.error);
+          reject(new Error(response.error || 'Failed to toggle reply like'));
+        }
+      };
+
+      socket.on('socialfeed:toggle-reply-like-response', handleResponse);
+      socket.emit('socialfeed:toggle-reply-like', { postId, commentId, replyId });
+
+      setTimeout(() => {
+        socket.off('socialfeed:toggle-reply-like-response', handleResponse);
+        reject(new Error('Toggle reply like timeout'));
+      }, 10000);
+    });
+  };
+
   const getCurrentUserProfile = () => {
     if (isLoaded && user) {
       return {
@@ -184,48 +362,43 @@ export const useSocialFeed = () => {
 
   useEffect(() => {
     if (socket) {
-      const handleNewPost = (data) => {
-        console.log('New post received via socket:', data);
+      socket.on('socialfeed:newPost', (data) => {
         if (data.done && data.data) {
+          console.log('New post received via socket:', data.data);
           setPosts(prevPosts => [data.data, ...prevPosts]);
         }
-      };
+      });
 
-      const handlePostUpdate = (data) => {
-        console.log('Post update received via socket:', data);
+      socket.on('socialfeed:postUpdate', (data) => {
         if (data.done && data.data) {
+          console.log('Post update received via socket:', data.data);
           setPosts(prevPosts =>
             prevPosts.map(post =>
               post._id === data.data._id ? data.data : post
             )
           );
         }
-      };
+      });
 
-      const handlePostDeleted = (data) => {
-        console.log('Post deleted via socket:', data);
+      socket.on('socialfeed:postDeleted', (data) => {
         if (data.done && data.data?.postId) {
+          console.log('Post deleted via socket:', data.data.postId);
           setPosts(prevPosts =>
             prevPosts.filter(post => post._id !== data.data.postId)
           );
         }
-      };
+      });
 
-      const handleSocialFeedError = (error) => {
+      socket.on('socialfeed:error', (error) => {
         console.error('Social feed error:', error);
         setError(error.error || 'Social feed error occurred');
-      };
-
-      socket.on('socialfeed:newPost', handleNewPost);
-      socket.on('socialfeed:postUpdate', handlePostUpdate);
-      socket.on('socialfeed:postDeleted', handlePostDeleted);
-      socket.on('socialfeed:error', handleSocialFeedError);
+      });
 
       return () => {
-        socket.off('socialfeed:newPost', handleNewPost);
-        socket.off('socialfeed:postUpdate', handlePostUpdate);
-        socket.off('socialfeed:postDeleted', handlePostDeleted);
-        socket.off('socialfeed:error', handleSocialFeedError);
+        socket.off('socialfeed:newPost');
+        socket.off('socialfeed:postUpdate');
+        socket.off('socialfeed:postDeleted');
+        socket.off('socialfeed:error');
       };
     }
   }, [socket]);
@@ -244,6 +417,11 @@ export const useSocialFeed = () => {
     createPost,
     toggleLike,
     addComment,
+    addReply: useCallback(addReply, []),
+    toggleReplyLike,
+    toggleCommentLike: useCallback(toggleCommentLike, []),
+    deleteComment: useCallback(deleteComment, []),
+    deletePost: useCallback(deletePost, []),
     getCurrentUserProfile
   };
 };

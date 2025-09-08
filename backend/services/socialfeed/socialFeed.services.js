@@ -182,6 +182,22 @@ export class SocialFeedService {
     }
   }
 
+  static async getPostById(companyId, postId) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const post = await collections.socialFeeds.findOne({ _id: new ObjectId(postId) });
+
+      if (!post) {
+        throw new Error('Post not found');
+      }
+
+      const enrichedPosts = await this.enrichPostsWithUserData([post]);
+      return enrichedPosts[0];
+    } catch (error) {
+      throw new Error(`Failed to get post: ${error.message}`);
+    }
+  }
+
   static async getAllPosts(companyId, page = 1, limit = 20) {
     try {
       const skip = (page - 1) * limit;
@@ -316,6 +332,66 @@ export class SocialFeedService {
     }
   }
 
+  static async toggleCommentLike(companyId, postId, commentId, userId) {
+    try {
+      const collections = getTenantCollections(companyId);
+      const post = await collections.socialFeeds.findOne({
+        _id: new ObjectId(postId),
+        'comments._id': new ObjectId(commentId)
+      });
+
+      if (!post) {
+        throw new Error('Post or comment not found');
+      }
+
+      // Find the comment index
+      const commentIndex = post.comments.findIndex(
+        comment => comment._id && comment._id.toString() === commentId
+      );
+
+      if (commentIndex === -1) {
+        throw new Error('Comment not found');
+      }
+
+      const comment = post.comments[commentIndex];
+
+      // Check if user already liked this comment
+      const existingLikeIndex = comment.likes ? comment.likes.findIndex(like => like.userId === userId) : -1;
+
+      let updateOperation;
+      if (existingLikeIndex !== -1) {
+        // Unlike: Remove the like
+        updateOperation = {
+          $pull: { [`comments.${commentIndex}.likes`]: { userId: userId } }
+        };
+      } else {
+        // Like: Add the like
+        updateOperation = {
+          $push: { [`comments.${commentIndex}.likes`]: { userId: userId, createdAt: new Date() } }
+        };
+      }
+
+      const updateResult = await collections.socialFeeds.updateOne(
+        {
+          _id: new ObjectId(postId),
+          'comments._id': new ObjectId(commentId)
+        },
+        updateOperation
+      );
+
+      if (updateResult.modifiedCount === 0) {
+        throw new Error('Failed to update comment like');
+      }
+
+      const updatedPost = await collections.socialFeeds.findOne({ _id: new ObjectId(postId) });
+      const enrichedPost = await this.enrichPostsWithUserData([updatedPost]);
+
+      return enrichedPost[0];
+    } catch (error) {
+      throw new Error(`Failed to toggle comment like: ${error.message}`);
+    }
+  }
+
   static async toggleLike(companyId, postId, userId) {
     try {
       const collections = getTenantCollections(companyId);
@@ -365,10 +441,12 @@ export class SocialFeedService {
       }
 
       const commentData = {
+        _id: new ObjectId(),
         userId,
         content,
         createdAt: new Date(),
-        likes: []
+        likes: [],
+        replies: []
       };
 
       const updateResult = await collections.socialFeeds.updateOne(
