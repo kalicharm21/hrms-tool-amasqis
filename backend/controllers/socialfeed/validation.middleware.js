@@ -52,4 +52,3 @@ export const validateSocketAuth = (socket) => {
 
   return true;
 };
-
