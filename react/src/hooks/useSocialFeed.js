@@ -603,7 +603,7 @@ export const useSocialFeed = () => {
 
     try {
       const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/api/socialfeed/users/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/socialfeed/users/profile/${user.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -613,7 +613,6 @@ export const useSocialFeed = () => {
       const data = await response.json();
 
       if (data.done) {
-        const userPostsCount = posts.filter(post => post.userId === user.id).length;
         setUserProfile(prev => ({
           ...data.data,
           name: data.data.name || prev.name,
@@ -622,7 +621,7 @@ export const useSocialFeed = () => {
           avatarIsExternal: data.data.avatarIsExternal ?? prev.avatarIsExternal,
           followers: data.data.followers || 0,
           following: data.data.following || 0,
-          posts: userPostsCount
+          posts: data.data.posts || 0
         }));
       } else {
         console.error('Failed to fetch user profile:', data.error);
@@ -701,13 +700,15 @@ export const useSocialFeed = () => {
 
   useEffect(() => {
     if (isLoaded && user) {
-      const userPostsCount = posts.filter(post => post.userId === user.id).length;
-      setUserProfile(prev => ({
-        ...prev,
-        posts: userPostsCount
-      }));
+      if (!userProfile.name || userProfile.name === 'Loading...') {
+        const userPostsCount = posts.filter(post => post.userId === user.id).length;
+        setUserProfile(prev => ({
+          ...prev,
+          posts: userPostsCount
+        }));
+      }
     }
-  }, [posts.length, user?.id, isLoaded]);
+  }, [posts.length, user?.id, isLoaded, userProfile.name]);
 
   return {
     posts,
