@@ -1,7 +1,7 @@
 
 import { addUser } from '../../services/user/user.services.js';
 import { getAllEmployees } from '../../services/employee/employee.services.js';
-import { getAllClients } from '../../services/client/client.services.js';
+import { getClients } from '../../services/client/client.services.js';
 
 const authorize = (socket, allowedRoles = []) => {
   const userRole = socket.role;
@@ -20,11 +20,15 @@ const userSocketController = (socket, io) => {
       if (!companyId) throw new Error("Company ID not found on socket.");
 
       const employees = await getAllEmployees(companyId);
-      const clients = await getAllClients(companyId);
+      const clientsResult = await getClients(companyId);
+      
+      if (!clientsResult.done) {
+        throw new Error(clientsResult.error || "Failed to fetch clients");
+      }
 
       const allUsers = [
         ...employees.map(e => ({ ...e, _id: e._id.toString(), role: 'Employee', name: `${e.firstName} ${e.lastName}` })),
-        ...clients.map(c => ({ ...c, _id: c._id.toString(), role: 'Client' }))
+        ...clientsResult.data.map(c => ({ ...c, _id: c._id.toString(), role: 'Client' }))
       ];
 
       socket.emit("users/get-all-response", {
