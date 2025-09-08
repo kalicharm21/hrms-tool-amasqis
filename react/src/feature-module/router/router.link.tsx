@@ -294,6 +294,7 @@ import Invoices from "../finance-accounts/sales/invoices";
 
 // Custom route
 import Validate from "../auth/login/validate";
+import ClerkDash from "../clerk/Clerkdash";
 const routes = all_routes;
 
 export const publicRoutes = [
@@ -332,6 +333,11 @@ export const publicRoutes = [
     path: routes.validate,
     element: <Validate />,
     roles: ["public"],
+  },
+  {
+    path: routes.clerk,
+    element: <ClerkDash />,
+    roles: ["admin"],
   },
   {
     path: routes.estimate,
