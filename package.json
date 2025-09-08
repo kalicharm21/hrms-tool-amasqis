@@ -6,6 +6,7 @@
     "dev:front": "cd react && npm start"
   },
   "devDependencies": {
+    "@types/chart.js": "^2.9.41",
     "concurrently": "^8.2.2"
   },
   "dependencies": {
