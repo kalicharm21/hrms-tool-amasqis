@@ -1,347 +1,215 @@
 import { SocialFeedService } from '../../services/socialfeed/socialFeed.services.js';
+import { validateSocketAuth } from './validation.middleware.js';
+import { broadcastToCompany, createErrorResponse, createSuccessResponse } from './response.helpers.js';
+import { validatePostData, validateCommentData, validateReplyData, validatePostId, validateCommentId } from './validation.helpers.js';
 
 const socialFeedSocketController = (socket, io) => {
 
-  if (!socket.userId || !socket.authenticated) {
-    console.error(`User not authenticated for socket: ${socket.id}`, {
-      hasUserId: !!socket.userId,
-      isAuthenticated: socket.authenticated
-    });
-    socket.emit('socialfeed:error', {
-      done: false,
-      error: 'Authentication required'
-    });
+  if (!validateSocketAuth(socket)) {
     return;
   }
 
-  const companyId = socket.companyId;
-  if (companyId) {
-    socket.join(`socialfeed:${companyId}`);
-  } else {
-    console.error(`User ${socket.userId} has no company ID`);
-    socket.emit('socialfeed:error', {
-      done: false,
-      error: 'Company ID required for social feed'
-    });
-    return;
-  }
+  socket.join(`socialfeed:${socket.companyId}`);
+  console.log(`User ${socket.userId} joined social feed room: socialfeed:${socket.companyId}`);
 
   socket.on("socialfeed:create-post", async (postData) => {
     try {
-      const { content, images = [], tags = [], location, isPublic = true } = postData;
-      const userId = socket.userId;
-
-      if (!content || !content.trim()) {
-        socket.emit("socialfeed:create-post-response", {
-          done: false,
-          error: "Post content is required"
-        });
+      const validation = validatePostData(postData);
+      if (!validation.isValid) {
+        createErrorResponse(socket, "socialfeed:create-post", validation.errors[0]);
         return;
       }
 
-      const newPost = await SocialFeedService.createPost(companyId, {
-        userId,
-        companyId,
-        content: content.trim(),
-        images,
-        tags,
-        location,
-        isPublic
+      const newPost = await SocialFeedService.createPost(socket.companyId, {
+        userId: socket.userId,
+        companyId: socket.companyId,
+        content: postData.content.trim(),
+        images: postData.images || [],
+        tags: postData.tags || [],
+        location: postData.location,
+        isPublic: postData.isPublic ?? true
       });
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:newPost", {
-        done: true,
-        data: newPost,
-        message: "New post created"
-      });
-
-      socket.emit("socialfeed:create-post-response", {
-        done: true,
-        data: newPost,
-        message: "Post created successfully"
-      });
+      broadcastToCompany(io, socket.companyId, "socialfeed:newPost", newPost, "New post created");
+      createSuccessResponse(socket, "socialfeed:create-post", newPost, "Post created successfully");
 
     } catch (error) {
       console.error("Error creating post:", error);
-      socket.emit("socialfeed:create-post-response", {
-        done: false,
-        error: error.message || "Failed to create post"
-      });
+      createErrorResponse(socket, "socialfeed:create-post", error.message || "Failed to create post");
     }
   });
 
   socket.on("socialfeed:toggle-like", async (data) => {
     try {
-
-      const { postId } = data;
-      const userId = socket.userId;
-
-      if (!postId) {
-        socket.emit("socialfeed:toggle-like-response", {
-          done: false,
-          error: "Post ID is required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-like", postIdValidation.error);
         return;
       }
 
-      const updatedPost = await SocialFeedService.toggleLike(companyId, postId, userId);
+      const updatedPost = await SocialFeedService.toggleLike(socket.companyId, data.postId, socket.userId);
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:postUpdate", {
-        done: true,
-        data: updatedPost,
-        action: "like",
-        message: "Post like updated"
-      });
-
-      socket.emit("socialfeed:toggle-like-response", {
-        done: true,
-        data: updatedPost,
-        message: "Like updated successfully"
-      });
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", updatedPost, "Post like updated");
+      createSuccessResponse(socket, "socialfeed:toggle-like", updatedPost, "Like updated successfully");
 
     } catch (error) {
       console.error("Error toggling like:", error);
-      socket.emit("socialfeed:toggle-like-response", {
-        done: false,
-        error: error.message || "Failed to toggle like"
-      });
+      createErrorResponse(socket, "socialfeed:toggle-like", error.message || "Failed to toggle like");
     }
   });
 
   socket.on("socialfeed:add-comment", async (data) => {
     try {
-      const { postId, content } = data;
-      const userId = socket.userId;
-
-      if (!postId) {
-        socket.emit("socialfeed:add-comment-response", {
-          done: false,
-          error: "Post ID is required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:add-comment", postIdValidation.error);
         return;
       }
 
-      if (!content || !content.trim()) {
-        socket.emit("socialfeed:add-comment-response", {
-          done: false,
-          error: "Comment content is required"
-        });
+      const validation = validateCommentData(data);
+      if (!validation.isValid) {
+        createErrorResponse(socket, "socialfeed:add-comment", validation.errors[0]);
         return;
       }
 
-      const updatedPost = await SocialFeedService.addComment(companyId, postId, userId, content.trim());
+      const updatedPost = await SocialFeedService.addComment(socket.companyId, data.postId, socket.userId, data.content.trim());
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:postUpdate", {
-        done: true,
-        data: updatedPost,
-        action: "comment",
-        message: "New comment added"
-      });
-
-      socket.emit("socialfeed:add-comment-response", {
-        done: true,
-        data: updatedPost,
-        message: "Comment added successfully"
-      });
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", updatedPost, "New comment added");
+      createSuccessResponse(socket, "socialfeed:add-comment", updatedPost, "Comment added successfully");
 
     } catch (error) {
       console.error("Error adding comment:", error);
-      socket.emit("socialfeed:add-comment-response", {
-        done: false,
-        error: error.message || "Failed to add comment"
-      });
+      createErrorResponse(socket, "socialfeed:add-comment", error.message || "Failed to add comment");
     }
   });
 
   socket.on("socialfeed:delete-post", async (data) => {
     try {
-      const { postId } = data;
-      const userId = socket.userId;
-
-      if (!postId) {
-        socket.emit("socialfeed:delete-post-response", {
-          done: false,
-          error: "Post ID is required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:delete-post", postIdValidation.error);
         return;
       }
 
-      const result = await SocialFeedService.deletePost(companyId, postId, userId);
+      const result = await SocialFeedService.deletePost(socket.companyId, data.postId, socket.userId);
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:postDeleted", {
-        done: true,
-        data: { postId },
-        message: "Post deleted"
-      });
-
-      socket.emit("socialfeed:delete-post-response", {
-        done: true,
-        data: result,
-        message: "Post deleted successfully"
-      });
+      broadcastToCompany(io, socket.companyId, "socialfeed:postDeleted", { postId: data.postId }, "Post deleted");
+      createSuccessResponse(socket, "socialfeed:delete-post", result, "Post deleted successfully");
 
     } catch (error) {
       console.error("Error deleting post:", error);
-      socket.emit("socialfeed:delete-post-response", {
-        done: false,
-        error: error.message || "Failed to delete post"
-      });
+      createErrorResponse(socket, "socialfeed:delete-post", error.message || "Failed to delete post");
     }
   });
 
   socket.on("socialfeed:delete-comment", async (data) => {
     try {
-      const { postId, commentId } = data;
-      const userId = socket.userId;
-
-      if (!postId || !commentId) {
-        socket.emit("socialfeed:delete-comment-response", {
-          done: false,
-          error: "Post ID and Comment ID are required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:delete-comment", postIdValidation.error);
         return;
       }
 
-      const result = await SocialFeedService.deleteComment(companyId, postId, commentId, userId);
+      const commentIdValidation = validateCommentId(data.commentId);
+      if (!commentIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:delete-comment", commentIdValidation.error);
+        return;
+      }
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:postUpdate", {
-        done: true,
-        data: result.updatedPost,
-        action: "deleteComment",
-        message: "Comment deleted"
-      });
+      const result = await SocialFeedService.deleteComment(socket.companyId, data.postId, data.commentId, socket.userId);
 
-      socket.emit("socialfeed:delete-comment-response", {
-        done: true,
-        data: result,
-        message: "Comment deleted successfully"
-      });
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", result.updatedPost, "Comment deleted");
+      createSuccessResponse(socket, "socialfeed:delete-comment", result, "Comment deleted successfully");
 
     } catch (error) {
       console.error("Error deleting comment:", error);
-      socket.emit("socialfeed:delete-comment-response", {
-        done: false,
-        error: error.message || "Failed to delete comment"
-      });
+      createErrorResponse(socket, "socialfeed:delete-comment", error.message || "Failed to delete comment");
     }
   });
 
   socket.on("socialfeed:toggle-bookmark", async (data) => {
     try {
-      const { postId } = data;
-      const userId = socket.userId;
-
-      if (!postId) {
-        socket.emit("socialfeed:toggle-bookmark-response", {
-          done: false,
-          error: "Post ID is required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-bookmark", postIdValidation.error);
         return;
       }
 
-      const result = await SocialFeedService.toggleBookmark(companyId, postId, userId);
-
-      socket.emit("socialfeed:toggle-bookmark-response", {
-        done: true,
-        data: result,
-        message: "Bookmark updated successfully"
-      });
+      const result = await SocialFeedService.toggleBookmark(socket.companyId, data.postId, socket.userId);
+      createSuccessResponse(socket, "socialfeed:toggle-bookmark", result, "Bookmark updated successfully");
 
     } catch (error) {
       console.error("Error toggling bookmark:", error);
-      socket.emit("socialfeed:toggle-bookmark-response", {
-        done: false,
-        error: error.message || "Failed to toggle bookmark"
-      });
+      createErrorResponse(socket, "socialfeed:toggle-bookmark", error.message || "Failed to toggle bookmark");
     }
   });
 
   socket.on("socialfeed:add-reply", async (data) => {
     try {
-      const { postId, commentId, content } = data;
-      const userId = socket.userId;
-
-      if (!postId || !commentId) {
-        socket.emit("socialfeed:add-reply-response", {
-          done: false,
-          error: "Post ID and Comment ID are required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:add-reply", postIdValidation.error);
         return;
       }
 
-      if (!content || !content.trim()) {
-        socket.emit("socialfeed:add-reply-response", {
-          done: false,
-          error: "Reply content is required"
-        });
+      const commentIdValidation = validateCommentId(data.commentId);
+      if (!commentIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:add-reply", commentIdValidation.error);
         return;
       }
 
-      const updatedPost = await SocialFeedService.addReply(companyId, postId, commentId, userId, content.trim());
+      const validation = validateReplyData(data);
+      if (!validation.isValid) {
+        createErrorResponse(socket, "socialfeed:add-reply", validation.errors[0]);
+        return;
+      }
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:postUpdate", {
-        done: true,
-        data: updatedPost,
-        action: "reply",
-        message: "New reply added"
-      });
+      const updatedPost = await SocialFeedService.addReply(socket.companyId, data.postId, data.commentId, socket.userId, data.content.trim());
 
-      socket.emit("socialfeed:add-reply-response", {
-        done: true,
-        data: updatedPost,
-        message: "Reply added successfully"
-      });
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", updatedPost, "New reply added");
+      createSuccessResponse(socket, "socialfeed:add-reply", updatedPost, "Reply added successfully");
 
     } catch (error) {
       console.error("Error adding reply:", error);
-      socket.emit("socialfeed:add-reply-response", {
-        done: false,
-        error: error.message || "Failed to add reply"
-      });
+      createErrorResponse(socket, "socialfeed:add-reply", error.message || "Failed to add reply");
     }
   });
 
   socket.on("socialfeed:toggle-reply-like", async (data) => {
     try {
-      const { postId, commentId, replyId } = data;
-      const userId = socket.userId;
-
-      if (!postId || !commentId || !replyId) {
-        socket.emit("socialfeed:toggle-reply-like-response", {
-          done: false,
-          error: "Post ID, Comment ID, and Reply ID are required"
-        });
+      const postIdValidation = validatePostId(data.postId);
+      if (!postIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-reply-like", postIdValidation.error);
         return;
       }
 
-      const updatedPost = await SocialFeedService.toggleReplyLike(companyId, postId, commentId, replyId, userId);
+      const commentIdValidation = validateCommentId(data.commentId);
+      if (!commentIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-reply-like", commentIdValidation.error);
+        return;
+      }
 
-      io.to(`socialfeed:${companyId}`).emit("socialfeed:postUpdate", {
-        done: true,
-        data: updatedPost,
-        action: "replyLike",
-        message: "Reply like updated"
-      });
+      const replyIdValidation = validateCommentId(data.replyId);
+      if (!replyIdValidation.isValid) {
+        createErrorResponse(socket, "socialfeed:toggle-reply-like", "Reply ID is required");
+        return;
+      }
 
-      socket.emit("socialfeed:toggle-reply-like-response", {
-        done: true,
-        data: updatedPost,
-        message: "Reply like updated successfully"
-      });
+      const updatedPost = await SocialFeedService.toggleReplyLike(socket.companyId, data.postId, data.commentId, data.replyId, socket.userId);
+
+      broadcastToCompany(io, socket.companyId, "socialfeed:postUpdate", updatedPost, "Reply like updated");
+      createSuccessResponse(socket, "socialfeed:toggle-reply-like", updatedPost, "Reply like updated successfully");
 
     } catch (error) {
       console.error("Error toggling reply like:", error);
-      socket.emit("socialfeed:toggle-reply-like-response", {
-        done: false,
-        error: error.message || "Failed to toggle reply like"
-      });
+      createErrorResponse(socket, "socialfeed:toggle-reply-like", error.message || "Failed to toggle reply like");
     }
   });
 
   socket.on("disconnect", () => {
     console.log(`User ${socket.id} disconnected from social feed`);
-    if (companyId) {
-      socket.leave(`socialfeed:${companyId}`);
+    if (socket.companyId) {
+      socket.leave(`socialfeed:${socket.companyId}`);
     }
   });
 };

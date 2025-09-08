@@ -1,8 +1,10 @@
 import express from 'express';
 import { socialFeedController, authenticateUser } from '../controllers/socialfeed/socialFeed.controller.js';
+import { validateCompanyAccess } from '../controllers/socialfeed/validation.middleware.js';
 
 const router = express.Router();
 router.use(authenticateUser);
+router.use(validateCompanyAccess);
 router.get('/posts', socialFeedController.getAllPosts);
 router.get('/posts/user/:userId', socialFeedController.getPostsByUser);
 router.post('/posts', socialFeedController.createPost);
