@@ -6,11 +6,10 @@ import fs from "fs";
 import { config } from "dotenv";
 import { connectDB } from "./config/db.js";
 import { socketHandler } from "./socket/index.js";
-import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { console } from "inspector";
 import { clerkClient } from "@clerk/clerk-sdk-node";
+import socialFeedRoutes from "./routes/socialfeed.routes.js";
 
 config();
 
@@ -41,46 +40,63 @@ if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir);
 }
 
-// Connect to database
-connectDB();
-
-// Setup socket handlers
-
-app.get("/", (req, res) => {
-  res.send("API is running");
-});
-
-app.post("/api/update-role", async (req, res) => {
+// Initialize Server
+const initializeServer = async () => {
   try {
-    const { userId, companyId, role } = req.body;
-    console.log(userId);
-    console.log(companyId);
-    console.log(role);
+    await connectDB();
+    console.log("Database connection established successfully");
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
+    // Routes
+    app.use("/api/socialfeed", socialFeedRoutes);
 
-    // Update public metadata
-
-    const updatedUser = await clerkClient.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        companyId,
-        role,
-      },
+    app.get("/", (req, res) => {
+      res.send("API is running");
     });
 
-    res.json({ message: "User metadata updated", user: updatedUser });
+    app.get("/health", (req, res) => {
+      res.json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || "development",
+      });
+    });
+
+    app.post("/api/update-role", async (req, res) => {
+      try {
+        const { userId, companyId, role } = req.body;
+        console.log(userId, companyId, role);
+
+        if (!userId) {
+          return res.status(400).json({ error: "User ID is required" });
+        }
+
+        const updatedUser = await clerkClient.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            companyId,
+            role,
+          },
+        });
+
+        res.json({ message: "User metadata updated", user: updatedUser });
+      } catch (error) {
+        console.error("Error updating user:", error);
+        res.status(500).json({ error: "Failed to update user metadata" });
+      }
+    });
+
+    // Socket setup
+    socketHandler(httpServer);
+
+    // Server listen
+    const PORT = process.env.PORT || 5000;
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+    });
   } catch (error) {
-    console.error("Error updating user:", error);
-    res.status(500).json({ error: "Failed to update user metadata" });
+    console.error("Failed to initialize server:", error);
+    process.exit(1);
   }
-});
+};
 
-socketHandler(httpServer);
-
-// Server Listen
-const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-});
+initializeServer();

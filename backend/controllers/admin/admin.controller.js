@@ -1,5 +1,4 @@
 import * as adminService from "../../services/admin/admin.services.js";
-import { getTenantCollections } from "../../config/db.js";
 import { ObjectId } from "mongodb";
 
 const adminController = (socket, io) => {
