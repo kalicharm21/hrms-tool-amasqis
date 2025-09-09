@@ -443,10 +443,10 @@ const ClientList = () => {
                                                 <h4>{stats?.totalClients || 0}</h4>
                                             </div>
                                         </div>
-                                        <span className="badge bg-transparent-purple d-inline-flex align-items-center fw-normal">
+                                        {/* <span className="badge bg-transparent-purple d-inline-flex align-items-center fw-normal">
                                             <i className="ti ti-arrow-wave-right-down me-1" />
                                             +19.01%
-                                        </span>
+                                        </span> */}
                                     </div>
                                 </div>
                             </div>
@@ -468,10 +468,10 @@ const ClientList = () => {
                                                 <h4>{stats?.activeClients || 0}</h4>
                                             </div>
                                         </div>
-                                        <span className="badge bg-transparent-primary text-primary d-inline-flex align-items-center fw-normal">
+                                        {/* <span className="badge bg-transparent-primary text-primary d-inline-flex align-items-center fw-normal">
                                             <i className="ti ti-arrow-wave-right-down me-1" />
                                             +19.01%
-                                        </span>
+                                        </span> */}
                                     </div>
                                 </div>
                             </div>
@@ -493,10 +493,10 @@ const ClientList = () => {
                                                 <h4>{stats?.inactiveClients || 0}</h4>
                                             </div>
                                         </div>
-                                        <span className="badge bg-transparent-dark text-dark d-inline-flex align-items-center fw-normal">
+                                        {/* <span className="badge bg-transparent-dark text-dark d-inline-flex align-items-center fw-normal">
                                             <i className="ti ti-arrow-wave-right-down me-1" />
                                             +19.01%
-                                        </span>
+                                        </span> */}
                                     </div>
                                 </div>
                             </div>
@@ -518,10 +518,10 @@ const ClientList = () => {
                                                 <h4>{stats?.newClients || 0}</h4>
                                             </div>
                                         </div>
-                                        <span className="badge bg-transparent-secondary text-dark d-inline-flex align-items-center fw-normal">
+                                        {/* <span className="badge bg-transparent-secondary text-dark d-inline-flex align-items-center fw-normal">
                                             <i className="ti ti-arrow-wave-right-down me-1" />
                                             +19.01%
-                                        </span>
+                                        </span> */}
                                     </div>
                                 </div>
                             </div>
@@ -600,7 +600,7 @@ const ClientList = () => {
                                 </div>
                                 
                                 {/* Company Filter */}
-                                <div className="dropdown me-3">
+                                {/* <div className="dropdown me-3">
                                     <Link
                                         to="#"
                                         className="dropdown-toggle btn btn-sm btn-white d-inline-flex align-items-center"
@@ -636,7 +636,7 @@ const ClientList = () => {
                                             </li>
                                         ))}
                                     </ul>
-                                </div>
+                                </div> */}
                                 
                                 {/* Sort Filter */}
                                 <div className="dropdown me-3">
@@ -696,7 +696,7 @@ const ClientList = () => {
                                                 Oldest First
                                             </Link>
                                         </li>
-                                        <li>
+                                        {/* <li>
                                             <Link
                                                 to="#"
                                                 className="dropdown-item rounded-1"
@@ -707,7 +707,7 @@ const ClientList = () => {
                                             >
                                                 By Company
                                             </Link>
-                                        </li>
+                                        </li> */}
                                     </ul>
                                 </div>
                                 
