@@ -65,7 +65,9 @@ export const getTenantCollections = (tenantDbName) => {
     pipelines: db.collection("pipelines"),
     stages: db.collection("stages"),
     
-
+    //Chat Collections
+    conversations: db.collection("conversations"),
+    messages: db.collection("messages"),
   };
 };
 
