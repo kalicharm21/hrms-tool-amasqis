@@ -125,10 +125,10 @@ export const socketHandler = (httpServer) => {
         let role = user.publicMetadata?.role;
         let companyId = user.publicMetadata?.companyId || null;
         
-        // In development, set a default companyId if none exists
-        if (isDevelopment && !companyId) {
-          companyId = "dev_company_123";
-          console.log(`[Development] Setting default companyId: ${companyId}`);
+        // TEMPORARY FIX: Auto-assign companyId for admin users in development
+        if (isDevelopment && role === "admin" && !companyId) {
+          companyId = "68443081dcdfe43152aebf80";
+          console.log(`🔧 Development fix: Auto-assigning companyId ${companyId} to admin user`);
         }
 
         console.log(`User ${user.id} metadata:`, {
@@ -216,6 +216,8 @@ export const socketHandler = (httpServer) => {
           case "admin":
             if (companyId) {
               socket.join(`admin_room_${companyId}`);
+              socket.join(`company_${companyId}`);
+              socket.join(`user_${user.id}`);
               console.log(`User joined admin_room_${companyId}`);
             } else {
               console.warn(`Admin user ${user.id} has no companyId`);
@@ -225,12 +227,16 @@ export const socketHandler = (httpServer) => {
           case "hr":
             if (companyId) {
               socket.join(`hr_room_${companyId}`);
+              socket.join(`company_${companyId}`);
+              socket.join(`user_${user.id}`);
               console.log(`User joined hr_room_${companyId}`);
             }
             break;
           case "employee":
             if (companyId) {
               socket.join(`employee_room_${companyId}`);
+              socket.join(`company_${companyId}`);
+              socket.join(`user_${user.id}`);
               console.log(`User joined employee_room_${companyId}`);
             }
             break;

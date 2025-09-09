@@ -38,6 +38,7 @@ export const all_routes = {
 
   //custom routes
   validate: "/validate",
+  clerk: "/clerk",
 
   //page module
   starter: "/starter",

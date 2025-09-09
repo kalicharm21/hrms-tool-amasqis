@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { Eye, Star, Trash2 } from "react-feather/dist";
 import { Link } from "react-router-dom";
 import Select from "react-select";
 import ImageWithBasePath from "../common/imageWithBasePath";
@@ -8,15 +7,33 @@ import CommonTextEditor from "../common/textEditor";
 import { useSocket } from "../../SocketContext";
 import { Socket } from "socket.io-client";
 
+interface Todo {
+  _id: string;
+  title: string;
+  description?: string;
+  priority: string;
+  tag?: string;
+  dueDate?: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+  userId: string;
+  assignedTo?: string;
+}
+
 interface TodoModalProps {
   onTodoAdded?: () => void;
   selectedTodoToDelete?: string | null;
   onDeleteTodo?: (todoId: string) => void;
+  selectedTodoToEdit?: Todo | null;
+  onTodoUpdated?: () => void;
+  selectedTodoToView?: Todo | null;
 }
 
-const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete, onDeleteTodo }) => {
+const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete, onDeleteTodo, selectedTodoToEdit, onTodoUpdated, selectedTodoToView }) => {
   const socket = useSocket() as Socket | null;
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [tags, setTags] = useState([
     { value: "Internal", label: "Internal" },
     { value: "Projects", label: "Projects" },
@@ -35,7 +52,8 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
     priority: "Medium", // Set default priority
     description: "",
     assignee: "Self", // Set default assignee
-    status: "Pending"
+    status: "Pending",
+    dueDate: ""
   });
 
   const statusChoose = [
@@ -94,6 +112,25 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
     };
   }, [socket]);
 
+  // Populate form when editing
+  useEffect(() => {
+    if (selectedTodoToEdit) {
+      setIsEditMode(true);
+      setFormData({
+        title: selectedTodoToEdit.title || "",
+        tag: selectedTodoToEdit.tag || "Personal",
+        priority: selectedTodoToEdit.priority || "Medium",
+        description: selectedTodoToEdit.description || "",
+        assignee: selectedTodoToEdit.assignedTo || "Self",
+        status: selectedTodoToEdit.completed ? "Completed" : "Pending",
+        dueDate: selectedTodoToEdit.dueDate ? new Date(selectedTodoToEdit.dueDate).toISOString().split('T')[0] : ""
+      });
+    } else {
+      setIsEditMode(false);
+      resetForm();
+    }
+  }, [selectedTodoToEdit]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -138,98 +175,96 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
 
     try {
       console.log("Form data before submission:", formData);
-      const todoData = {
-        title: formData.title,
-        tag: formData.tag || 'Personal',
-        priority: (formData.priority || 'Medium').toLowerCase(), // Convert to lowercase for backend
-        description: formData.description || '',
-        assignee: formData.assignee || 'Self',
-        status: formData.status || 'Pending',
-      };
-      console.log("Todo data being sent:", todoData);
+      
+      if (isEditMode && selectedTodoToEdit) {
+        // Handle edit
+        const updateData = {
+          id: selectedTodoToEdit._id,
+          title: formData.title,
+          tag: formData.tag || 'Personal',
+          priority: (formData.priority || 'Medium').toLowerCase(),
+          description: formData.description || '',
+          assignedTo: formData.assignee || 'Self',
+          completed: formData.status === 'Completed',
+          dueDate: formData.dueDate ? new Date(formData.dueDate) : null
+        };
+        console.log("Todo update data being sent:", updateData);
 
-      const handleResponse = (response: any) => {
-        console.log("Add todo response received:", response);
-        setIsLoading(false);
-        if (response.done) {
-          console.log("Todo added successfully");
-          resetForm();
-
-          const modal = document.getElementById('add_todo');
-          if (modal) {
-            try {
-              const bootstrap = (window as any).bootstrap;
-              if (bootstrap && bootstrap.Modal) {
-                const modalInstance = bootstrap.Modal.getInstance(modal);
-                if (modalInstance) {
-                  modalInstance.hide();
-                } else {
-                  // If no instance exists, create one and hide it
-                  const newModalInstance = new bootstrap.Modal(modal);
-                  newModalInstance.hide();
-                }
-              } else {
-                throw new Error('Bootstrap not available');
-              }
-            } catch (error) {
-              console.warn('Bootstrap Modal API not available, using fallback method');
-              // Fallback: manually trigger the modal close
-              const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
-              if (closeButton) {
-                closeButton.click();
-              } else {
-                // Manual modal close
-                modal.style.display = 'none';
-                modal.setAttribute('aria-hidden', 'true');
-                modal.classList.remove('show');
-                modal.removeAttribute('aria-modal');
-
-                // Remove backdrop
-                const backdrops = document.querySelectorAll('.modal-backdrop');
-                backdrops.forEach(backdrop => backdrop.remove());
-
-                // Restore body
-                document.body.classList.remove('modal-open');
-                document.body.style.overflow = '';
-                document.body.style.paddingRight = '';
-              }
+        const handleResponse = (response: any) => {
+          console.log("Update todo response received:", response);
+          setIsLoading(false);
+          if (response.done) {
+            console.log("Todo updated successfully");
+            resetForm();
+            closeModal('edit-note-units');
+            if (onTodoUpdated) {
+              onTodoUpdated();
             }
+          } else {
+            console.error("Failed to update todo:", response.error);
+            alert('Failed to update todo: ' + response.error);
           }
+          socket.off("admin/dashboard/update-todo-response", handleResponse);
+        };
 
-          setTimeout(() => {
-            const remainingBackdrops = document.querySelectorAll('.modal-backdrop');
-            remainingBackdrops.forEach(backdrop => backdrop.remove());
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = '';
-            document.body.style.paddingRight = '';
+        socket.on("admin/dashboard/update-todo-response", handleResponse);
+        socket.emit("admin/dashboard/update-todo", updateData);
+
+        // Add timeout
+        setTimeout(() => {
+          if (isLoading) {
+            console.error("Update todo request timed out");
+            setIsLoading(false);
+            alert('Request timed out. Please try again.');
+            socket.off("admin/dashboard/update-todo-response", handleResponse);
+          }
+        }, 10000);
+      } else {
+        // Handle add
+        const todoData = {
+          title: formData.title,
+          tag: formData.tag || 'Personal',
+          priority: (formData.priority || 'Medium').toLowerCase(),
+          description: formData.description || '',
+          assignee: formData.assignee || 'Self',
+          status: formData.status || 'Pending',
+          dueDate: formData.dueDate ? new Date(formData.dueDate) : null
+        };
+        console.log("Todo data being sent:", todoData);
+
+        const handleResponse = (response: any) => {
+          console.log("Add todo response received:", response);
+          setIsLoading(false);
+          if (response.done) {
+            console.log("Todo added successfully");
+            resetForm();
+            closeModal('add_todo');
             if (onTodoAdded) {
               onTodoAdded();
             }
-          }, 200);
-        } else {
-          console.error("Failed to add todo:", response.error);
-          alert('Failed to add todo: ' + response.error);
-        }
-
-        // Remove the specific listener after handling the response
-        socket.off("admin/dashboard/add-todo-response", handleResponse);
-      };
-
-      socket.on("admin/dashboard/add-todo-response", handleResponse);
-      socket.emit("admin/dashboard/add-todo", todoData);
-
-      // Add timeout to prevent infinite loading
-      setTimeout(() => {
-        if (isLoading) {
-          console.error("Add todo request timed out");
-          setIsLoading(false);
-          alert('Request timed out. Please try again.');
+          } else {
+            console.error("Failed to add todo:", response.error);
+            alert('Failed to add todo: ' + response.error);
+          }
           socket.off("admin/dashboard/add-todo-response", handleResponse);
-        }
-      }, 10000); // 10 second timeout
+        };
+
+        socket.on("admin/dashboard/add-todo-response", handleResponse);
+        socket.emit("admin/dashboard/add-todo", todoData);
+
+        // Add timeout
+        setTimeout(() => {
+          if (isLoading) {
+            console.error("Add todo request timed out");
+            setIsLoading(false);
+            alert('Request timed out. Please try again.');
+            socket.off("admin/dashboard/add-todo-response", handleResponse);
+          }
+        }, 10000);
+      }
     } catch (error) {
-      console.error('Error adding todo:', error);
-      alert('An error occurred while adding the todo');
+      console.error('Error submitting todo:', error);
+      alert('An error occurred while submitting the todo');
       setIsLoading(false);
     }
   };
@@ -241,8 +276,45 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
       priority: "",
       description: "",
       assignee: "",
-      status: "Pending"
+      status: "Pending",
+      dueDate: ""
     });
+  };
+
+  const closeModal = (modalId: string) => {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      try {
+        const bootstrap = (window as any).bootstrap;
+        if (bootstrap && bootstrap.Modal) {
+          const modalInstance = bootstrap.Modal.getInstance(modal);
+          if (modalInstance) {
+            modalInstance.hide();
+          } else {
+            const newModalInstance = new bootstrap.Modal(modal);
+            newModalInstance.hide();
+          }
+        } else {
+          throw new Error('Bootstrap not available');
+        }
+      } catch (error) {
+        console.warn('Bootstrap Modal API not available, using fallback method');
+        const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+        if (closeButton) {
+          closeButton.click();
+        } else {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+          modal.classList.remove('show');
+          modal.removeAttribute('aria-modal');
+          const backdrops = document.querySelectorAll('.modal-backdrop');
+          backdrops.forEach(backdrop => backdrop.remove());
+          document.body.classList.remove('modal-open');
+          document.body.style.overflow = '';
+          document.body.style.paddingRight = '';
+        }
+      }
+    }
   };
 
   const cleanupModal = useCallback(() => {
@@ -283,7 +355,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
   return (
     <div>
       {/* Add Todo */}
-      <div className="modal fade" id="add_todo" aria-hidden="false">
+      <div className="modal fade" id="add_todo" tabIndex={-1} aria-labelledby="addTodoModalLabel" aria-hidden="true">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="modal-header">
@@ -346,7 +418,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                       />
                     </div>
                   </div>
-                  <div className="col-12">
+                  <div className="col-6">
                     <div className="mb-3">
                       <label className="form-label">Assignee</label>
                       <CommonSelect
@@ -355,6 +427,21 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                         defaultValue={assignees.find(option => option.value === formData.assignee)}
                         onChange={(selectedOption) => handleSelectChange('assignee', selectedOption)}
                       />
+                    </div>
+                  </div>
+                  <div className="col-6">
+                    <div className="mb-3">
+                      <label className="form-label">Due Date</label>
+                      <div className="input-groupicon calender-input">
+                        <input
+                          type="date"
+                          className="form-control"
+                          name="dueDate"
+                          value={formData.dueDate || ''}
+                          onChange={handleInputChange}
+                          placeholder="Select date"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="col-12">
@@ -402,7 +489,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
       {/* /Add Todo */}
 
       {/* Edit Note */}
-      <div className="modal fade" id="edit-note-units">
+      <div className="modal fade" id="edit-note-units" tabIndex={-1} aria-labelledby="editTodoModalLabel" aria-hidden="true">
         <div className="modal-dialog modal-dialog-centered custom-modal-two">
           <div className="modal-content">
             <div className="page-wrapper-new p-0">
@@ -412,21 +499,6 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                     <h4>Edit Todo</h4>
                   </div>
                   <div className=" edit-note-head d-flex align-items-center">
-                    <Link to="#" className="me-2">
-                      <span>
-                        <Trash2 />
-                      </span>
-                    </Link>
-                    <Link to="#" className="me-2">
-                      <span>
-                        <Star />
-                      </span>
-                    </Link>
-                    <Link to="#" className="me-2">
-                      <span>
-                        <Eye />
-                      </span>
-                    </Link>
                     <button
                       type="button"
                       className="btn-close custom-btn-close"
@@ -438,45 +510,52 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                   </div>
                 </div>
                 <div className="modal-body custom-modal-body">
-                  <form action="todo">
+                  <form onSubmit={handleSubmit}>
                     <div className="row">
                       <div className="col-12">
                         <div className="input-blocks">
-                          <label className="form-label">Todo Title</label>
+                          <label className="form-label">Todo Title *</label>
                           <input
                             type="text"
                             className="form-control"
+                            name="title"
+                            value={formData.title}
+                            onChange={handleInputChange}
                             placeholder="Enter todo title"
+                            required
                           />
                         </div>
                       </div>
                       <div className="col-12">
                         <div className="input-blocks">
                           <label className="form-label">Assignee</label>
-                          <Select
-                            className="select" classNamePrefix="react-select"
+                          <CommonSelect
+                            className="select"
                             options={assignees}
-                            placeholder="Select assignee"
+                            defaultValue={assignees.find(option => option.value === formData.assignee)}
+                            onChange={(selectedOption) => handleSelectChange('assignee', selectedOption)}
                           />
                         </div>
                       </div>
                       <div className="col-6">
                         <div className="input-blocks">
                           <label className="form-label">Tag</label>
-                          <Select
-                            className="select" classNamePrefix="react-select"
+                          <CommonSelect
+                            className="select"
                             options={tags}
-                            placeholder="Select tag"
+                            defaultValue={tags.find(option => option.value === formData.tag)}
+                            onChange={(selectedOption) => handleSelectChange('tag', selectedOption)}
                           />
                         </div>
                       </div>
                       <div className="col-6">
                         <div className="input-blocks">
                           <label className="form-label">Priority</label>
-                          <Select
-                            className="select" classNamePrefix="react-select"
+                          <CommonSelect
+                            className="select"
                             options={priorityOptions}
-                            placeholder="Select priority"
+                            defaultValue={priorityOptions.find(option => option.value === formData.priority)}
+                            onChange={(selectedOption) => handleSelectChange('priority', selectedOption)}
                           />
                         </div>
                       </div>
@@ -487,6 +566,9 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                             <input
                               type="date"
                               className="form-control"
+                              name="dueDate"
+                              value={formData.dueDate || ''}
+                              onChange={handleInputChange}
                               placeholder="Select date"
                             />
                           </div>
@@ -495,17 +577,21 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                       <div className="col-6">
                         <div className="input-blocks">
                           <label className="form-label">Status</label>
-                          <Select
-                            className="select" classNamePrefix="react-select"
+                          <CommonSelect
+                            className="select"
                             options={statusChoose}
-                            placeholder="Select status"
+                            defaultValue={statusChoose.find(option => option.value === formData.status)}
+                            onChange={(selectedOption) => handleSelectChange('status', selectedOption)}
                           />
                         </div>
                       </div>
                       <div className="col-lg-12">
                         <div className="input-blocks summer-description-box notes-summernote">
                           <label className="form-label">Description</label>
-                          <CommonTextEditor />
+                          <CommonTextEditor
+                            defaultValue={formData.description}
+                            onChange={(value) => handleDescriptionChange(value)}
+                          />
                           <p className="text-muted mt-1">Maximum 500 characters</p>
                         </div>
                       </div>
@@ -515,11 +601,23 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                         type="button"
                         className="btn btn-cancel me-2"
                         data-bs-dismiss="modal"
+                        disabled={isLoading}
                       >
                         Cancel
                       </button>
-                      <button type="submit" className="btn btn-submit">
-                        Save Changes
+                      <button 
+                        type="submit" 
+                        className="btn btn-submit"
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            {isEditMode ? 'Updating...' : 'Adding...'}
+                          </>
+                        ) : (
+                          isEditMode ? 'Update Todo' : 'Add Todo'
+                        )}
                       </button>
                     </div>
                   </form>
@@ -532,7 +630,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
       {/* /Edit Note */}
 
       {/* Delete Note */}
-      <div className="modal fade" id="delete_modal">
+      <div className="modal fade" id="delete_modal" tabIndex={-1} aria-labelledby="deleteTodoModalLabel" aria-hidden="true">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="page-wrapper-new p-0">
@@ -589,7 +687,7 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
       {/* /Delete Note */}
 
       {/* View Note */}
-      <div className="modal fade" id="view-note-units">
+      <div className="modal fade" id="view-note-units" tabIndex={-1} aria-labelledby="viewTodoModalLabel" aria-hidden="true">
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <div className="page-wrapper-new p-0">
@@ -624,15 +722,41 @@ const TodoModal: React.FC<TodoModalProps> = ({ onTodoAdded, selectedTodoToDelete
                   <div className="row">
                     <div className="col-12">
                       <div className="edit-head-view">
-                        <h6>Todo Title</h6>
+                        <h6>{selectedTodoToView?.title || 'Todo Title'}</h6>
                         <p>
-                          Todo description will be displayed here. This is a sample
-                          description showing how the todo details will appear when
-                          viewing a specific todo item.
+                          {selectedTodoToView?.description || 'No description available'}
                         </p>
-                        <p className="badged high">
-                          <i className="fas fa-circle" /> High Priority
-                        </p>
+                        <div className="d-flex flex-wrap gap-2 mb-3">
+                          <span className={`badge ${selectedTodoToView?.priority?.toLowerCase() === 'high' ? 'badge-danger' : selectedTodoToView?.priority?.toLowerCase() === 'medium' ? 'badge-warning' : 'badge-success'}`}>
+                            <i className="fas fa-circle" /> {selectedTodoToView?.priority || 'Medium'} Priority
+                          </span>
+                          {selectedTodoToView?.tag && (
+                            <span className="badge badge-info">
+                              <i className="ti ti-tag" /> {selectedTodoToView.tag}
+                            </span>
+                          )}
+                          <span className={`badge ${selectedTodoToView?.completed ? 'badge-success' : 'badge-warning'}`}>
+                            <i className="ti ti-check" /> {selectedTodoToView?.completed ? 'Completed' : 'Pending'}
+                          </span>
+                        </div>
+                        <div className="todo-details">
+                          {selectedTodoToView?.assignedTo && (
+                            <p className="mb-2">
+                              <strong>Assigned to:</strong> {selectedTodoToView.assignedTo}
+                            </p>
+                          )}
+                          {selectedTodoToView?.dueDate && (
+                            <p className="mb-2">
+                              <strong>Due Date:</strong> {new Date(selectedTodoToView.dueDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          <p className="mb-2">
+                            <strong>Created:</strong> {selectedTodoToView?.createdAt ? new Date(selectedTodoToView.createdAt).toLocaleDateString() : 'N/A'}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Last Updated:</strong> {selectedTodoToView?.updatedAt ? new Date(selectedTodoToView.updatedAt).toLocaleDateString() : 'N/A'}
+                          </p>
+                        </div>
                       </div>
                       <div className="modal-footer-btn edit-footer-menu">
                         <Link

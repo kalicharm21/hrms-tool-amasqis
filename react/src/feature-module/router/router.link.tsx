@@ -44,6 +44,7 @@ import Error500 from "../pages/error/error-500";
 import UnderMaintenance from "../pages/underMaintenance";
 import Email from "../application/email";
 import Chat from "../application/chat";
+import FunctionalChat from "../application/functional-chat";
 import CallHistory from "../application/call/callHistory";
 import FileManager from "../application/fileManager";
 import MembershipTransaction from "../membership/membershiptrasaction";
@@ -294,6 +295,7 @@ import Invoices from "../finance-accounts/sales/invoices";
 
 // Custom route
 import Validate from "../auth/login/validate";
+import ClerkDash from "../clerk/Clerkdash";
 const routes = all_routes;
 
 export const publicRoutes = [
@@ -334,6 +336,11 @@ export const publicRoutes = [
     roles: ["public"],
   },
   {
+    path: routes.clerk,
+    element: <ClerkDash />,
+    roles: ["admin"],
+  },
+  {
     path: routes.estimate,
     element: <Extimates />,
     roles: ["hr"],
@@ -372,7 +379,7 @@ export const publicRoutes = [
   //Application
   {
     path: routes.chat,
-    element: <Chat />,
+    element: <FunctionalChat />,
     route: Route,
     roles: ["public"],
   },
@@ -727,7 +734,7 @@ export const publicRoutes = [
   },
   {
     path: routes.chat,
-    element: <Chat />,
+    element: <FunctionalChat />,
     route: Route,
     roles: ["public"],
   },
