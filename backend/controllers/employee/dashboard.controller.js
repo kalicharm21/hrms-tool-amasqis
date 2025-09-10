@@ -7,7 +7,7 @@ const employeeDashboardController = (socket, io) => {
         process.env.NODE_ENV === "development" || process.env.NODE_ENV === "production";
 
     const validateEmployeeAccess = (socket) => {
-        
+
         if (!socket.companyId) {
             console.error("[Employee] Company ID not found in user metadata", { user: socket.user?.sub });
             throw new Error("Company ID not found in user metadata");
@@ -103,31 +103,22 @@ const employeeDashboardController = (socket, io) => {
             if (!leaveRequest || typeof leaveRequest !== "object") {
                 throw new Error("Invalid leave data format.");
             }
-            console.log(typeof leaveRequest.empName);
-
-            const empName = typeof leaveRequest.empName === "string"
-                ? leaveRequest.empName.trim().substring(0, 100)
-                : null;
-
-            if (!empName) {
-                throw new Error("Employee name is required.");
-            }
 
             const rawLeaveType = typeof leaveRequest.leaveType === "string"
                 ? leaveRequest.leaveType.trim().toLowerCase()
                 : "";
 
-            const allowedLeaveTypes = ["casual", "sick"];
+            const allowedLeaveTypes = ["casual", "sick", "lossOfPay"];
             const leaveType = allowedLeaveTypes.includes(rawLeaveType)
                 ? rawLeaveType
                 : "casual";
 
-            const startDate = leaveRequest.startDate && !isNaN(Date.parse(leaveRequest.startDate))
-                ? new Date(leaveRequest.startDate)
+            const startDate = leaveRequest.fromDate && !isNaN(Date.parse(leaveRequest.fromDate))
+                ? new Date(leaveRequest.fromDate)
                 : null;
 
-            const endDate = leaveRequest.endDate && !isNaN(Date.parse(leaveRequest.endDate))
-                ? new Date(leaveRequest.endDate)
+            const endDate = leaveRequest.toDate && !isNaN(Date.parse(leaveRequest.toDate))
+                ? new Date(leaveRequest.toDate)
                 : null;
 
             if (!startDate || !endDate || startDate > endDate) {
@@ -146,7 +137,6 @@ const employeeDashboardController = (socket, io) => {
                 throw new Error("Valid number of leave days is required.");
             }
             const leaveData = {
-                empName,
                 leaveType,
                 reason,
                 noOfDays,
@@ -159,8 +149,10 @@ const employeeDashboardController = (socket, io) => {
                 done: true,
                 data: result
             });
-            io.to(`leads_room_${companyId}`).emit("leads/leave/refresh", result);
+            // io.to(`hr_room_${companyId}`).emit("hr/leave/refresh", result);
         } catch (err) {
+            console.log(err);
+
             socket.emit("employee/dashboard/add-leave-response", {
                 done: false,
                 error: err.message || "Something went wrong while submitting leave.",
@@ -374,16 +366,39 @@ const employeeDashboardController = (socket, io) => {
                     error: "Update must include at least one of: status, starred, or checked."
                 });
             }
+console.log("check 1");
+
+            let allowedUpdates = {};
+            if (typeof updateData.status === 'string') {
+                if (!ALLOWED_STATUSES.includes(updateData.status)) {
+                    return { done: false, error: 'Invalid status value.' };
+                }
+                allowedUpdates.status = updateData.status;
+            }
+            if (typeof updateData.starred === 'boolean') {
+                allowedUpdates.starred = updateData.starred;
+            }
+            if (typeof updateData.checked === 'boolean') {
+                allowedUpdates.checked = updateData.checked;
+            }
+
+            if (Object.keys(allowedUpdates).length === 0) {
+                return { done: false, error: 'No valid fields to update.' };
+            }
+console.log("chek-2");
+
             const result = await employeeService.updateTask({
                 companyId,
                 employeeId,
                 taskData: {
                     taskId: new ObjectId(payload.taskId),
-                    updateData
+                    updateData: allowedUpdates,
                 }
             });
             socket.emit("employee/dashboard/update-task-response", result);
         } catch (err) {
+            console.log(err);
+            
             socket.emit("employee/dashboard/update-task-response", {
                 done: false,
                 error: err.message || "Unexpected error while updating task."

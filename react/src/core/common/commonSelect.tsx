@@ -15,14 +15,14 @@ export interface SelectProps {
   disabled?: boolean;
 }
 
-const CommonSelect: React.FC<SelectProps> = ({
-  options,
-  defaultValue,
-  className,
-  onChange,
-  isSearchable = true,
-  disabled = false,
-}) => {
+  const CommonSelect: React.FC<SelectProps> = ({
+    options,
+    defaultValue,
+    className,
+    onChange,
+    isSearchable = true,
+    disabled = false,
+  }) => {
   const findOptionByLabel = (label: string): Option | null => {
     return options.find((opt) => opt.label === label) || null;
   };

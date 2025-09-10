@@ -3204,7 +3204,7 @@ const AdminDashboard = () => {
           const currentYear = date.getFullYear();
           socket.emit("admin/dashboard/get-all-data", { year: currentYear });
         }
-      }} />
+      }} mode = "admin" />
       <TodoModal onTodoAdded={() => {
         if (socket) {
           const currentYear = date.getFullYear();
