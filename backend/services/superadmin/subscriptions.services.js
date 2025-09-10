@@ -253,7 +253,7 @@ export const generateInvoicePDF = async (invoiceData) => {
       .fontSize(24)
       .font("Helvetica-Bold")
       .fillColor(primaryColor)
-      .text("SmartHR", 50, 50);
+      .text("Amasqis", 50, 50);
 
     // Add invoice header and details
     doc
@@ -298,7 +298,7 @@ export const generateInvoicePDF = async (invoiceData) => {
       .fontSize(12)
       .font("Helvetica")
       .fillColor(secondaryColor)
-      .text("SmartHR", { width: fromWidth })
+      .text("Amasqis", { width: fromWidth })
       .text("367 Hillcrest Lane, Irvine, California", { width: fromWidth })
       .text("smarthr@example.com", { width: fromWidth });
 

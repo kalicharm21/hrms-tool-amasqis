@@ -1100,7 +1100,7 @@ const useSidebarData = () => {
                       base: "email-settings",
                     },
                     {
-                      label: "Email Templates",
+                      label: "Email Dashboards",
                       link: routes.emailTemplates,
                       base: "email-template",
                     },
@@ -1110,7 +1110,7 @@ const useSidebarData = () => {
                       base: "sms-settings",
                     },
                     {
-                      label: "SMS Templates",
+                      label: "SMS Dashboards",
                       link: routes.smsTemplate,
                       base: "sms-template",
                     },
@@ -4020,7 +4020,7 @@ const useSidebarData = () => {
                       base: "email-settings",
                     },
                     {
-                      label: "Email Templates",
+                      label: "Email Dashboards",
                       link: routes.emailTemplates,
                       base: "email-template",
                     },
@@ -4030,7 +4030,7 @@ const useSidebarData = () => {
                       base: "sms-settings",
                     },
                     {
-                      label: "SMS Templates",
+                      label: "SMS Dashboards",
                       link: routes.smsTemplate,
                       base: "sms-template",
                     },
