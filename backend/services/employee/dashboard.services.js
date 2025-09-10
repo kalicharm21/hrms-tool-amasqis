@@ -363,8 +363,7 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
 export const punchOut = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({userId: employeeId });
     if (!employee) return { done: false, error: 'Employee not found' };
 
     const companyDetails = await collections.details.findOne({});
@@ -375,7 +374,7 @@ export const punchOut = async (companyId, employeeId) => {
     const todayCompany = localNow.startOf('day').toUTC().toJSDate();
 
     const attendanceRecord = await collections.attendance.findOne({
-      employeeId: empObjectId,
+      userId: employeeId,
       date: {
         $gte: todayCompany,
         $lt: new Date(todayCompany.getTime() + 24 * 60 * 60 * 1000)
@@ -856,9 +855,7 @@ export const getTasks = async (companyId, employeeId, filter) => {
 export const addTask = async ({ companyId, employeeId, taskData }) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
@@ -869,7 +866,7 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
 
     const project = await collections.projects.findOne({
       _id: new ObjectId(taskData.projectId),
-      empMembers: { $in: [empObjectId] }
+      empMembers: { $in: [employeeId] }
     });
 
     if (!project) {
@@ -879,7 +876,7 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
     const newTask = {
       title: taskData.title,
       description: taskData.description || '',
-      empIds: [empObjectId],
+      empIds: [employeeId],
       projectId: new ObjectId(taskData.projectId),
       status: taskData.status || 'pending',
       dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
@@ -900,8 +897,7 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
 };
 
 export const updateTask = async ({ companyId, employeeId, taskData }) => {
-  try {
-    
+  try {    
     const collections = getTenantCollections(companyId);
     const { taskId, updateData } = taskData;
     const taskObjectId = new ObjectId(taskId);
