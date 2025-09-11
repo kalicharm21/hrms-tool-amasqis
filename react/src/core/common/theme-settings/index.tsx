@@ -31,10 +31,7 @@ type Color = Extract<
 >;
 const ThemeSettings = () => {
   const buyNow = () => {
-    window.open(
-      "https://themeforest.net/item/Amasqis-react-admin-template/28253842?s_rank=21",
-      "_blank"
-    );
+    window.open("https://amasqis.ai/contact-us/", "_blank");
   };
   const dispatch = useDispatch();
   const dataLayout = useSelector((state: any) => state.themeSetting.dataLayout);
@@ -1589,7 +1586,7 @@ const ThemeSettings = () => {
                 onClick={buyNow}
               >
                 <i className="ti ti-shopping-cart-plus me-1" />
-                Buy Product
+                Get Quotation
               </Link>
             </div>
           </div>
