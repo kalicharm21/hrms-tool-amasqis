@@ -81,6 +81,8 @@ export const displayDepartment = async (companyId, hrId, filters = {}) => {
     }
 
     const collections = getTenantCollections(companyId);
+    console.log(Object.keys(collections));
+    
     const hrExists = await collections.hr.countDocuments({ userId: hrId  });
     if (!hrExists) return { done: false, message: "HR doesn't exist" };
 
