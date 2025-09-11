@@ -512,8 +512,8 @@ const hrDashboardController = (socket, io) => {
 
     socket.on("hr/departments/add", withRateLimit(async (data) => {
         try {
+            console.log("Hee");
             const { companyId, hrId } = validateHrAccess(socket);
-
             if (!data) {
                 throw new Error("Data is required for creation");
             }
@@ -522,7 +522,7 @@ const hrDashboardController = (socket, io) => {
             if (!departmentName) {
                 throw new Error("Department name and display name are required");
             }
-
+console.log("Hee");
             let status = "";
             if (data.status) {
                 status = String(data.status).trim().toLowerCase();
@@ -533,13 +533,16 @@ const hrDashboardController = (socket, io) => {
                 department: departmentName,
                 status: isValidStatus ? status : "active",
             };
+console.log("Hee");
 
             const response = await hrmDepartment.addDepartment(companyId, hrId, payload);
             socket.emit("hr/departments/add-response", response);
-            // if (socket) {
-            //     socket.emit("hr/departmentsStats/get", response);
-            // }
+            if (socket) {
+                socket.emit("hr/departmentsStats/get", response);
+            }
         } catch (error) {
+            console.log(error);
+            
             socket.emit("hr/departments/add-response", {
                 done: false,
                 error: error.message || "Unexpected error adding department",

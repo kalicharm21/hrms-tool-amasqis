@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import { ObjectId } from "mongodb";
-import { generateId } from '../../utils/generateId.js';
+import {generateId} from "../../utils/generateId.js"
 import { getTenantCollections } from "../../config/db.js";
 import { maskAccountNumber } from "../../utils/maskAccNo.js"
 

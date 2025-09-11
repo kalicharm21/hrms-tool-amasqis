@@ -65,6 +65,8 @@ export const addDepartment = async (companyId, hrId, payload) => {
       message: "Department added successfully"
     };
   } catch (error) {
+    console.log(error);
+    
     return {
       done: false,
       error: "Internal server error",
