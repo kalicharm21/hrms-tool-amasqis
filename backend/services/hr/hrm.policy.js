@@ -88,6 +88,8 @@ export const displayPolicy = async (companyId, hrId, filters = {}) => {
         };
 
     } catch (error) {
+        console.log(error);
+        
         return {
             done: false,
             error: `Failed to fetch policies: ${error.message}`,

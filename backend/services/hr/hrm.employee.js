@@ -1565,6 +1565,7 @@ export const getEmployeeDetails = async (companyId, hrId, employeeId) => {
     const employee = await collections.employees.findOne(
       { _id: employeeObjId },
     );
+console.log(employee);
 
     if (!employee) {
       return { done: false, message: "Employee not found" };

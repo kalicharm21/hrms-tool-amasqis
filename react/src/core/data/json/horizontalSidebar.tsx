@@ -412,7 +412,7 @@ export const HorizontalSidebarData = [
                   },
                   {
                     menuValue: 'Employees Details',
-                    route: routes.employeedetails,
+                    route: routes.employeeDetailPage,
                     base: 'employees',
                     base2: 'employee-details',
                   },

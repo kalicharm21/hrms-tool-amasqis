@@ -225,10 +225,6 @@ const EmployeeDetails = () => {
         )
     }
 
-    if (!employee) {
-        return <p>No Data found for this employee</p>
-    }
-
     const togglePasswordVisibility = (field: PasswordField) => {
         setPasswordVisibility((prevState) => ({
             ...prevState,

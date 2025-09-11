@@ -412,7 +412,7 @@ const hrDashboardController = (socket, io) => {
             const result = await hrPolicy.displayPolicy(companyId, hrId, filters);
             socket.emit("hr/policy/get-response", result);
 
-        } catch (error) {
+        } catch (error) {            
             socket.emit("hr/policy/get-response", {
                 done: false,
                 error: error.message || "Unexpected error fetching policies",
