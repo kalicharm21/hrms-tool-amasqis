@@ -1,5 +1,3 @@
-// employeedetails 
-
 import React, { useState, useEffect } from 'react'
 import { Link, useParams, } from 'react-router-dom'
 import PredefinedDateRanges from '../../../core/common/datePicker'
@@ -143,22 +141,22 @@ export interface Employee {
     reportOffice?: string;
     managerId?: string;
     leadId?: string;
-    avatar: string;
+    avatar?: string;
     yearsOfExperience?: number;
-    contact: ContactInfo;
-    personal: PersonalInfo;
-    account: AccountInfo;
-    emergencyContacts: EmergencyContact[];
-    bank: BankInfo;
-    family: FamilyInfo;
-    education: EducationEntry[];
-    experience: ExperienceEntry[];
-    assets: Asset[];
-    statutory: Statutory;
-    updatedBy: string;
-    designationId: string;
-    avatarUrl: string;
-    clientId: string;
+    contact?: ContactInfo;
+    personal?: PersonalInfo;
+    account?: AccountInfo;
+    emergencyContacts? : EmergencyContact[];
+    bank?: BankInfo;
+    family?: FamilyInfo;
+    education?: EducationEntry[];
+    experience?: ExperienceEntry[];
+    assets?: Asset[];
+    statutory?: Statutory;
+    updatedBy?: string;
+    designationId?: string;
+    avatarUrl?: string;
+    clientId?: string;
 }
 
 const EmployeeDetails = () => {
@@ -418,7 +416,7 @@ const EmployeeDetails = () => {
                                             </h5>
                                             <span className="badge badge-soft-dark fw-medium me-2">
                                                 <i className="ti ti-point-filled me-1" />
-                                                {employee?.role}
+                                                {employee?.role || "employee"}
                                             </span>
                                             <span className="badge badge-soft-secondary fw-medium">
                                                 <i className="ti ti-point-filled me-1" />
@@ -613,7 +611,7 @@ const EmployeeDetails = () => {
                             </div>
                             <div className="card">
                                 <div className="card-body p-0">
-                                    {employee?.emergencyContacts.map((contact, index) => {
+                                    {employee?.emergencyContacts?.map((contact, index) => {
                                         const label = index === 0 ? "Primary" : "Secondary";
                                         return (
                                             <div key={index} className="p-3 border-bottom">
@@ -1186,7 +1184,7 @@ const EmployeeDetails = () => {
                                                             tabIndex={0}
                                                         >
                                                             <div className="row">
-                                                                {employee?.assets.map((asset, idx) => (
+                                                                {employee?.assets?.map((asset, idx) => (
                                                                     <div key={idx} className="col-md-12 d-flex mb-3">
                                                                         <div className="card flex-fill">
                                                                             <div className="card-body">

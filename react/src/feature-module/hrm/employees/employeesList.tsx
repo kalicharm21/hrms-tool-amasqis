@@ -947,7 +947,7 @@ console.log("Helllo1");
         designationId,
         about,
       };
-console.log("Helllo1");
+
       // Prepare full submission data
       const submissionData = {
         employeeData: basicInfo,
