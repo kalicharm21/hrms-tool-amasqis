@@ -466,7 +466,7 @@ export const TowColData = [
                   },
                   {
                     menuValue: 'Employees Details',
-                    route: routes.employeedetails,
+                    route: routes.employeeDetailPage,
                     base: 'employees',
                     base2: 'employee-details',
                   },

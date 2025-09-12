@@ -7,7 +7,7 @@ const SocketContext = createContext(null);
 export const SocketProvider = ({ children }) => {
   const { getToken, isSignedIn } = useAuth();
   const socketRef = useRef(null);
-  const [socketState, setSocketState] = useState(null); // for context consumers
+  const [socketState, setSocketState] = useState(null);
 
   useEffect(() => {
     const connectSocket = async () => {
@@ -18,24 +18,41 @@ export const SocketProvider = ({ children }) => {
         return;
       }
 
-      const token = await getToken();
-      const backend_url =
-        process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
-      const newSocket = io(backend_url, {
-        auth: { token },
-        timeout: 20000,
-      });
+      try {
+        console.log("Getting auth token for socket...");
+        const token = await getToken();
+        console.log("Token retrieved:", token ? "Token exists" : "No token");
+        if (!token) {
+          console.error("No auth token available for socket connection");
+          return;
+        }
 
-      newSocket.on("connect", () => {
-        console.log("✅ Socket connected:", newSocket.id);
-      });
+        console.log("Backend ->", process.env.REACT_APP_BACKEND_URL);
 
-      newSocket.on("disconnect", () => {
-        console.log("❌ Socket disconnected");
-      });
+        const backend_url =
+          process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+        const newSocket = io(backend_url, {
+          auth: { token },
+          timeout: 20000,
+        });
 
-      socketRef.current = newSocket;
-      setSocketState(newSocket);
+        newSocket.on("connect", () => {
+          console.log("Socket connected:", newSocket.id);
+        });
+
+        newSocket.on("disconnect", (reason) => {
+          console.log("Socket disconnected:", reason);
+        });
+
+        newSocket.on("connect_error", (error) => {
+          console.error("Socket connection error:", error.message);
+        });
+
+        socketRef.current = newSocket;
+        setSocketState(newSocket);
+      } catch (error) {
+        console.error("Failed to initialize socket:", error);
+      }
     };
 
     connectSocket();
@@ -45,7 +62,6 @@ export const SocketProvider = ({ children }) => {
       socketRef.current = null;
       setSocketState(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
   return (
