@@ -8,7 +8,6 @@ import { ChatUsersController } from "../controllers/chat/users.controller.js";
 
 import userSocketController from "../controllers/user/user.socket.controller.js";
 import socialFeedSocketController from "../controllers/socialfeed/socialFeed.socket.controller.js";
-import pipelineController from "../controllers/pipeline/pipeline.controllers.js";
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -55,6 +54,7 @@ const router = (socket, io, role) => {
 
     case "hr":
       console.log("Attaching HR controller...");
+      hrDashboardController(socket,io);
       console.log("Attaching lead controller for hr...");
       leadController(socket, io);
       console.log("Attaching client controller for hr...");
