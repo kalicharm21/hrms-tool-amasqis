@@ -8,26 +8,47 @@ import { DateTime } from 'luxon';
 
 const ALLOWED_STATUSES = ["onHold", "ongoing", "completed", "pending"];
 
-
 export const getEmployeeDetails = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
     const [employee, companyDetails] = await Promise.all([
-      collections.employees.findOne({ _id: new ObjectId(employeeId) }),
-      collections.details.findOne({})
+      collections.employees.findOne(
+        { userId: employeeId },
+        {
+          projection: {
+            _id: 0,
+            employeeId: 1,
+            firstName: 1,
+            lastName: 1,
+            dateOfJoining: 1,
+            designation: 1,
+            department: 1,
+            role: 1,
+            contact: 1,
+            reportOffice: 1,
+            managerId: 1,
+            avatar: 1,
+            timeZone: 1,
+          },
+        }
+      ),
+      collections.details.findOne({}),
     ]);
+
     if (!employee) {
       return { done: false, error: "Employee not found" };
     }
+
     if (!companyDetails || !companyDetails.timeZone) {
       return { done: false, error: "Company timezone not found" };
     }
+
     return {
       done: true,
       data: {
         ...employee,
         companyTimeZone: companyDetails.timeZone,
-      }
+      },
     };
   } catch (error) {
     console.error("Error fetching employee details:", error);
@@ -38,7 +59,6 @@ export const getEmployeeDetails = async (companyId, employeeId) => {
 export const getAttendanceStats = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
     const currentYear = new Date().getFullYear();
 
     const selectedYear = Number.isInteger(Number(year))
@@ -52,7 +72,7 @@ export const getAttendanceStats = async (companyId, employeeId, year) => {
       : new Date(selectedYear, 11, 31, 23, 59, 59, 999);
 
     const attendanceQuery = {
-      employeeId: empObjectId,
+      userId: employeeId,
       date: { $gte: startDate, $lte: endDate },
     };
 
@@ -108,11 +128,8 @@ export const getAttendanceStats = async (companyId, employeeId, year) => {
 
 export const getLeaveStats = async (companyId, employeeId, year) => {
   try {
-    const collections = getTenantCollections(companyId);
-    console.log(year);
 
-    if (!ObjectId.isValid(employeeId)) throw new Error("Invalid employeeId");
-    const empObjectId = new ObjectId(employeeId);
+    const collections = getTenantCollections(companyId);
 
     const detailsDoc = await collections.details.findOne();
     if (!detailsDoc) throw new Error("Details document not found");
@@ -125,11 +142,9 @@ export const getLeaveStats = async (companyId, employeeId, year) => {
     const toDate = new Date(`${inputYear}-12-31T23:59:59.999Z`);
 
     const allLeaves = await collections.leaves.find({
-      employeeId: empObjectId,
-      $or: [
-        { startDate: { $gte: fromDate, $lte: toDate } },
-        { endDate: { $gte: fromDate, $lte: toDate } }
-      ]
+      userId: employeeId,
+      startDate: { $lte: toDate },
+      endDate: { $gte: fromDate }
     }).toArray();
 
     const takenLeaves = allLeaves
@@ -167,18 +182,9 @@ export const getLeaveStats = async (companyId, employeeId, year) => {
 export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
+    const { leaveType, startDate, endDate, reason, noOfDays } = leaveData;
 
-    const {
-      empName,
-      leaveType,
-      startDate,
-      endDate,
-      reason,
-      noOfDays
-    } = leaveData;
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: "Employee not found" };
     }
@@ -190,23 +196,22 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
     }
 
     const totalAllowedLeaves = detailsDoc.totalLeavesAllowed || 0;
-
     const pendingRequest = await collections.leaves.findOne({
-      employeeId: empObjectId,
+      userId: employeeId,
       status: "pending"
     });
+
     if (pendingRequest) {
       return {
         done: false,
-        error:
-          "You already have a pending leave request. Please wait until it's processed."
+        error: "You already have a pending leave request. Please wait until it's processed."
       };
     }
 
     const takenLeaves = await collections.leaves.aggregate([
       {
         $match: {
-          employeeId: empObjectId,
+          userId: employeeId,           // Match by userId field
           status: "approved",
           startDate: {
             $gte: new Date(currentYear, 0, 1),
@@ -217,20 +222,19 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
       },
       {
         $group: {
-          _id: "$employeeId",
-          total: { $sum: "$noOfDays" }
+          _id: "$userId",               // Group by userId field
+          total: { $sum: "$noOfDays" }  // Sum the noOfDays field
         }
       }
     ]).toArray();
 
     const alreadyTaken = takenLeaves[0]?.total || 0;
-    const remainingDays = totalAllowedLeaves - alreadyTaken;
 
+    const remainingDays = totalAllowedLeaves - alreadyTaken;
     const finalLeaveType = noOfDays > remainingDays ? "lossOfPay" : leaveType;
 
     const leaveRequest = {
-      employeeId: empObjectId,
-      empName,
+      userId: employeeId,
       leaveType: finalLeaveType,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
@@ -241,13 +245,14 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
       updatedAt: new Date()
     };
 
-    await collections.leaves.insertOne(leaveRequest);
+    const result = await collections.leaves.insertOne(leaveRequest);
+    const newRemaining = remainingDays - noOfDays >= 0 ? remainingDays - noOfDays : 0;
 
     return {
       done: true,
       data: {
         message: `Leave request submitted successfully as "${finalLeaveType}".`,
-        remainingDays: remainingDays - noOfDays >= 0 ? remainingDays - noOfDays : 0
+        remainingDays: newRemaining
       }
     };
 
@@ -259,13 +264,10 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
 export const punchIn = async (companyId, employeeId, timestamp) => {
   try {
     const collections = getTenantCollections(companyId);
-
-    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company' };
     }
-
-    console.log('timestamp:', timestamp, timestamp instanceof Date);
 
     let nowUtc;
 
@@ -285,8 +287,6 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
       return { done: false, error: 'Provided timestamp is invalid.' };
     }
 
-    console.log('nowUtc', nowUtc.toISO());
-
     const companyDetails = await collections.details.findOne({});
     if (!companyDetails || !companyDetails.punchInTime || !companyDetails.timeZone) {
       return { done: false, error: 'Company settings incomplete (timezone or punch-in time missing)' };
@@ -297,7 +297,7 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
     const todayCompany = localNow.startOf('day').toUTC().toJSDate();
 
     const existingAttendance = await collections.attendance.findOne({
-      employeeId: new ObjectId(employeeId),
+      userId: employeeId,
       date: todayCompany,
     });
 
@@ -317,7 +317,6 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
     const absentCutoff = companyDetails.absentCutoffMinutes ?? 60;
 
     const diffMinutes = localNow.diff(scheduledStart, 'minutes').toObject().minutes;
-    console.log('diffMinutes:', diffMinutes);
 
     let attendanceStatus = '';
 
@@ -334,7 +333,7 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
     }
 
     const insertedData = {
-      employeeId: new ObjectId(employeeId),
+      userId: employeeId,
       date: todayCompany,
       punchIn: nowUtc.toJSDate(),
       attendanceStatus,
@@ -364,8 +363,7 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
 export const punchOut = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-
-    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
+    const employee = await collections.employees.findOne({userId: employeeId });
     if (!employee) return { done: false, error: 'Employee not found' };
 
     const companyDetails = await collections.details.findOne({});
@@ -376,8 +374,11 @@ export const punchOut = async (companyId, employeeId) => {
     const todayCompany = localNow.startOf('day').toUTC().toJSDate();
 
     const attendanceRecord = await collections.attendance.findOne({
-      employeeId: new ObjectId(employeeId),
-      date: todayCompany
+      userId: employeeId,
+      date: {
+        $gte: todayCompany,
+        $lt: new Date(todayCompany.getTime() + 24 * 60 * 60 * 1000)
+      }
     });
 
     if (!attendanceRecord) return { done: false, error: 'Punch-in not found' };
@@ -550,7 +551,6 @@ export const resumeBreak = async (companyId, employeeId) => {
 export const getWorkingHoursStats = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
 
     // Get company timezone first
     const companyDetails = await collections.details.findOne({}, {
@@ -593,7 +593,7 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
     const MAX_OVERTIME_MONTH = companyDetails.totalOvertimePerMonth ?? 5;
 
     const attendanceRecords = await collections.attendance.find({
-      employeeId: empObjectId,
+      userId: employeeId,
       date: {
         $gte: startOfYear.toJSDate(),
         $lt: endOfYear.toJSDate()
@@ -667,97 +667,121 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
 export const getProjects = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
 
     const matchStage = {
       $match: {
-        empMembers: empObjectId
+        teamMembers: employeeId
       }
     };
 
-    if (filter === 'ongoing') {
-      matchStage.$match.status = 'ongoing';
+    if (filter === "ongoing") {
+      matchStage.$match.status = "ongoing";
     }
 
     const pipeline = [
       matchStage,
+
+      // Lookup lead details from employees collection
       {
         $lookup: {
-          from: "leads",
-          let: { leadIdStr: "$leadId" },
+          from: "employees",
+          let: { teamLeaderIds: { $ifNull: ["$teamLeader", []] } }, // default to empty array
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $eq: ["$_id", { $toObjectId: "$$leadIdStr" }]
+                  $in: ["$userId", "$$teamLeaderIds"]
                 }
+              }
+            },
+            {
+              $project: {
+                avatarUrl: 1,
+                firstName: 1,
+                lastName: 1,
+                userId: 1,
+                _id: 0
               }
             }
           ],
           as: "leadDetails"
         }
       },
+
+      // Lookup avatars of team members
       {
         $lookup: {
-          from: 'employees',
-          let: { memberIds: '$empMembers' },
+          from: "employees",
+          let: { memberIds: { $ifNull: ["$teamMembers", []] } }, // default to empty array
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $in: ['$_id', '$$memberIds']
+                  $in: ["$userId", "$$memberIds"]
                 }
               }
             },
             {
-              $project: {
-                _id: 0,
-                avatar: 1
+              $group: {
+                _id: null,
+                avatarUrls: { $push: "$avatarUrl" }
               }
             }
           ],
-          as: 'membersInfo'
+          as: "avatarData"
         }
       },
-      {
-        $lookup: {
-          from: 'tasks',
-          localField: '_id',
-          foreignField: 'projectId',
-          as: 'taskStats'
-        }
-      },
+
+      // Add teamMemberAvatars field with array of avatars
       {
         $addFields: {
-          totalTasks: { $size: '$taskStats' },
+          membersAvatars: { $arrayElemAt: ["$avatarData.avatarUrls", 0] }
+        }
+      },
+
+      // Lookup tasks related to the project
+      {
+        $lookup: {
+          from: "tasks",
+          let: { projectIdStr: { $toString: "$_id" } },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$projectId", "$$projectIdStr"] }
+              }
+            }
+          ],
+          as: "taskStats"
+        }
+      },
+
+      // Add calculated totalTasks and completedTasks fields
+      {
+        $addFields: {
+          totalTasks: { $size: "$taskStats" },
           completedTasks: {
             $size: {
               $filter: {
-                input: '$taskStats',
-                as: 'task',
-                cond: { $eq: ['$$task.status', 'completed'] }
+                input: "$taskStats",
+                as: "task",
+                cond: { $eq: ["$$task.status", "completed"] }
               }
-            }
-          },
-          membersAvatars: {
-            $map: {
-              input: '$membersInfo',
-              as: 'member',
-              in: '$$member.avatar'
             }
           }
         }
       },
+
+      // Project final fields cleanly
       {
         $project: {
-          projectId: { $toString: '$_id' },
-          projectTitle: '$title',
-          dueDate: 1,
+          projectId: { $toString: "$_id" },
+          projectTitle: "$name",
+          deadline: 1,
           totalTasks: 1,
           completedTasks: 1,
-          projectLeadAvatar: 1,
-          leadName: 1,
-          membersAvatars: '$membersAvatars.avatar'
+          leadDetails: { $arrayElemAt: ["$leadDetails", 0] }, 
+          membersAvatars: 1, // corrected field name
+          taskStats: 1
         }
       }
     ];
@@ -777,63 +801,61 @@ export const getProjects = async (companyId, employeeId, filter) => {
 export const getTasks = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    // check if employee exists
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
 
-    const projectResult = await getProjects(companyId, employeeId, filter);
-    const projectIds = Array.isArray(projectResult?.data)
-      ? projectResult.data.map(p => p._id)
-      : [];
+    // base query: employeeId must be in empIds array
+    const matchQuery = { empIds: employeeId }; // since empIds is array of strings
 
-    const matchQuery = {
-      empIds: { $in: [empObjectId] }
-    };
-    if (projectIds.length > 0) {
-      matchQuery.projectId = { $in: projectIds };
-    }
-    if (filter && filter.toLowerCase() === 'ongoing') {
-      matchQuery.status = 'ongoing';
+    // add filter (status, ongoing etc.)
+    if (filter?.toLowerCase() === "ongoing") {
+      matchQuery.status = "ongoing";
     }
 
+    // aggregation: fetch tasks + lookup avatars of other employees
     const pipeline = [
       { $match: matchQuery },
-      { $sort: { createdAt: -1 } },
+
       {
         $lookup: {
-          from: 'employees',
-          let: { emp_ids: '$empIds' },
+          from: "employees",
+          let: { emp_ids: "$empIds" },
           pipeline: [
-            { $match: { $expr: { $in: ['$_id', '$$emp_ids'] } } },
-            { $project: { _id: 1, avatar: 1 } }
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $in: [{ $toString: "$_id" }, "$$emp_ids"] }, // match employees in empIds
+                    { $ne: [{ $toString: "$_id" }, employeeId] }   // exclude logged in employee
+                  ]
+                }
+              }
+            },
+            { $project: { _id: 1, avatar: 1, name: 1 } }
           ],
-          as: 'avatars'
+          as: "otherEmpAvatars"
         }
-      }
+      },
+
+      { $sort: { createdAt: -1 } } // latest tasks first (optional)
     ];
-    const tasksWithAvatars = await collections.tasks.aggregate(pipeline).toArray();
-    return {
-      done: true,
-      data: tasksWithAvatars
-    };
+
+    const tasks = await collections.tasks.aggregate(pipeline).toArray();
+    // const tasks = await collections.tasks.find({}).toArray();
+
+    return { done: true, data: tasks };
   } catch (error) {
-    return {
-      done: false,
-      error: error.message
-    };
+    return { done: false, error: error.message };
   }
 };
-
 
 export const addTask = async ({ companyId, employeeId, taskData }) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
@@ -844,7 +866,7 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
 
     const project = await collections.projects.findOne({
       _id: new ObjectId(taskData.projectId),
-      empMembers: { $in: [empObjectId] }
+      empMembers: { $in: [employeeId] }
     });
 
     if (!project) {
@@ -854,7 +876,7 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
     const newTask = {
       title: taskData.title,
       description: taskData.description || '',
-      empIds: [empObjectId],
+      empIds: [employeeId],
       projectId: new ObjectId(taskData.projectId),
       status: taskData.status || 'pending',
       dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
@@ -875,57 +897,39 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
 };
 
 export const updateTask = async ({ companyId, employeeId, taskData }) => {
-  try {
+  try {    
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
     const { taskId, updateData } = taskData;
     const taskObjectId = new ObjectId(taskId);
 
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
 
     const task = await collections.tasks.findOne({
       _id: taskObjectId,
-      empIds: { $in: [empObjectId] },
+      empIds: { $in: [employeeId] },
     });
     if (!task) {
       return { done: false, error: 'Task not found or not assigned to this employee.' };
     }
 
-    const allowedUpdates = {};
-    if (typeof updateData.status === 'string') {
-      if (!ALLOWED_STATUSES.includes(updateData.status)) {
-        return { done: false, error: 'Invalid status value.' };
-      }
-      allowedUpdates.status = updateData.status;
-    }
-    if (typeof updateData.starred === 'boolean') {
-      allowedUpdates.starred = updateData.starred;
-    }
-    if (typeof updateData.checked === 'boolean') {
-      allowedUpdates.checked = updateData.checked;
-    }
-
-    if (Object.keys(allowedUpdates).length === 0) {
-      return { done: false, error: 'No valid fields to update.' };
-    }
-
-    allowedUpdates.updatedAt = new Date();
+    updateData.updatedAt = new Date();
+    updateData.updatedBy = employeeId;
 
     const result = await collections.tasks.updateOne(
       { _id: taskObjectId },
-      { $set: allowedUpdates }
+      { $set: updateData },
+      { returnDocument: "after" }
     );
-
+  
     if (result.modifiedCount > 0) {
-      return { done: true, data: 'Task updated successfully.' };
+      return { done: true,  message: "The task was updated successfully" };
     } else {
       return { done: false, error: 'No changes made to the task.' };
     }
-  } catch (error) {
+  } catch (error) {    
     return { done: false, error: error.message };
   }
 };
@@ -933,9 +937,7 @@ export const updateTask = async ({ companyId, employeeId, taskData }) => {
 export const getPerformance = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return {
         done: false,
@@ -946,7 +948,7 @@ export const getPerformance = async (companyId, employeeId, year) => {
     const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
     const salaryHistory = await collections.salaryHistory
       .find({
-        empId: empObjectId,
+        userId: employeeId,
         effectiveDate: { $lte: endOfYear }
       })
       .sort({ effectiveDate: 1 })
@@ -968,9 +970,7 @@ export const getPerformance = async (companyId, employeeId, year) => {
 export const getSkills = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
@@ -979,7 +979,7 @@ export const getSkills = async (companyId, employeeId, year) => {
     const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
 
     const skills = await collections.skills.find({
-      employeeId: empObjectId,
+      userId: employeeId,
       updatedAt: {
         $gte: startOfYear,
         $lte: endOfYear
@@ -999,8 +999,7 @@ export const getSkills = async (companyId, employeeId, year) => {
 export const getTeamMembers = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
@@ -1009,7 +1008,8 @@ export const getTeamMembers = async (companyId, employeeId) => {
       {
         $project: {
           _id: 1,
-          name: 1,
+          firstName: 1,
+          lastName: 1,
           avatar: 1,
           role: 1
         }
@@ -1026,26 +1026,40 @@ export const getTeamMembers = async (companyId, employeeId) => {
   }
 };
 
-export const getTodaysNotifications = async (companyId, employeeId) => {
+export const getTodaysNotifications = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
 
+    // Build today's start and end dates in UTC
     const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const startDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(), 0, 0, 0, 0
+    ));
+    const endDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(), 23, 59, 59, 999
+    ));
 
+    // Build the match stage depending on the filter
+    let matchStage;
+    if (filter === "View All") {
+      matchStage = {}; // no filter, show all
+    } else {
+      matchStage = {
+        createdAt: { $gte: startDate, $lte: endDate }
+      };
+    }
+
+    // Query notifications
     const notifications = await collections.notifications.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lte: endDate }
-        }
-      },
+      { $match: matchStage },
       {
         $lookup: {
           from: 'employees',
@@ -1064,9 +1078,10 @@ export const getTodaysNotifications = async (companyId, employeeId) => {
         $project: {
           _id: 1,
           title: 1,
-          createdAt: {
+          createdAt: 1,
+          displayTime: {
             $dateToString: {
-              format: "%I:%M %p",
+              format: "%H:%M",
               date: "$createdAt",
               timezone: "Asia/Kolkata"
             }
@@ -1089,12 +1104,11 @@ export const getTodaysNotifications = async (companyId, employeeId) => {
   }
 };
 
+
 export const getMeetings = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
-    const empObjectId = new ObjectId(employeeId);
-
-    const employee = await collections.employees.findOne({ _id: empObjectId });
+    const employee = await collections.employees.findOne({ userId: employeeId });
     if (!employee) {
       return { done: false, error: 'Employee not found in this company.' };
     }
@@ -1115,10 +1129,8 @@ export const getMeetings = async (companyId, employeeId, filter) => {
       return { done: false, error: "Invalid filter" };
     }
 
-    const employeeLeadId = String(employee.leadId);
-
     const meetings = await collections.meetings.find({
-      leadId: employeeLeadId,
+      leadId: employee.leadId,
       startTime: { $gte: startDate, $lte: endDate }
     }).toArray();
 
@@ -1134,7 +1146,6 @@ export const getMeetings = async (companyId, employeeId, filter) => {
 export const getTodaysBirthday = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-
     const now = new Date();
     const todayDate = now.getDate();
     const todayMonth = now.getMonth();

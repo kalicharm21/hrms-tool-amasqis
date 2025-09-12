@@ -8,6 +8,7 @@ import { ChatUsersController } from "../controllers/chat/users.controller.js";
 
 import userSocketController from "../controllers/user/user.socket.controller.js";
 import socialFeedSocketController from "../controllers/socialfeed/socialFeed.socket.controller.js";
+import employeeController from "../controllers/employee/employee.controller.js";
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -73,9 +74,9 @@ const router = (socket, io, role) => {
       socialFeedSocketController(socket, io);
       break;
     case "employee":
-      console.log("Employee controller not implemented yet");
-      console.log("Attaching social feed controller for employee...");
-      socialFeedSocketController(socket, io);
+       console.log("Attaching Employee controller...");
+       employeeController(socket, io);
+
       break;
     default:
       console.log(

@@ -3991,30 +3991,24 @@ const AdminDashboard = () => {
       </div>
       {/* /Page Wrapper */}
 
-      <ProjectModals
-        onProjectCreated={() => {
-          if (socket) {
-            const currentYear = date.getFullYear();
-            socket.emit("admin/dashboard/get-all-data", { year: currentYear });
-          }
-        }}
-      />
-      <RequestModals
-        onLeaveRequestCreated={() => {
-          if (socket) {
-            const currentYear = date.getFullYear();
-            socket.emit("admin/dashboard/get-all-data", { year: currentYear });
-          }
-        }}
-      />
-      <TodoModal
-        onTodoAdded={() => {
-          if (socket) {
-            const currentYear = date.getFullYear();
-            socket.emit("admin/dashboard/get-all-data", { year: currentYear });
-          }
-        }}
-      />
+      <ProjectModals onProjectCreated={() => {
+        if (socket) {
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+        }
+      }} />
+      <RequestModals onLeaveRequestCreated={() => {
+        if (socket) {
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+        }
+      }} mode = "admin" />
+      <TodoModal onTodoAdded={() => {
+        if (socket) {
+          const currentYear = date.getFullYear();
+          socket.emit("admin/dashboard/get-all-data", { year: currentYear });
+        }
+      }} />
     </>
   );
 };

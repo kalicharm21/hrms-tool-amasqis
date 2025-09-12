@@ -24,26 +24,28 @@ import * as XLSX from "xlsx";
 
 interface DashboardData {
   employeeDetails?: {
-    _id: string;
-    name: string;
+    _id: string
+    firstName: string;
+    lastName: string;
     designation: string;
     role: string;
     avatar: string;
-    phoneNumber: string;
-    email: string;
+    contact: {
+      phone: string;
+      email: string;
+    }
     reportOffice: string;
-    joinedOn: string;
+    dateOfJoining: string;
     timeZone: string;
   };
   attendanceStats?: {
-    absent: number;
-    late: number;
-    onTime: number;
-    workFromHome: number;
-    workedDays: number;
-    workingDays: number;
-  };
-
+    absent: number,
+    late: number,
+    onTime: number,
+    workFromHome: number,
+    workedDays: number,
+    workingDays: number,
+  }
   leaveStats?: {
     lossOfPay: number;
     requestedLeaves: number;
@@ -73,13 +75,16 @@ interface DashboardData {
     };
   };
   projects?: Array<{
-    projectId: string;
-    projectTitle: string;
-    dueDate: string;
-    totalTasks: number;
-    completedTasks: number;
-    projectLeadAvatar: string | null;
-    leadName: string | null;
+    projectId: string
+    projectTitle: string,
+    deadline: string,
+    totalTasks: number,
+    completedTasks: number,
+    leadDetails?: {
+      avatarUrl: string | null;
+      firstName: string | null;
+      lastName: string | null;
+    }
     membersAvatars: string[];
   }>;
   tasks?: Array<{
@@ -97,7 +102,8 @@ interface DashboardData {
   }>;
   teamMembers?: Array<{
     _id: string;
-    name: string;
+    firstName: string;
+    lastName: string
     avatar: string;
     role: string;
   }>;
@@ -126,6 +132,13 @@ interface DashboardData {
   }>;
 }
 
+type TaskUpdatePayload = {
+  taskId: string;
+  checked?: boolean;
+  starred?: boolean;
+  status?: string;
+};
+
 const ENCRYPTION_KEY = "your-strong-encryption-key";
 const leaveType = [
   { value: "Select", label: "Select" },
@@ -135,6 +148,7 @@ const leaveType = [
 ];
 const EmployeeDashboard = () => {
   const routes = all_routes;
+  const { user, isLoaded, isSignedIn } = useUser();
   const { getToken } = useAuth();
   const [socket, setSocket] = useState<any>(null);
   const [dashboardData, setDashboardData] = useState<DashboardData>({});
@@ -203,17 +217,17 @@ const EmployeeDashboard = () => {
       doc.setFontSize(10);
       const employee = dashboardData.employeeDetails;
       if (employee) {
-        doc.text(`Name: ${employee.name}`, 20, yPosition);
+        doc.text(`Name: ${employee.firstName} ${employee.lastName}`, 20, yPosition);
         yPosition += 8;
         doc.text(`Designation: ${employee.designation}`, 20, yPosition);
         yPosition += 8;
-        doc.text(`Email: ${employee.email}`, 20, yPosition);
+        doc.text(`Email: ${employee.contact.email}`, 20, yPosition);
         yPosition += 8;
-        doc.text(`Phone: ${employee.phoneNumber}`, 20, yPosition);
+        doc.text(`Phone: ${employee.contact.phone}`, 20, yPosition);
         yPosition += 8;
         doc.text(`Report Office: ${employee.reportOffice}`, 20, yPosition);
         yPosition += 8;
-        doc.text(`Joined On: ${employee.joinedOn}`, 20, yPosition);
+        doc.text(`Joined On: ${employee.dateOfJoining}`, 20, yPosition);
         yPosition += 15;
       }
 
@@ -340,7 +354,7 @@ const EmployeeDashboard = () => {
           }
           doc.text(`• ${project.projectTitle}`, 20, yPosition);
           yPosition += 8;
-          doc.text(`  Due: ${project.dueDate}`, 30, yPosition);
+          doc.text(`  Due: ${project.deadline}`, 30, yPosition);
           yPosition += 8;
           doc.text(
             `  Tasks: ${project.completedTasks}/${project.totalTasks}`,
@@ -348,18 +362,13 @@ const EmployeeDashboard = () => {
             yPosition
           );
           yPosition += 8;
-          doc.text(`  Lead: ${project.leadName || "N/A"}`, 30, yPosition);
+          doc.text(`  Lead: ${project.leadDetails?.firstName || 'member'}`, 30, yPosition);
           yPosition += 12;
         });
       }
 
       // Save the PDF
-      doc.save(
-        `employee-dashboard-${employee?.name || "report"}-${currentDate.replace(
-          /\//g,
-          "-"
-        )}.pdf`
-      );
+      doc.save(`employee-dashboard-${employee?.firstName || 'report'}-${currentDate.replace(/\//g, '-')}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert("Error generating PDF export. Please try again.");
@@ -375,13 +384,14 @@ const EmployeeDashboard = () => {
       if (dashboardData.employeeDetails) {
         const employeeData: (string | number)[][] = [
           ["Employee Information", ""],
-          ["Name", dashboardData.employeeDetails.name],
+          ["FirstName", dashboardData.employeeDetails.firstName],
+          ["LastName", dashboardData.employeeDetails.lastName],
           ["Designation", dashboardData.employeeDetails.designation],
-          ["Email", dashboardData.employeeDetails.email],
-          ["Phone", dashboardData.employeeDetails.phoneNumber],
+          ["Email", dashboardData.employeeDetails.contact.email],
+          ["Phone", dashboardData.employeeDetails.contact.phone],
           ["Report Office", dashboardData.employeeDetails.reportOffice],
-          ["Joined On", dashboardData.employeeDetails.joinedOn],
-          ["Time Zone", dashboardData.employeeDetails.timeZone],
+          ["Joined On", dashboardData.employeeDetails.dateOfJoining],
+          ["Time Zone", dashboardData.employeeDetails.timeZone]
         ];
         const employeeWS = XLSX.utils.aoa_to_sheet(employeeData);
         XLSX.utils.book_append_sheet(wb, employeeWS, "Employee Info");
@@ -497,10 +507,10 @@ const EmployeeDashboard = () => {
         dashboardData.projects.forEach((project) => {
           projectData.push([
             project.projectTitle,
-            project.dueDate,
+            project.deadline,
             project.completedTasks,
             project.totalTasks,
-            project.leadName || "N/A",
+            project.leadDetails?.firstName || 'Member'
           ]);
         });
 
@@ -537,9 +547,7 @@ const EmployeeDashboard = () => {
       }
 
       // Save the Excel file
-      const fileName = `employee-dashboard-${
-        dashboardData.employeeDetails?.name || "report"
-      }-${currentDate.replace(/\//g, "-")}.xlsx`;
+      const fileName = `employee-dashboard-${dashboardData.employeeDetails?.firstName || 'report'}-${currentDate.replace(/\//g, '-')}.xlsx`;
       XLSX.writeFile(wb, fileName);
     } catch (error) {
       console.error("Error generating Excel:", error);
@@ -556,6 +564,7 @@ const EmployeeDashboard = () => {
         console.log("Initializing socket connection...");
         const token = await getToken();
         console.log("Token obtained, creating socket...");
+        setLoading(true);
 
         if (!isMounted) return;
 
@@ -637,18 +646,26 @@ const EmployeeDashboard = () => {
           }
         );
 
-        currentSocket.on(
-          "employee/dashboard/get-tasks-response",
-          (response: any) => {
-            if (!isMounted) return;
-            if (response.done) {
-              setDashboardData((prev) => ({
-                ...prev,
-                tasks: response.data,
-              }));
+        currentSocket.on('employee/dashboard/get-tasks-response', (response: any) => {
+          if (!isMounted) return;
+          if (response.done) {
+            setDashboardData(prev => ({
+              ...prev,
+              tasks: response.data
+            }));
+          }
+        });
+
+        currentSocket.on('employee/dashboard/update-task-response', (response: any) => {
+          if (!isMounted) return;
+          console.log(response);
+
+          if (response.done) {
+            if (currentSocket) {
+              currentSocket.emit('employee/dashboard/get-tasks');
             }
           }
-        );
+        });
 
         currentSocket.on(
           "employee/dashboard/get-skills-response",
@@ -954,7 +971,8 @@ const EmployeeDashboard = () => {
   const overtimeHours =
     dashboardData?.workingHoursStats?.today?.expectedOvertimeHours ?? 0;
   const expectedHours = baseHours + overtimeHours;
-  const expectedSeconds = expectedHours * 3600;
+  // const expectedSeconds = expectedHours * 3600;
+  const expectedSeconds = 30;
   const punchInTimeUTC = checkInTime ?? null;
   const timeZone = dashboardData?.employeeDetails?.timeZone || "Asia/Kolkata";
   const [leftover, setLeftover] = useState(() =>
@@ -1161,18 +1179,26 @@ const EmployeeDashboard = () => {
     return value.toString().padStart(2, "0");
   }
 
+  function calculateRemainingLeaves(): number {
+    const totalLeaves = dashboardData?.leaveStats?.totalLeavesAllowed || 0;
+    const takenLeaves = dashboardData?.leaveStats?.takenLeaves || 0;
+    return totalLeaves - takenLeaves;
+  }
   const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "badge-soft-success";
-      case "pending":
-        return "badge-secondary-transparent";
-      case "inprogress":
-        return "bg-transparent-purple";
-      case "onhold":
-        return "bg-soft-pink";
+    if (!status) return 'bg-light';
+
+    switch (status.trim().toLowerCase()) {
+      case 'completed':
+        return 'badge-soft-success';       // matches .badge-soft-success in SCSS
+      case 'pending':
+        return 'badge-secondary-transparent'; // matches .badge-secondary-transparent
+      case 'ongoing':                // in case of space variation
+        return 'bg-transparent-purple';    // matches .bg-transparent-purple
+      case 'onhold':
+      case 'on hold':                      // in case of space variation
+        return 'bg-soft-pink';             // matches .bg-soft-pink
       default:
-        return "bg-light";
+        return 'bg-light';                 // default light background class
     }
   };
 
@@ -1235,7 +1261,29 @@ const EmployeeDashboard = () => {
       overtimePercent: (overtime / total) * 100,
       breakPercent: (brk / total) * 100,
     };
-  }
+  };
+
+  const handleTaskUpdate = (
+    { taskId, updateData }: { taskId: string; updateData: { checked?: boolean; starred?: boolean; status?: string } },
+    socket: any
+  ) => {
+    if (!taskId) {
+      console.error("Missing task ID");
+      return;
+    }
+    if (!socket) {
+      console.error("Socket not connected");
+      return;
+    }
+
+    const payload = {
+      taskId,
+      updateData
+    };
+
+    socket.emit("employee/dashboard/update-task", payload);
+    console.log("Emitted update", payload);
+  };
 
   //New Chart
   const leavesChart_series = [
@@ -1345,6 +1393,35 @@ const EmployeeDashboard = () => {
       }
     }
   };
+  if (loading || !isLoaded) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div
+            className="d-flex justify-content-center align-items-center"
+            style={{ height: "400px" }}
+          >
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-wrapper">
+        <div className="content">
+          <div className="alert alert-danger" role="alert">
+            <h4 className="alert-heading">Error!</h4>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <>
       {/* Page Wrapper */}
@@ -1448,17 +1525,13 @@ const EmployeeDashboard = () => {
                   <div className="d-flex align-items-center">
                     <span className="avatar avatar-lg avatar-rounded border border-white border-2 flex-shrink-0 me-2">
                       <ImageWithBasePath
-                        src={
-                          dashboardData?.employeeDetails?.avatar ||
-                          "assets/img/users/user-01.jpg"
-                        }
+                        src={dashboardData?.employeeDetails?.avatar || "/assets/img/users/user-01.jpg"}
                         alt="Img"
+                        isLink={Boolean(dashboardData?.employeeDetails?.avatar)}
                       />
                     </span>
                     <div>
-                      <h5 className="text-white mb-1">
-                        {dashboardData?.employeeDetails?.name}
-                      </h5>
+                      <h5 className="text-white mb-1">{dashboardData?.employeeDetails?.firstName} {dashboardData?.employeeDetails?.lastName}</h5>
                       <div className="d-flex align-items-center">
                         <p className="text-white fs-12 mb-0">
                           {dashboardData?.employeeDetails?.designation}
@@ -1472,25 +1545,15 @@ const EmployeeDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  <Link
-                    to="#"
-                    className="btn btn-icon btn-sm text-white rounded-circle edit-top"
-                  >
-                    <i className="ti ti-edit" />
-                  </Link>
                 </div>
                 <div className="card-body">
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Phone Number</span>
-                    <p className="text-gray-9">
-                      {dashboardData?.employeeDetails?.phoneNumber}
-                    </p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.contact.phone}</p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Email Address</span>
-                    <p className="text-gray-9">
-                      {dashboardData?.employeeDetails?.email}
-                    </p>
+                    <p className="text-gray-9">{dashboardData?.employeeDetails?.contact.email}</p>
                   </div>
                   <div className="mb-3">
                     <span className="d-block mb-1 fs-13">Report Office</span>
@@ -1500,9 +1563,7 @@ const EmployeeDashboard = () => {
                   </div>
                   <div>
                     <span className="d-block mb-1 fs-13">Joined on</span>
-                    <p className="text-gray-9">
-                      {dashboardData?.employeeDetails?.joinedOn}
-                    </p>
+                    <p className="text-gray-9">{formatDateProject(dashboardData?.employeeDetails?.dateOfJoining || "")}</p>
                   </div>
                 </div>
               </div>
@@ -1547,7 +1608,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-dark me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              {dashboardData?.attendanceStats?.onTime}
+                              {dashboardData?.attendanceStats?.onTime || "0"}
                             </span>
                             on time
                           </p>
@@ -1556,7 +1617,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-success me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              {dashboardData?.attendanceStats?.late}
+                              {dashboardData?.attendanceStats?.late || "0"}
                             </span>
                             Late Attendance
                           </p>
@@ -1565,7 +1626,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-primary me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              {dashboardData?.attendanceStats?.workFromHome}
+                              {dashboardData?.attendanceStats?.workFromHome || "0"}
                             </span>
                             Work From Home
                           </p>
@@ -1574,7 +1635,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-danger me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              {dashboardData?.attendanceStats?.absent}
+                              {dashboardData?.attendanceStats?.absent || "0"}
                             </span>
                             Absent
                           </p>
@@ -1583,7 +1644,7 @@ const EmployeeDashboard = () => {
                           <p className="d-flex align-items-center">
                             <i className="ti ti-circle-filled fs-8 text-warning me-1" />
                             <span className="text-gray-9 fw-semibold me-1">
-                              {dashboardData?.leaveStats?.sickLeaves}
+                              {dashboardData?.leaveStats?.sickLeaves || "0"}
                             </span>
                             Sick Leave
                           </p>
@@ -1648,37 +1709,37 @@ const EmployeeDashboard = () => {
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Total Leaves</span>
-                        <h4>{dashboardData?.leaveStats?.totalLeavesAllowed}</h4>
+                        <h4>{dashboardData?.leaveStats?.totalLeavesAllowed || "0"}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">taken</span>
-                        <h4>{dashboardData?.leaveStats?.takenLeaves}</h4>
+                        <h4>{dashboardData?.leaveStats?.takenLeaves || "0"}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Absent</span>
-                        <h4>{dashboardData?.attendanceStats?.absent}</h4>
+                        <h4>{dashboardData?.attendanceStats?.absent || "0"}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Request</span>
-                        <h4>{dashboardData?.leaveStats?.requestedLeaves}</h4>
+                        <h4>{dashboardData?.leaveStats?.requestedLeaves || "0"}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Worked Days</span>
-                        <h4>{dashboardData?.attendanceStats?.workedDays}</h4>
+                        <h4>{dashboardData?.attendanceStats?.workedDays || "0"}</h4>
                       </div>
                     </div>
                     <div className="col-sm-6">
                       <div className="mb-3">
                         <span className="d-block mb-1">Loss of Pay</span>
-                        <h4>{dashboardData?.leaveStats?.lossOfPay}</h4>
+                        <h4>{dashboardData?.leaveStats?.lossOfPay || "0"}</h4>
                       </div>
                     </div>
                     <div className="col-sm-12">
@@ -1716,12 +1777,12 @@ const EmployeeDashboard = () => {
                     {isPunchIn && checkInTime && (
                       <h6 className="fw-medium d-flex align-items-center justify-content-center mb-4">
                         <i className="ti ti-fingerprint text-primary me-1" />
-                        {leftover.isTimerExpired
-                          ? "Auto-Punched Out"
-                          : `Punch In at ${convertUtcToTimeZone(
-                              checkInTime,
-                              dashboardData?.employeeDetails?.timeZone || ""
-                            )}`}
+                        {leftover.isTimerExpired ? (
+                          "Auto-Punched Out"
+                        ) : (
+                          `Punch In at ${convertUtcToTimeZone(checkInTime, dashboardData?.employeeDetails?.timeZone || "")}`
+                          // `Punch In at ${checkInTime}`
+                        )}
                       </h6>
                     )}
 
@@ -1744,9 +1805,8 @@ const EmployeeDashboard = () => {
                     ) : (
                       <>
                         <button
-                          className={`btn btn-danger w-100 mb-2 ${
-                            isPunchingOut ? "disabled" : ""
-                          }`}
+                          className={`btn btn-danger w-100 mb-2 ${isPunchingOut ? "disabled" : ""
+                            }`}
                           disabled={
                             !(
                               leftover.hrs === 0 &&
@@ -2054,7 +2114,7 @@ const EmployeeDashboard = () => {
                             <div className="card-body">
                               <div className="d-flex align-items-center justify-content-between mb-3">
                                 <h6>{project.projectTitle}</h6>
-                                <div className="dropdown">
+                                {/* <div className="dropdown">
                                   <Link
                                     to="#"
                                     className="d-inline-flex align-items-center"
@@ -2085,17 +2145,14 @@ const EmployeeDashboard = () => {
                                       </Link>
                                     </li>
                                   </ul>
-                                </div>
+                                </div> */}
                               </div>
 
                               {/* Leader */}
                               <div className="d-flex align-items-center mb-3">
                                 <Link to="#" className="avatar">
                                   <img
-                                    src={
-                                      project.projectLeadAvatar ||
-                                      "assets/img/users/user-placeholder.jpg"
-                                    }
+                                    src={project.leadDetails?.avatarUrl || 'assets/img/users/user-placeholder.jpg'}
                                     className="img-fluid rounded-circle"
                                     alt="lead"
                                   />
@@ -2103,7 +2160,9 @@ const EmployeeDashboard = () => {
                                 <div className="ms-2">
                                   <h6 className="fw-normal">
                                     <Link to="#">
-                                      {project.leadName || "N/A"}
+                                      {(project.leadDetails?.firstName && project.leadDetails?.lastName)
+                                        ? `${project.leadDetails.firstName} ${project.leadDetails.lastName}`
+                                        : "lead"}
                                     </Link>
                                   </h6>
                                   <span className="fs-13 d-block">
@@ -2121,12 +2180,8 @@ const EmployeeDashboard = () => {
                                   <i className="ti ti-calendar text-primary fs-16" />
                                 </Link>
                                 <div className="ms-2">
-                                  <h6 className="fw-normal">
-                                    {formatDateProject(project.dueDate)}
-                                  </h6>
-                                  <span className="fs-13 d-block">
-                                    Deadline
-                                  </span>
+                                  <h6 className="fw-normal">{formatDateProject(project.deadline) || "-"}</h6>
+                                  <span className="fs-13 d-block">Deadline</span>
                                 </div>
                               </div>
 
@@ -2192,7 +2247,7 @@ const EmployeeDashboard = () => {
                         className="btn btn-white border-0 dropdown-toggle border btn-sm d-inline-flex align-items-center"
                         data-bs-toggle="dropdown"
                       >
-                        All Projects
+                        {filters.tasks} projects
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
                         <li>
@@ -2219,52 +2274,49 @@ const EmployeeDashboard = () => {
                 </div>
                 <div className="card-body">
                   <div className="list-group list-group-flush">
-                    {dashboardData?.tasks?.map((task) => (
-                      <div
-                        key={task._id}
-                        className="list-group-item border rounded mb-3 p-2"
-                      >
-                        <div className="row align-items-center row-gap-3">
-                          <div className="col-md-8">
-                            <div className="todo-inbox-check d-flex align-items-center">
-                              <span>
-                                <i className="ti ti-grid-dots me-2" />
-                              </span>
-                              <div className="form-check">
-                                <input
-                                  className="form-check-input"
-                                  type="checkbox"
-                                  defaultChecked={task.checked}
-                                />
-                              </div>
-                              <span className="me-2 d-flex align-items-center rating-select">
-                                <i
-                                  className={`ti ${
-                                    task.starred
-                                      ? "ti-star-filled filled"
-                                      : "ti-star"
-                                  }`}
-                                />
-                              </span>
-                              <div className="strike-info">
-                                <h4 className="fs-14 text-truncate">
-                                  {task.title}
-                                </h4>
+                    {dashboardData?.tasks?.length === 0 ? (
+                      <p className="text-center text-gray-500 text-lg">No available projects</p>
+                    ) : (
+                      dashboardData?.tasks?.map((task) => (
+                        <div key={task._id} className="list-group-item border rounded mb-3 p-2">
+                          <div className="row align-items-center row-gap-3">
+                            <div className="col-md-8">
+                              <div className="todo-inbox-check d-flex align-items-center">
+                                <span><i className="ti ti-grid-dots me-2" /></span>
+                                <div className="form-check">
+                                  <input
+                                    className="form-check-input"
+                                    type="checkbox"
+                                    checked={task.checked}
+                                    onChange={e => handleTaskUpdate({ taskId: task._id, updateData: { checked: e.target.checked } }, socket)}
+                                  />
+                                </div>
+                                <span
+                                  className="me-3 d-flex align-items-center rating-select"
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => handleTaskUpdate({ taskId: task._id, updateData: { starred: !task.starred } }, socket)}
+                                  onKeyPress={e => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      handleTaskUpdate({ taskId: task._id, updateData: { starred: !task.starred } }, socket);
+                                    }
+                                  }}
+                                >
+                                  <i className={`ti ${task.starred ? 'ti-star-filled filled' : 'ti-star'}`} aria-label={task.starred ? "Unstar task" : "Star task"} />
+                                </span>
+                                <div className="strike-info">
+                                  <h4 className="fs-14 text-truncate">{task.title}</h4>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="col-md-4">
-                            <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
-                              <span
-                                className={`badge d-inline-flex align-items-center me-2 ${getStatusBadgeClass(
-                                  task.status
-                                )}`}
-                              >
-                                <i className="fas fa-circle fs-6 me-1" />
-                                {task.status}
-                              </span>
-                              <div className="d-flex align-items-center">
-                                <div className="avatar-list-stacked avatar-group-sm">
+                            <div className="col-md-4">
+                              <div className="d-flex align-items-center justify-content-md-end flex-wrap row-gap-3">
+                                <span className={`badge d-inline-flex align-items-center me-2 ${getStatusBadgeClass(task.status)}`}>
+                                  <i className={`fas fa-circle fs-6 me-1 ${getStatusBadgeClass(task.status)}`} />
+                                  {task.status}
+                                </span>
+                                <div className="d-flex align-items-center">
+                                  {/* <div className="avatar-list-stacked avatar-group-sm">
                                   {task.avatars.slice(0, 3).map((member) => (
                                     <span
                                       key={member._id}
@@ -2291,15 +2343,16 @@ const EmployeeDashboard = () => {
                                       +{task.avatars.length - 3}
                                     </span>
                                   )}
+                                </div> */}
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )))}
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
@@ -2338,15 +2391,14 @@ const EmployeeDashboard = () => {
                 </div>
                 <div className="card-body">
                   <div>
-                    <div className="bg-light d-flex align-items-center rounded p-2">
+                    {/* <div className="bg-light d-flex align-items-center rounded p-2">
                       <h3 className="me-2">98%</h3>
                       <span className="badge badge-outline-success bg-success-transparent rounded-pill me-1">
                         12%
                       </span>
                       <span>vs last years</span>
-                    </div>
-                    {performance_chart2_series.length === months.length &&
-                    performance_chart2_series.length > 0 ? (
+                    </div> */}
+                    {performance_chart2_series.length === months.length && performance_chart2_series.length > 0 ? (
                       <ReactApexChart
                         options={{
                           ...performance_chart2_options,
@@ -2455,7 +2507,7 @@ const EmployeeDashboard = () => {
                     <div className="text-center">
                       <h5 className="text-white mb-4">Team Birthday</h5>
                       {dashboardData?.birthdays &&
-                      dashboardData?.birthdays.length > 0 ? (
+                        dashboardData?.birthdays.length > 0 ? (
                         dashboardData?.birthdays.map((birthday) => (
                           <div key={birthday._id} className="mb-4">
                             <span className="avatar avatar-xl avatar-rounded mb-2">
@@ -2541,18 +2593,18 @@ const EmployeeDashboard = () => {
                     >
                       <div className="d-flex align-items-center">
                         <Link to="#" className="avatar flex-shrink-0">
-                          <ImageWithBasePath
+                          <img
                             src={
                               member.avatar ||
                               "assets/img/profiles/avatar-31.jpg"
                             }
                             className="rounded-circle border border-2"
-                            alt={`${member.name}'s avatar`}
+                            alt={`${member.firstName}'s avatar`}
                           />
                         </Link>
                         <div className="ms-2">
                           <h6 className="fs-14 fw-medium text-truncate mb-1">
-                            <Link to="#">{member.name}</Link>
+                            <Link to="#">{member.firstName} {member.lastName}</Link>
                           </h6>
                           <p className="fs-13">{member.role}</p>
                         </div>
@@ -2656,8 +2708,8 @@ const EmployeeDashboard = () => {
                           {filters.meetings === "today"
                             ? "Today"
                             : filters.meetings === "month"
-                            ? "This Month"
-                            : "This Year"}
+                              ? "This Month"
+                              : "This Year"}
                         </span>
                       </Link>
                       <ul className="dropdown-menu  dropdown-menu-end p-3">
@@ -2759,13 +2811,15 @@ const EmployeeDashboard = () => {
             </Link>
           </p>
         </div>
-      </div>
+      </div >
       <RequestModals
         onLeaveRequestCreated={() => {
           if (socket) {
-            socket?.emit("admin/dashboard/get-all-data", { year: currentYear });
+            socket?.emit("employee/dashboard/get-all-data", { year: currentYear });
           }
         }}
+        mode="employee"
+        remainingEmployeeLeaves={calculateRemainingLeaves()}
       />
     </>
   );

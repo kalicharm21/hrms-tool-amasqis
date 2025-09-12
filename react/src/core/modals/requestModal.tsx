@@ -4,6 +4,8 @@ import { DatePicker } from "antd";
 import moment from 'moment';
 import { useSocket } from "../../SocketContext";
 import { Socket } from "socket.io-client";
+import { useAuth } from "@clerk/clerk-react";
+import { toast } from "react-toastify";
 
 interface Employee {
   value: string;
@@ -31,31 +33,48 @@ interface LeaveBalance {
   employeeName: string;
 }
 
-interface RequestModalsProps {
-  onLeaveRequestCreated?: () => void;
+interface SimpleLeaveType {
+  value: string;
+  label: string;
 }
 
-const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) => {
+interface RequestModalsProps {
+  onLeaveRequestCreated?: () => void;
+  mode: "admin" | "employee";
+  remainingEmployeeLeaves?: number;
+}
+
+const employeeLeaves = [
+  { value: 'lossOfPay', label: 'Loss of Pay' },
+  { value: 'sick', label: 'Sick Leave' },
+  { value: 'casual', label: 'Casual Leave' },
+];
+
+const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated, mode = "employee", remainingEmployeeLeaves }) => {
   const socket = useSocket() as Socket | null;
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [selectedLeaveType, setSelectedLeaveType] = useState<LeaveType | null>(null);
+  const [selectedLeaveType, setSelectedLeaveType] = useState<LeaveType | SimpleLeaveType | null>(null);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const auth = useAuth();
+  const userId = auth.userId;
+  const [isApplicableLeave, setIsApplicableLeave] = useState(true);
 
   // Form states
   const [formData, setFormData] = useState({
     employeeId: '',
     leaveType: '',
-    fromDate: '',
-    toDate: '',
+    fromDate: null as moment.Moment | null,
+    toDate: null as moment.Moment | null,
     reason: '',
     days: 0
   });
+
 
   const [calculatedDays, setCalculatedDays] = useState(0);
 
@@ -132,10 +151,78 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
         if (onLeaveRequestCreated) {
           onLeaveRequestCreated();
         }
-        setError(null);
+        // Show success message
+        alert("Leave request created successfully!");
       } else {
         console.error("Error creating leave request:", response.error);
-        setError("Error creating leave request: " + response.error);
+        alert("Error creating leave request: " + response.error);
+      }
+    };
+
+    const handleEmployeeAddLeave = (response: any) => {
+      setLoading(false);
+      setSubmitting(false);
+
+      if (response.done) {
+        console.log("Leave applied data", response);
+
+        // Close the modal first
+        const modal = document.getElementById('add_leaves'); // Replace with your actual modal ID
+        if (modal) {
+          try {
+            const bootstrap = (window as any).bootstrap;
+            if (bootstrap && bootstrap.Modal) {
+              const modalInstance = bootstrap.Modal.getInstance(modal);
+              if (modalInstance) {
+                modalInstance.hide();
+              } else {
+                // If no instance exists, create one and hide it
+                const newModalInstance = new bootstrap.Modal(modal);
+                newModalInstance.hide();
+              }
+            } else {
+              throw new Error('Bootstrap not available');
+            }
+          } catch (error) {
+            console.warn('Bootstrap Modal API not available, using fallback method');
+            // Fallback: manually trigger the modal close
+            const closeButton = modal.querySelector('[data-bs-dismiss="modal"]') as HTMLElement;
+            if (closeButton) {
+              closeButton.click();
+            } else {
+              // Manual modal close
+              modal.style.display = 'none';
+              modal.classList.remove('show');
+              modal.setAttribute('aria-hidden', 'true');
+              modal.removeAttribute('aria-modal');
+
+              // Remove backdrop
+              const backdrop = document.querySelector('.modal-backdrop');
+              if (backdrop) {
+                backdrop.remove();
+              }
+
+              // Restore body
+              document.body.classList.remove('modal-open');
+              document.body.style.overflow = '';
+              document.body.style.paddingRight = '';
+            }
+          }
+        }
+
+        resetForm();
+
+        // Call callback if exists
+        if (onLeaveRequestCreated) {
+          onLeaveRequestCreated();
+        }
+
+        // Show success toast
+        toast.success(response.data?.message || response.message || "Leave request submitted successfully.");
+
+      } else {
+        console.error("Error creating leave request:", response.error);
+        toast.error(response.error || response.message || "Failed to submit leave request.");
       }
     };
 
@@ -143,6 +230,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
     socket.on("admin/leave/get-modal-data-response", handleModalDataResponse);
     socket.on("admin/leave/get-employee-balance-response", handleEmployeeBalanceResponse);
     socket.on("admin/leave/create-request-response", handleCreateRequestResponse);
+    socket.on("employee/dashboard/add-leave-response", handleEmployeeAddLeave);
 
     // Cleanup event listeners
     return () => {
@@ -150,9 +238,29 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
         socket.off("admin/leave/get-modal-data-response", handleModalDataResponse);
         socket.off("admin/leave/get-employee-balance-response", handleEmployeeBalanceResponse);
         socket.off("admin/leave/create-request-response", handleCreateRequestResponse);
+        socket.off("employee/dashboard/add-leave-response", handleEmployeeAddLeave);
       }
     };
   }, [socket, onLeaveRequestCreated]);
+
+  useEffect(() => {
+    if (mode === 'employee' && userId) {
+      setFormData(prev => ({ ...prev, employeeId: userId }));
+      // fetchEmployeeBalance(userId);
+    }
+  }, [mode, userId]);
+
+  useEffect(() => {
+    if (mode == "employee") {
+      if ((calculatedDays > (remainingEmployeeLeaves ?? 0)) && (selectedLeaveType?.value !== "lossOfPay")) {
+        setIsApplicableLeave(false);
+      } else {
+        setIsApplicableLeave(true);
+      }
+    } else {
+      setIsApplicableLeave(true); // applicable leave is not for admin mode
+    }
+  }, [mode, remainingEmployeeLeaves, calculatedDays, selectedLeaveType]);
 
   const handleEmployeeChange = (employee: Employee) => {
     setSelectedEmployee(employee);
@@ -166,34 +274,59 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
     }
   };
 
-  const handleLeaveTypeChange = (leaveType: LeaveType) => {
-    setSelectedLeaveType(leaveType);
-    setFormData(prev => ({ ...prev, leaveType: leaveType.value }));
-  };
-
-  const handleDateChange = (field: 'fromDate' | 'toDate', date: any) => {
-    const dateString = date ? date.format('YYYY-MM-DD') : '';
-    setFormData(prev => ({ ...prev, [field]: dateString }));
-
-    // Calculate days when both dates are selected
-    if (field === 'fromDate' && formData.toDate) {
-      calculateDays(dateString, formData.toDate);
-    } else if (field === 'toDate' && formData.fromDate) {
-      calculateDays(formData.fromDate, dateString);
+  const handleLeaveTypeChange = (selectedOption: SimpleLeaveType | null) => {
+    if (!selectedOption) {
+      setSelectedLeaveType(null);
+      setFormData(prev => ({
+        ...prev,
+        leaveType: "", // Or whatever default/empty value you use
+        maxDays: undefined,
+        description: undefined
+      }));
+      return;
     }
-  };
 
-  const calculateDays = (fromDate: string, toDate: string) => {
-    if (fromDate && toDate) {
-      const from = moment(fromDate);
-      const to = moment(toDate);
-      const days = to.diff(from, 'days') + 1;
-      setCalculatedDays(days > 0 ? days : 0);
-      return days;
+    let leaveType: LeaveType | SimpleLeaveType | null = null;
+
+    if (mode === "admin") {
+      leaveType = leaveTypes.find(type => type.value === selectedOption.value) || null;
     } else {
-      setCalculatedDays(0);
-      return 0;
+      leaveType = employeeLeaves.find(type => type.value === selectedOption.value) || null;
     }
+
+    setSelectedLeaveType(leaveType);
+
+    setFormData(prev => ({
+      ...prev,
+      leaveType: selectedOption.value,
+      ...(mode === "admin" && leaveType && "description" in leaveType && "maxDays" in leaveType
+        ? { maxDays: leaveType.maxDays, description: leaveType.description }
+        : {})
+    }));
+  };
+
+  const handleDateChange = (field: 'fromDate' | 'toDate', value: moment.Moment | null) => {
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+
+      if (updated.fromDate && updated.toDate) {
+        calculateDays(updated.fromDate, updated.toDate);
+      } else {
+        setCalculatedDays(0);
+      }
+
+      return updated;
+    });
+  };
+
+  const calculateDays = (fromDate: moment.Moment | null, toDate: moment.Moment | null) => {
+    if (fromDate && toDate) {
+      const days = toDate.diff(fromDate, 'days') + 1;
+      setCalculatedDays(days > 0 ? days : 0);
+      return days > 0 ? days : 0;
+    }
+    setCalculatedDays(0);
+    return 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -210,22 +343,39 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
     }
 
     setSubmitting(true);
-    setError(null);
 
-    const requestData = {
+    let requestData;
+
+    requestData = {
       ...formData,
-      days: calculateDays(formData.fromDate, formData.toDate)
+      fromDate: formData.fromDate ? formData.fromDate.format('YYYY-MM-DD') : '',
+      toDate: formData.toDate ? formData.toDate.format('YYYY-MM-DD') : ''
     };
 
-    socket.emit("admin/leave/create-request", requestData);
+    if (mode === "admin") {
+      requestData = {
+        ...formData,
+        days: calculateDays(formData.fromDate, formData.toDate),
+      };
+      console.log(requestData);
+      socket.emit("admin/leave/create-request", requestData);
+    } else if (mode === "employee") {
+      requestData = {
+        ...formData,
+        noOfDays: calculateDays(formData.fromDate, formData.toDate),
+      };
+      console.log(requestData);
+      socket.emit("employee/dashboard/add-leave", requestData);
+    }
   };
+
 
   const resetForm = () => {
     setFormData({
       employeeId: '',
       leaveType: '',
-      fromDate: '',
-      toDate: '',
+      fromDate: null,
+      toDate: null,
       reason: '',
       days: 0
     });
@@ -238,7 +388,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
 
   const loadModalData = () => {
     if (!socket) return;
-    setLoading(true);
+    // setLoading(true);
     socket.emit("admin/leave/get-modal-data");
   };
 
@@ -267,7 +417,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
         modalElement.removeEventListener('hide.bs.modal', handleModalHide);
       };
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   return (
@@ -304,175 +454,202 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
                       </div>
                     )}
                     <div className="row">
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Employee Name <span className="text-danger">*</span></label>
-                        <CommonSelect
-                          className="select"
-                          options={[
-                            { value: '', label: 'Select Employee' },
-                            ...employees
-                          ]}
-                          defaultValue={selectedEmployee ? { value: selectedEmployee.value, label: selectedEmployee.label } : { value: '', label: 'Select Employee' }}
-                          onChange={(option: any) => {
-                            const employee = employees.find(emp => emp.value === option.value);
-                            if (employee) {
-                              handleEmployeeChange(employee);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {selectedEmployee && (
-                      <div className="col-md-12">
-                        <div className="mb-3">
-                          <div className="alert alert-info py-2">
-                            <small>
-                              <strong>Employee:</strong> {selectedEmployee.label}<br />
-                              <strong>Position:</strong> {selectedEmployee.position}<br />
-                              <strong>Department:</strong> {selectedEmployee.department}
-                            </small>
+                      {mode === 'admin' && (
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">
+                              Employee Name <span className="text-danger">*</span>
+                            </label>
+                            <CommonSelect
+                              className="select"
+                              options={[
+                                { value: '', label: 'Select Employee' },
+                                ...employees
+                              ]}
+                              defaultValue={
+                                selectedEmployee
+                                  ? { value: selectedEmployee.value, label: selectedEmployee.label }
+                                  : { value: '', label: 'Select Employee' }
+                              }
+                              onChange={(option: any) => {
+                                const employee = employees.find(emp => emp.value === option.value);
+                                if (employee) {
+                                  handleEmployeeChange(employee);
+                                }
+                              }}
+                            />
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Leave Type <span className="text-danger">*</span></label>
-                        <CommonSelect
-                          className="select"
-                          options={[
-                            { value: '', label: 'Select Leave Type' },
-                            ...leaveTypes
-                          ]}
-                          defaultValue={selectedLeaveType ? { value: selectedLeaveType.value, label: selectedLeaveType.label } : { value: '', label: 'Select Leave Type' }}
-                          onChange={(option: any) => {
-                            const leaveType = leaveTypes.find(type => type.value === option.value);
-                            if (leaveType) {
-                              handleLeaveTypeChange(leaveType);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
+                      {mode === 'admin' && selectedEmployee && (
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <div className="alert alert-info py-2">
+                              <small>
+                                <strong>Employee:</strong> {selectedEmployee.label}<br />
+                                <strong>Position:</strong> {selectedEmployee.position}<br />
+                                <strong>Department:</strong> {selectedEmployee.department}
+                              </small>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                    {selectedLeaveType && (
+                      {mode === 'admin' && selectedEmployee && (
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <div className="alert alert-info py-2">
+                              <small>
+                                <strong>Employee:</strong> {selectedEmployee.label}<br />
+                                <strong>Position:</strong> {selectedEmployee.position}<br />
+                                <strong>Department:</strong> {selectedEmployee.department}
+                              </small>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="col-md-12">
                         <div className="mb-3">
-                          <div className="alert alert-secondary py-2">
-                            <small>
+                          <label className="form-label">Leave Type <span className="text-danger">*</span></label>
+                          <CommonSelect
+                            className='select'
+                            options={mode === "admin" ? leaveTypes : employeeLeaves}
+                            defaultValue={selectedLeaveType
+                              ? { value: selectedLeaveType.value, label: selectedLeaveType.label }
+                              : { value: "", label: "Select Leave Type" }}
+                            onChange={handleLeaveTypeChange}
+                          />
+                        </div>
+                      </div>
+
+                      {mode == "employee" && !isApplicableLeave && (
+                        <div className="alert alert-danger w-100">Leave type must be  Loss Of Pay when requested days exceed remaining balance</div>
+                      )}
+
+                      {selectedLeaveType && (
+                        <div>
+                          {"description" in selectedLeaveType && "maxDays" in selectedLeaveType ? (
+                            <>
                               <strong>Description:</strong> {selectedLeaveType.description}<br />
                               <strong>Max Days:</strong> {selectedLeaveType.maxDays}
-                            </small>
+                            </>
+                          ) : (
+                            <>
+                              {/* <strong>Leave Type:</strong> {selectedLeaveType.label} */}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">From Date <span className="text-danger">*</span></label>
+                          <div className="input-icon-end position-relative">
+                            <DatePicker
+                              className="form-control datetimepicker"
+                              format="DD-MM-YYYY"
+                              getPopupContainer={getModalContainer}
+                              placeholder="DD-MM-YYYY"
+                              value={formData.fromDate ? formData.fromDate : null}  // keep as moment
+                              onChange={(date) => handleDateChange('fromDate', date)}
+                              disabledDate={(current) => current && current < moment().startOf('day')}
+                            />
+                            <span className="input-icon-addon ">
+                              <i className="ti ti-calendar text-gray-7" />
+                            </span>
                           </div>
                         </div>
                       </div>
-                    )}
 
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">From Date <span className="text-danger">*</span></label>
-                        <div className="input-icon-end position-relative">
-                          <DatePicker
-                            className="form-control datetimepicker"
-                            format="DD-MM-YYYY"
-                            getPopupContainer={getModalContainer}
-                            placeholder="DD-MM-YYYY"
-                            value={formData.fromDate ? moment(formData.fromDate) : null}
-                            onChange={(date) => handleDateChange('fromDate', date)}
-                            disabledDate={(current) => current && current < moment().startOf('day')}
-                          />
-                          <span className="input-icon-addon">
-                            <i className="ti ti-calendar text-gray-7" />
-                          </span>
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">To Date <span className="text-danger">*</span></label>
+                          <div className="input-icon-end position-relative">
+                            <DatePicker
+                              className="form-control datetimepicker"
+                              format="DD-MM-YYYY"
+                              getPopupContainer={getModalContainer}
+                              placeholder="DD-MM-YYYY"
+                              value={formData.toDate ? formData.toDate : null}  // keep as moment
+                              onChange={(date) => handleDateChange('toDate', date)}
+                              disabledDate={(current) => current && current < moment().startOf('day')}
+                            />
+                            <span className="input-icon-addon">
+                              <i className="ti ti-calendar text-gray-7" />
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">To Date <span className="text-danger">*</span></label>
-                        <div className="input-icon-end position-relative">
-                          <DatePicker
-                            className="form-control datetimepicker"
-                            format="DD-MM-YYYY"
-                            getPopupContainer={getModalContainer}
-                            placeholder="DD-MM-YYYY"
-                            value={formData.toDate ? moment(formData.toDate) : null}
-                            onChange={(date) => handleDateChange('toDate', date)}
-                            disabledDate={(current) => {
-                              if (!formData.fromDate) return current && current < moment().startOf('day');
-                              return current && current < moment(formData.fromDate);
-                            }}
-                          />
-                          <span className="input-icon-addon">
-                            <i className="ti ti-calendar text-gray-7" />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">No of Days</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={calculatedDays}
-                          disabled
-                        />
-                      </div>
-                    </div>
-
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Remaining Days</label>
-                        <div className="input-group">
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label className="form-label">No of Days</label>
                           <input
                             type="text"
                             className="form-control"
-                            value={loadingBalance ? 'Loading...' : leaveBalance ? leaveBalance.remainingLeaves : 'N/A'}
+                            value={calculatedDays}
                             disabled
                           />
-                          {loadingBalance && (
-                            <div className="input-group-text">
-                              <div className="spinner-border spinner-border-sm" role="status">
-                                <span className="visually-hidden">Loading...</span>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
-                    </div>
 
-                    {leaveBalance && (
-                      <div className="col-md-12">
+                      <div className="col-md-6">
                         <div className="mb-3">
-                          <div className="alert alert-success py-2">
-                            <small>
-                              <strong>Total Annual Leave:</strong> {leaveBalance.totalLeaves} days<br />
-                              <strong>Used:</strong> {leaveBalance.usedLeaves} days<br />
-                              <strong>Remaining:</strong> {leaveBalance.remainingLeaves} days
-                            </small>
+                          <label className="form-label">Remaining Days</label>
+                          <div className="input-group">
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={
+                                mode === "employee"
+                                  ? remainingEmployeeLeaves ?? 'N/A'
+                                  : loadingBalance
+                                    ? 'Loading...'
+                                    : leaveBalance
+                                      ? leaveBalance.remainingLeaves
+                                      : 'N/A'
+                              }
+                              disabled
+                            />
+                            {loadingBalance && (
+                              <div className="input-group-text">
+                                <div className="spinner-border spinner-border-sm" role="status">
+                                  <span className="visually-hidden">Loading...</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                    )}
 
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Reason <span className="text-danger">*</span></label>
-                        <textarea
-                          className="form-control"
-                          rows={3}
-                          value={formData.reason}
-                          onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-                          placeholder="Enter reason for leave request..."
-                        />
+
+                      {leaveBalance && (
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <div className="alert alert-success py-2">
+                              <small>
+                                <strong>Total Annual Leave:</strong> {leaveBalance.totalLeaves} days<br />
+                                <strong>Used:</strong> {leaveBalance.usedLeaves} days<br />
+                                <strong>Remaining:</strong> {leaveBalance.remainingLeaves} days
+                              </small>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Reason <span className="text-danger">*</span></label>
+                          <textarea
+                            className="form-control"
+                            rows={3}
+                            value={formData.reason}
+                            onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
+                            placeholder="Enter reason for leave request..."
+                          />
+                        </div>
                       </div>
-                    </div>
                     </div>
                   </>
                 )}
@@ -490,7 +667,7 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={submitting || loading}
+                  disabled={submitting || loading || !isApplicableLeave}
                 >
                   {submitting ? (
                     <>
@@ -508,8 +685,8 @@ const RequestModals: React.FC<RequestModalsProps> = ({ onLeaveRequestCreated }) 
       </div>
       {/* /Add Leaves */}
     </>
-  );
-};
+  )
+}
 
 export default RequestModals;
 

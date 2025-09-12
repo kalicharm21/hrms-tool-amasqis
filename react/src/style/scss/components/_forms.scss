@@ -821,7 +821,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   pointer-events: none;
   font-size: 1.2em;
   color: $gray-400;
-  z-index: 9;
+  z-index: 0;
   &:last-child {
     right: 0;
     left: auto;
@@ -1062,7 +1062,7 @@ kbd {
 }
 .input-icon-end {
   .form-control {
-      padding-right: 32px;
+    padding-right: 32px;
   }
 }
 .icon-addon {
