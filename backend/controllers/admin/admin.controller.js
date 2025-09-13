@@ -997,6 +997,35 @@ socket.on("admin/users/delete", async (data) => {
       });
     }
   });
+  
+  socket.on("admin/invoices/create", async (payload, callback) => {
+  try {
+    // 1. Create new invoice from payload
+    const newInvoice = new Invoice({
+      invoiceNumber: payload.invoiceNumber,
+      title: payload.title,
+      clientId: payload.clientId,
+      amount: payload.amount,
+      status: payload.status,
+      dueDate: payload.dueDate,
+      createdAt: new Date(),
+    });
+
+    await newInvoice.save();
+
+    // 2. Send back success response
+    callback({ done: true, data: newInvoice });
+
+    // 3. Broadcast updated list to all admins
+    const invoices = await Invoice.find({});
+    io.emit("admin/invoices/list-update", { done: true, data: invoices });
+
+  } catch (err) {
+    console.error("Error creating invoice:", err);
+    callback({ done: false, error: "Failed to create invoice" });
+  }
+});
+
 
   // Get leave request modal data (all data in one call)
   socket.on("admin/leave/get-modal-data", async () => {
