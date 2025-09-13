@@ -2100,12 +2100,12 @@ export const authRoutes = [
     element: <ResetPasswordSuccess3 />,
     roles: ["public"],
   },
-  //  {
-  //   path: routes.employeedetails,
-  //   route: Route,
-  //   element: <EmployeeDetails />,
-  //   roles: ["public"],
-  // },
+   {
+    path: routes.employeedetails,
+    route: Route,
+    element: <EmployeeDetails />,
+    roles: ["public"],
+  },
    {
     path: routes.employeeDetailPage,
     route: Route,

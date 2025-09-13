@@ -1,12 +1,10 @@
-// employeedetails 
-
 import React, { useState, useEffect } from 'react'
 import { Link, useParams, } from 'react-router-dom'
 import PredefinedDateRanges from '../../../core/common/datePicker'
 import Table from "../../../core/common/dataTable/index";
-import { all_routes } from "../../router/all_routes";
-import ImageWithBasePath from "../../../core/common/imageWithBasePath";
-import { employeereportDetails } from "../../../core/data/json/employeereportDetails";
+import { all_routes } from '../../router/all_routes';
+import ImageWithBasePath from '../../../core/common/imageWithBasePath';
+import { employeereportDetails } from '../../../core/data/json/employeereportDetails';
 import { DatePicker, TimePicker } from "antd";
 import CommonSelect from '../../../core/common/commonSelect';
 import CollapseHeader from '../../../core/common/collapse-header/collapse-header';
@@ -176,7 +174,6 @@ const EmployeeDetails = () => {
         if (!socket || !employeeId) return;
 
         let isMounted = true;
-
         setLoading(true);
 
         const timeoutId = setTimeout(() => {
@@ -219,80 +216,81 @@ const EmployeeDetails = () => {
         return (
             <div className='alert alert-warning d-flex align-items-center justify-content-center pt-50 mt-5'>
                 <Link to={`/employees/`} className="btn btn-outline-primary btn-sm">
-                    Go to Employees List
+                    Select an employee from the Employees List
                 </Link>
             </div>
         )
     }
 
-  const togglePasswordVisibility = (field: PasswordField) => {
-    setPasswordVisibility((prevState) => ({
-      ...prevState,
-      [field]: !prevState[field],
-    }));
-  };
+    if (loading) {
+        return <p className='text-center'>Loading employee data</p>
+    }
 
-  const getModalContainer = () => {
-    const modalElement = document.getElementById("modal-datepicker");
-    return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
-  };
-  const getModalContainer2 = () => {
-    const modalElement = document.getElementById("modal_datepicker");
-    return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
-  };
+    if (!employee) {
+        return <p className='text-center'>No Data found for this employee</p>
+    }
 
-  const data = employeereportDetails;
-  const columns = [
-    {
-      title: "Name",
-      dataIndex: "Name",
-      render: (text: String, record: any) => (
-        <Link to={all_routes.employeedetails} className="link-default">
-          Emp-001
-        </Link>
-      ),
-      sorter: (a: any, b: any) => a.Name.length - b.Name.length,
-    },
-    {
-      title: "Email",
-      dataIndex: "Email",
-      sorter: (a: any, b: any) => a.Email.length - b.Email.length,
-    },
-    {
-      title: "Created Date",
-      dataIndex: "CreatedDate",
-      sorter: (a: any, b: any) => a.CreatedDate.length - b.CreatedDate.length,
-    },
-    {
-      title: "Role",
-      dataIndex: "Role",
-      render: (text: String, record: any) => (
-        <span
-          className={`badge d-inline-flex align-items-center badge-xs ${
-            text === "Employee" ? "badge-pink-transparent" : "badge-soft-purple"
-          }`}
-        >
-          {text}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.Role.length - b.Role.length,
-    },
-    {
-      title: "Status",
-      dataIndex: "Status",
-      render: (text: String, record: any) => (
-        <span
-          className={`badge d-inline-flex align-items-center badge-xs ${
-            text === "Active" ? "badge-success" : "badge-danger"
-          }`}
-        >
-          <i className="ti ti-point-filled me-1" />
-          {text}
-        </span>
-      ),
-      sorter: (a: any, b: any) => a.Status.length - b.Status.length,
-    },
-  ];
+    const togglePasswordVisibility = (field: PasswordField) => {
+        setPasswordVisibility((prevState) => ({
+            ...prevState,
+            [field]: !prevState[field],
+        }));
+    };
+
+    const getModalContainer = () => {
+        const modalElement = document.getElementById('modal-datepicker');
+        return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
+    };
+    const getModalContainer2 = () => {
+        const modalElement = document.getElementById('modal_datepicker');
+        return modalElement ? modalElement : document.body; // Fallback to document.body if modalElement is null
+    };
+
+    const data = employeereportDetails;
+    const columns = [
+        {
+            title: "Name",
+            dataIndex: "Name",
+            render: (text: String, record: any) => (
+                <Link to={all_routes.employeedetails} className="link-default">Emp-001</Link>
+
+            ),
+            sorter: (a: any, b: any) => a.Name.length - b.Name.length,
+        },
+        {
+            title: "Email",
+            dataIndex: "Email",
+            sorter: (a: any, b: any) => a.Email.length - b.Email.length,
+        },
+        {
+            title: "Created Date",
+            dataIndex: "CreatedDate",
+            sorter: (a: any, b: any) => a.CreatedDate.length - b.CreatedDate.length,
+        },
+        {
+            title: "Role",
+            dataIndex: "Role",
+            render: (text: String, record: any) => (
+                <span className={`badge d-inline-flex align-items-center badge-xs ${text === 'Employee' ? 'badge-pink-transparent' : 'badge-soft-purple'}`}>
+                    {text}
+                </span>
+
+            ),
+            sorter: (a: any, b: any) => a.Role.length - b.Role.length,
+        },
+        {
+            title: "Status",
+            dataIndex: "Status",
+            render: (text: String, record: any) => (
+                <span className={`badge d-inline-flex align-items-center badge-xs ${text === 'Active' ? 'badge-success' : 'badge-danger'}`}>
+                    <i className="ti ti-point-filled me-1" />
+                    {text}
+                </span>
+
+            ),
+            sorter: (a: any, b: any) => a.Status.length - b.Status.length,
+        },
+    ]
 
     const departmentChoose = [
         { value: "Select", label: "Select" },
@@ -418,7 +416,7 @@ const EmployeeDetails = () => {
                                             </h5>
                                             <span className="badge badge-soft-dark fw-medium me-2">
                                                 <i className="ti ti-point-filled me-1" />
-                                                {employee?.role}
+                                                {employee?.role || 'employee'}
                                             </span>
                                             <span className="badge badge-soft-secondary fw-medium">
                                                 <i className="ti ti-point-filled me-1" />
@@ -613,7 +611,7 @@ const EmployeeDetails = () => {
                             </div>
                             <div className="card">
                                 <div className="card-body p-0">
-                                    {employee?.emergencyContacts.map((contact, index) => {
+                                    {employee?.emergencyContacts?.map((contact, index) => {
                                         const label = index === 0 ? "Primary" : "Secondary";
                                         return (
                                             <div key={index} className="p-3 border-bottom">
@@ -1186,7 +1184,7 @@ const EmployeeDetails = () => {
                                                             tabIndex={0}
                                                         >
                                                             <div className="row">
-                                                                {employee?.assets.map((asset, idx) => (
+                                                                {employee?.assets?.map((asset, idx) => (
                                                                     <div key={idx} className="col-md-12 d-flex mb-3">
                                                                         <div className="card flex-fill">
                                                                             <div className="card-body">
@@ -3221,4 +3219,4 @@ const EmployeeDetails = () => {
     )
 }
 
-export default EmployeeDetails;
+export default EmployeeDetails
