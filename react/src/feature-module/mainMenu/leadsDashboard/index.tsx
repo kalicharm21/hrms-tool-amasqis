@@ -177,202 +177,15 @@ const LeadsDasboard = () => {
     colors: ["#9CA3AF", "#F37438", "#9CA3AF", "#F37438", "#9CA3AF", "#F37438"],
     series: [
       {
-        name: "0",
+        name: "New Leads",
         data: [
-          {
-            x: "Mon",
-            y: 22,
-          },
-          {
-            x: "Tue",
-            y: 29,
-          },
-          {
-            x: "Wed",
-            y: 13,
-          },
-          {
-            x: "Thu",
-            y: 32,
-          },
-          {
-            x: "Fri",
-            y: 32,
-          },
-          {
-            x: "Sat",
-            y: 32,
-          },
-          {
-            x: "Sun",
-            y: 32,
-          },
-        ],
-      },
-      {
-        name: "20",
-        data: [
-          {
-            x: "Mon",
-            y: 22,
-            color: "#ff5722",
-          },
-          {
-            x: "Tue",
-            y: 29,
-          },
-          {
-            x: "Wed",
-            y: 13,
-          },
-          {
-            x: "Thu",
-            y: 32,
-          },
-          {
-            x: "Fri",
-            y: 32,
-          },
-          {
-            x: "Sat",
-            y: 32,
-          },
-          {
-            x: "Sun",
-            y: 32,
-          },
-        ],
-      },
-      {
-        name: "40",
-        data: [
-          {
-            x: "Mon",
-            y: 22,
-          },
-          {
-            x: "Tue",
-            y: 29,
-          },
-          {
-            x: "Wed",
-            y: 13,
-          },
-          {
-            x: "Thu",
-            y: 32,
-          },
-          {
-            x: "Fri",
-            y: 32,
-          },
-          {
-            x: "Sat",
-            y: 32,
-          },
-          {
-            x: "Sun",
-            y: 32,
-          },
-        ],
-      },
-      {
-        name: "60",
-        data: [
-          {
-            x: "Mon",
-            y: 0,
-          },
-          {
-            x: "Tue",
-            y: 29,
-          },
-          {
-            x: "Wed",
-            y: 13,
-          },
-          {
-            x: "Thu",
-            y: 32,
-          },
-          {
-            x: "Fri",
-            y: 0,
-          },
-          {
-            x: "Sat",
-            y: 0,
-          },
-          {
-            x: "Sun",
-            y: 32,
-          },
-        ],
-      },
-      {
-        name: "80",
-        data: [
-          {
-            x: "Mon",
-            y: 0,
-          },
-          {
-            x: "Tue",
-            y: 20,
-          },
-          {
-            x: "Wed",
-            y: 13,
-          },
-          {
-            x: "Thu",
-            y: 32,
-          },
-          {
-            x: "Fri",
-            y: 0,
-          },
-          {
-            x: "Sat",
-            y: 0,
-          },
-          {
-            x: "Sun",
-            y: 32,
-          },
-        ],
-      },
-      {
-        name: "120",
-        data: [
-          {
-            x: "Mon",
-            y: 0,
-          },
-          {
-            x: "Tue",
-            y: 0,
-          },
-          {
-            x: "Wed",
-            y: 75,
-          },
-          {
-            x: "Thu",
-            y: 0,
-          },
-          {
-            x: "Fri",
-            y: 0,
-          },
-          {
-            x: "Sat",
-            y: 0,
-          },
-          {
-            x: "Sun",
-            y: 0,
-          },
+          { x: "Mon", y: 0 },
+          { x: "Tue", y: 0 },
+          { x: "Wed", y: 0 },
+          { x: "Thu", y: 0 },
+          { x: "Fri", y: 0 },
+          { x: "Sat", y: 0 },
+          { x: "Sun", y: 0 },
         ],
       },
     ],
@@ -1273,36 +1086,15 @@ const LeadsDasboard = () => {
         ...prev,
         series: [
           {
-            name: "0",
+            name: "New Leads",
             data: [
-              {
-                x: "Mon",
-                y: 0,
-              },
-              {
-                x: "Tue",
-                y: 0,
-              },
-              {
-                x: "Wed",
-                y: 0,
-              },
-              {
-                x: "Thu",
-                y: 0,
-              },
-              {
-                x: "Fri",
-                y: 0,
-              },
-              {
-                x: "Sat",
-                y: 0,
-              },
-              {
-                x: "Sun",
-                y: 0,
-              },
+              { x: "Mon", y: 0 },
+              { x: "Tue", y: 0 },
+              { x: "Wed", y: 0 },
+              { x: "Thu", y: 0 },
+              { x: "Fri", y: 0 },
+              { x: "Sat", y: 0 },
+              { x: "Sun", y: 0 },
             ],
           },
         ],
@@ -2753,68 +2545,44 @@ const LeadsDasboard = () => {
                   </div>
                 </div>
                 <div className="card-body schedule-timeline activity-timeline">
-                  <div className="d-flex align-items-start">
-                    <div className="avatar avatar-md avatar-rounded bg-success flex-shrink-0">
-                      <i className="ti ti-phone fs-20" />
+                  {dashboardData?.recentActivities && dashboardData.recentActivities.length > 0 ? (
+                    dashboardData.recentActivities.map((activity: any, index: number) => (
+                      <div key={index} className="d-flex align-items-start">
+                        <div className={`avatar avatar-md avatar-rounded ${
+                          activity.type === 'call' ? 'bg-success' :
+                          activity.type === 'message' ? 'bg-info' :
+                          activity.type === 'meeting' ? 'bg-purple' :
+                          activity.type === 'email' ? 'bg-warning' :
+                          'bg-secondary'
+                        } flex-shrink-0`}>
+                          <i className={`ti ${
+                            activity.type === 'call' ? 'ti-phone' :
+                            activity.type === 'message' ? 'ti-message-circle-2' :
+                            activity.type === 'meeting' ? 'ti-user-circle' :
+                            activity.type === 'email' ? 'ti-mail' :
+                            'ti-activity'
+                          } fs-20`} />
+                        </div>
+                        <div className={`flex-fill ps-3 ${index < dashboardData.recentActivities.length - 1 ? 'pb-4' : ''} timeline-flow`}>
+                          <p className="fw-medium text-gray-9 mb-1">
+                            <Link to="#">
+                              {activity.description || activity.title || 'Activity'}
+                            </Link>
+                          </p>
+                          <span>{activity.time || new Date(activity.createdAt || activity.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="d-flex align-items-center justify-content-center py-4">
+                      <div className="text-center">
+                        <div className="avatar avatar-xl avatar-rounded bg-light flex-shrink-0 mb-3">
+                          <i className="ti ti-activity fs-24 text-muted" />
+                        </div>
+                        <p className="text-muted">No recent activities found</p>
+                      </div>
                     </div>
-                    <div className="flex-fill ps-3 pb-4 timeline-flow">
-                      <p className="fw-medium text-gray-9 mb-1">
-                        <Link to="activity.html">
-                          Drain responded to your appointment schedule question.
-                        </Link>
-                      </p>
-                      <span>09:25 PM</span>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <div className="avatar avatar-md avatar-rounded bg-info flex-shrink-0">
-                      <i className="ti ti-message-circle-2 fs-20" />
-                    </div>
-                    <div className="flex-fill ps-3 pb-4 timeline-flow">
-                      <p className="fw-medium text-gray-9 mb-1">
-                        <Link to="activity.html">
-                          You sent 1 Message to the James.
-                        </Link>
-                      </p>
-                      <span>10:25 PM</span>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <div className="avatar avatar-md avatar-rounded bg-success flex-shrink-0">
-                      <i className="ti ti-phone fs-20" />
-                    </div>
-                    <div className="flex-fill ps-3 pb-4 timeline-flow">
-                      <p className="fw-medium text-gray-9 mb-1">
-                        <Link to="activity.html">
-                          Denwar responded to your appointment on 25 Jan 2025,
-                          08:15 PM
-                        </Link>
-                      </p>
-                      <span>09:25 PM</span>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <div className="avatar avatar-md avatar-rounded bg-purple flex-shrink-0">
-                      <i className="ti ti-user-circle fs-20" />
-                    </div>
-                    <div className="flex-fill ps-3 timeline-flow">
-                      <p className="fw-medium text-gray-9 mb-1">
-                        <Link
-                          to="activity.html"
-                          className="d-flex align-items-center"
-                        >
-                          Meeting With{" "}
-                          <ImageWithBasePath
-                            src="assets/img/users/user-58.jpg"
-                            className="avatar avatar-sm rounded-circle mx-2"
-                            alt="Img"
-                          />
-                          Abraham
-                        </Link>
-                      </p>
-                      <span>09:25 PM</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2831,89 +2599,34 @@ const LeadsDasboard = () => {
                   </div>
                 </div>
                 <div className="card-body">
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-27.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-2">Today at 9:42 AM</p>
-                      <div className="d-flex align-items-center">
-                        <Link
-                          to="#"
-                          className="avatar avatar-sm border flex-shrink-0 me-2"
-                        >
-                          <ImageWithBasePath
-                            src="assets/img/social/pdf-icon.svg"
-                            className="w-auto h-auto"
-                            alt="Img"
-                          />
-                        </Link>
-                        <h6 className="fw-normal">
-                          <Link to="#">EY_review.pdf</Link>
-                        </h6>
+                  {dashboardData?.recentLeads && dashboardData.recentLeads.length > 0 ? (
+                    dashboardData.recentLeads.slice(0, 4).map((lead: any, index: number) => (
+                      <div key={index} className={`d-flex align-items-start ${index < 3 ? 'mb-4' : ''}`}>
+                        <div className="avatar avatar-sm avatar-rounded bg-primary flex-shrink-0">
+                          <i className="ti ti-user fs-16 text-white" />
+                        </div>
+                        <div className="ms-2">
+                          <h6 className="fs-14 fw-medium text-truncate mb-1">
+                            New lead: {lead.name || lead.firstName || 'Unknown'} 
+                            {lead.company && ` from ${lead.company}`}
+                          </h6>
+                          <p className="fs-13 mb-0">
+                            {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'Recent'}
+                            {lead.source && ` • Source: ${lead.source}`}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="d-flex align-items-center justify-content-center py-4">
+                      <div className="text-center">
+                        <div className="avatar avatar-xl avatar-rounded bg-light flex-shrink-0 mb-3">
+                          <i className="ti ti-bell fs-24 text-muted" />
+                        </div>
+                        <p className="text-muted">No new notifications</p>
                       </div>
                     </div>
-                  </div>
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-28.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-0">Today at 10:00 AM</p>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start mb-4">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-29.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-2">Today at 10:50 AM</p>
-                      <div className="d-flex align-items-center">
-                        <Link to="#" className="btn btn-primary btn-sm me-2">
-                          Approve
-                        </Link>
-                        <Link to="#" className="btn btn-outline-primary btn-sm">
-                          Decline
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="d-flex align-items-start">
-                    <Link to="#" className="avatar flex-shrink-0">
-                      <ImageWithBasePath
-                        src="assets/img/users/user-33.jpg"
-                        className="rounded-circle border border-2"
-                        alt="img"
-                      />
-                    </Link>
-                    <div className="ms-2">
-                      <h6 className="fs-14 fw-medium text-truncate mb-1">
-                        Lex Murphy requested access to UNIX{" "}
-                      </h6>
-                      <p className="fs-13 mb-0">Today at 05:00 PM</p>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
