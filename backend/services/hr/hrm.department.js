@@ -4,7 +4,7 @@ import { getTenantCollections } from "../../config/db.js";
 
 export const allDepartments = async (companyId, hrId) => {
   try {
-    if (!companyId || !hrId) {
+    if (!companyId) {
       return {
         done: false,
         error: "All fields are required including file upload",
@@ -35,7 +35,7 @@ export const allDepartments = async (companyId, hrId) => {
 export const addDepartment = async (companyId, hrId, payload) => {
   console.log("in add depart");
   try {
-    if (!companyId || !hrId || !payload) {
+    if (!companyId || !payload) {
       return { done: false, error: "Missing required fields" };
     }
     if (!payload.department) {
@@ -78,7 +78,7 @@ export const addDepartment = async (companyId, hrId, payload) => {
 
 export const displayDepartment = async (companyId, hrId, filters = {}) => {
   try {
-    if (!companyId || !hrId) {
+    if (!companyId) {
       return { done: false, error: "Missing required fields" };
     }
 
@@ -170,7 +170,6 @@ export const updateDepartment = async (companyId, hrId, payload) => {
   try {
     if (
       !companyId ||
-      !hrId ||
       !payload?.departmentId ||
       !payload?.department ||
       !payload?.status
@@ -277,7 +276,7 @@ export const updateDepartment = async (companyId, hrId, payload) => {
 
 export const deleteDepartment = async (companyId, hrId, departmentId) => {
   try {
-    if (!companyId || !hrId || !departmentId) {
+    if (!companyId || !departmentId) {
       return { done: false, error: "Missing required fields" };
     }
 

@@ -6,6 +6,7 @@ import { maskAccountNumber } from "../../utils/maskAccNo.js";
 
 export const getEmployeesStats = async (companyId, hrId, filters = {}) => {
   try {
+    console.log("reqyesr");
     const collections = getTenantCollections(companyId);
     // const hrCount = await collections.hr.countDocuments({
     //   userId: hrId,
@@ -133,6 +134,13 @@ export const getEmployeesStats = async (companyId, hrId, filters = {}) => {
           },
         }),
       ]);
+
+    console.log("{Debug - Employee get stats} : ", {
+      totalEmployees,
+      activeCount,
+      inactiveCount,
+      newJoinersCount,
+    });
 
     return {
       done: true,
@@ -422,7 +430,7 @@ export const getEmployeeGridsStats = async (companyId, hrId, filters) => {
 
 export const updateEmployeeDetails = async (companyId, hrId, payload) => {
   try {
-    if (!companyId || !hrId) {
+    if (!companyId) {
       return { done: false, error: "Missing required parameters" };
     }
     const collections = getTenantCollections(companyId);
@@ -475,7 +483,7 @@ export const updateEmployeeDetails = async (companyId, hrId, payload) => {
 
 export const getPermissions = async (companyId, hrId, employeeId) => {
   try {
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       return { done: false, error: "Missing required parameters" };
     }
 
@@ -661,7 +669,7 @@ export const updatePermissions = async (
   payload
 ) => {
   try {
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       return { done: false, error: "Missing required parameters" };
     }
 
@@ -777,7 +785,7 @@ export const updatePermissions = async (
 
 export const deleteEmployee = async (companyId, hrId = 1, employeeId) => {
   try {
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       return { done: false, error: "Missing required parameters" };
     }
 
@@ -946,7 +954,7 @@ export const addEmployee = async (
 
 export const getEmployeeProjectsStats = async (companyId, hrId, employeeId) => {
   try {
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       return { done: false, error: "Missing required parameters" };
     }
 
@@ -1034,7 +1042,7 @@ export const getBankStatutory = async (companyId, hrId, employeeId) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1103,7 +1111,7 @@ export const getFamilyInfo = async (companyId, hrId, employeeId) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1170,7 +1178,7 @@ export const getExperienceInfo = async (companyId, hrId, employeeId) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1238,7 +1246,7 @@ export const updateFamilyInfo = async (companyId, hrId, payload) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !payload?.employeeId || !payload?.familyInfo) {
+    if (!companyId || !payload?.employeeId || !payload?.familyInfo) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1314,7 +1322,7 @@ export const updateBankStatutory = async (companyId, hrId, payload = {}) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !payload) {
+    if (!companyId || !payload) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1417,7 +1425,7 @@ export const updateBankDetails = async (companyId, hrId, payload = {}) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !payload?.employeeId || !payload?.bankDetails) {
+    if (!companyId || !payload?.employeeId || !payload?.bankDetails) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1492,12 +1500,7 @@ export const updateExperience = async (companyId, hrId, payload = {}) => {
   try {
     session.startTransaction();
 
-    if (
-      !companyId ||
-      !hrId ||
-      !payload?.employeeId ||
-      !payload?.experienceDetails
-    ) {
+    if (!companyId || !payload?.employeeId || !payload?.experienceDetails) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1571,12 +1574,7 @@ export const updateEducation = async (companyId, hrId, payload = {}) => {
   try {
     session.startTransaction();
 
-    if (
-      !companyId ||
-      !hrId ||
-      !payload?.employeeId ||
-      !payload?.educationDetails
-    ) {
+    if (!companyId || !payload?.employeeId || !payload?.educationDetails) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1655,12 +1653,7 @@ export const updateEmergencyContacts = async (
   try {
     session.startTransaction();
 
-    if (
-      !companyId ||
-      !hrId ||
-      !payload?.employeeId ||
-      !payload?.emergencyContacts
-    ) {
+    if (!companyId || !payload?.employeeId || !payload?.emergencyContacts) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1746,7 +1739,6 @@ export const raiseAssetIssue = async (companyId, hrId, payload = {}) => {
 
     if (
       !companyId ||
-      !hrId ||
       !payload?.assetId ||
       !payload?.description ||
       payload?.employeeId
@@ -1838,7 +1830,7 @@ export const getBankDetails = async (companyId, hrId, employeeId) => {
   try {
     session.startTransaction();
 
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       await session.abortTransaction();
       return { done: false, error: "Missing required parameters" };
     }
@@ -1912,7 +1904,7 @@ export const getBankDetails = async (companyId, hrId, employeeId) => {
 
 export const getEmployeeDetails = async (companyId, hrId, employeeId) => {
   try {
-    if (!companyId || !hrId || !employeeId) {
+    if (!companyId || !employeeId) {
       return { done: false, message: "Missing required parameters" };
     }
 

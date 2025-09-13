@@ -1,10 +1,9 @@
-
-import { ObjectId } from 'mongodb';
-import { getStartOfDayInTimeZone } from '../../utils/startDayTimeZone.js';
-import { getTenantCollections } from '../../config/db.js';
-import { getWorkingDays } from '../../utils/workingDays.js'
-import { fillSalaryMonths } from '../../utils/fillMissingMonths.js';
-import { DateTime } from 'luxon';
+import { ObjectId } from "mongodb";
+import { getStartOfDayInTimeZone } from "../../utils/startDayTimeZone.js";
+import { getTenantCollections } from "../../config/db.js";
+import { getWorkingDays } from "../../utils/workingDays.js";
+import { fillSalaryMonths } from "../../utils/fillMissingMonths.js";
+import { DateTime } from "luxon";
 
 const ALLOWED_STATUSES = ["onHold", "ongoing", "completed", "pending"];
 
@@ -62,7 +61,8 @@ export const getAttendanceStats = async (companyId, employeeId, year) => {
     const currentYear = new Date().getFullYear();
 
     const selectedYear = Number.isInteger(Number(year))
-      ? Number(year) : currentYear;
+      ? Number(year)
+      : currentYear;
 
     const isCurrentYear = selectedYear === currentYear;
 
@@ -78,25 +78,24 @@ export const getAttendanceStats = async (companyId, employeeId, year) => {
 
     const [presentDates, counts] = await Promise.all([
       collections.attendance.distinct("date", attendanceQuery),
-      collections.attendance.aggregate([
-        { $match: attendanceQuery },
-        {
-          $facet: {
-            onTime: [
-              { $match: { attendanceStatus: "onTime" } },
-              { $count: "count" },
-            ],
-            late: [
-              { $match: { attendanceStatus: "late" } },
-              { $count: "count" },
-            ],
-            wfh: [
-              { $match: { mode: "workFromHome" } },
-              { $count: "count" },
-            ],
+      collections.attendance
+        .aggregate([
+          { $match: attendanceQuery },
+          {
+            $facet: {
+              onTime: [
+                { $match: { attendanceStatus: "onTime" } },
+                { $count: "count" },
+              ],
+              late: [
+                { $match: { attendanceStatus: "late" } },
+                { $count: "count" },
+              ],
+              wfh: [{ $match: { mode: "workFromHome" } }, { $count: "count" }],
+            },
           },
-        },
-      ]).toArray(),
+        ])
+        .toArray(),
     ]);
 
     const totalWorkedDays = presentDates.length;
@@ -128,7 +127,6 @@ export const getAttendanceStats = async (companyId, employeeId, year) => {
 
 export const getLeaveStats = async (companyId, employeeId, year) => {
   try {
-
     const collections = getTenantCollections(companyId);
 
     const detailsDoc = await collections.details.findOne();
@@ -136,31 +134,35 @@ export const getLeaveStats = async (companyId, employeeId, year) => {
 
     const totalLeavesAllowed = detailsDoc.totalLeavesAllowed || 0;
 
-    const inputYear = !isNaN(parseInt(year)) ? parseInt(year) : new Date().getFullYear();
+    const inputYear = !isNaN(parseInt(year))
+      ? parseInt(year)
+      : new Date().getFullYear();
 
     const fromDate = new Date(`${inputYear}-01-01T00:00:00.000Z`);
     const toDate = new Date(`${inputYear}-12-31T23:59:59.999Z`);
 
-    const allLeaves = await collections.leaves.find({
-      userId: employeeId,
-      startDate: { $lte: toDate },
-      endDate: { $gte: fromDate }
-    }).toArray();
+    const allLeaves = await collections.leaves
+      .find({
+        userId: employeeId,
+        startDate: { $lte: toDate },
+        endDate: { $gte: fromDate },
+      })
+      .toArray();
 
     const takenLeaves = allLeaves
-      .filter(l => l.status === 'approved')
+      .filter((l) => l.status === "approved")
       .reduce((sum, l) => sum + (l.noOfDays || 0), 0);
 
     const sickLeaves = allLeaves
-      .filter(l => l.status === 'approved' && l.leaveType === 'sick')
+      .filter((l) => l.status === "approved" && l.leaveType === "sick")
       .reduce((sum, l) => sum + (l.noOfDays || 0), 0);
 
     const lossOfPay = allLeaves
-      .filter(l => l.leaveType === 'lossOfPay' && l.status === 'approved')
+      .filter((l) => l.leaveType === "lossOfPay" && l.status === "approved")
       .reduce((sum, l) => sum + (l.noOfDays || 0), 0);
 
     const requestedLeaves = allLeaves
-      .filter(l => l.status === 'pending')
+      .filter((l) => l.status === "pending")
       .reduce((sum, l) => sum + (l.noOfDays || 0), 0);
 
     return {
@@ -171,7 +173,7 @@ export const getLeaveStats = async (companyId, employeeId, year) => {
         sickLeaves,
         lossOfPay,
         requestedLeaves,
-      }
+      },
     };
   } catch (err) {
     console.error("Error in getLeaveStats:", err);
@@ -184,7 +186,9 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
     const collections = getTenantCollections(companyId);
     const { leaveType, startDate, endDate, reason, noOfDays } = leaveData;
 
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
       return { done: false, error: "Employee not found" };
     }
@@ -198,35 +202,38 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
     const totalAllowedLeaves = detailsDoc.totalLeavesAllowed || 0;
     const pendingRequest = await collections.leaves.findOne({
       userId: employeeId,
-      status: "pending"
+      status: "pending",
     });
 
     if (pendingRequest) {
       return {
         done: false,
-        error: "You already have a pending leave request. Please wait until it's processed."
+        error:
+          "You already have a pending leave request. Please wait until it's processed.",
       };
     }
 
-    const takenLeaves = await collections.leaves.aggregate([
-      {
-        $match: {
-          userId: employeeId,           // Match by userId field
-          status: "approved",
-          startDate: {
-            $gte: new Date(currentYear, 0, 1),
-            $lte: new Date(currentYear, 11, 31, 23, 59, 59, 999)
+    const takenLeaves = await collections.leaves
+      .aggregate([
+        {
+          $match: {
+            userId: employeeId, // Match by userId field
+            status: "approved",
+            startDate: {
+              $gte: new Date(currentYear, 0, 1),
+              $lte: new Date(currentYear, 11, 31, 23, 59, 59, 999),
+            },
+            leaveType: { $in: ["causual", "sick"] },
           },
-          leaveType: { $in: ["causual", "sick"] }
-        }
-      },
-      {
-        $group: {
-          _id: "$userId",               // Group by userId field
-          total: { $sum: "$noOfDays" }  // Sum the noOfDays field
-        }
-      }
-    ]).toArray();
+        },
+        {
+          $group: {
+            _id: "$userId", // Group by userId field
+            total: { $sum: "$noOfDays" }, // Sum the noOfDays field
+          },
+        },
+      ])
+      .toArray();
 
     const alreadyTaken = takenLeaves[0]?.total || 0;
 
@@ -242,20 +249,20 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
       noOfDays,
       status: "pending",
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     const result = await collections.leaves.insertOne(leaveRequest);
-    const newRemaining = remainingDays - noOfDays >= 0 ? remainingDays - noOfDays : 0;
+    const newRemaining =
+      remainingDays - noOfDays >= 0 ? remainingDays - noOfDays : 0;
 
     return {
       done: true,
       data: {
         message: `Leave request submitted successfully as "${finalLeaveType}".`,
-        remainingDays: newRemaining
-      }
+        remainingDays: newRemaining,
+      },
     };
-
   } catch (error) {
     return { done: false, error: error.message };
   }
@@ -264,9 +271,11 @@ export const addLeaveRequest = async (companyId, employeeId, leaveData) => {
 export const punchIn = async (companyId, employeeId, timestamp) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company' };
+      return { done: false, error: "Employee not found in this company" };
     }
 
     let nowUtc;
@@ -274,27 +283,38 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
     if (timestamp) {
       if (timestamp instanceof Date) {
         nowUtc = DateTime.fromJSDate(timestamp).toUTC();
-      } else if (typeof timestamp === 'string') {
-        nowUtc = DateTime.fromISO(timestamp, { zone: 'utc' });
+      } else if (typeof timestamp === "string") {
+        nowUtc = DateTime.fromISO(timestamp, { zone: "utc" });
       } else {
-        return { done: false, error: 'Invalid timestamp. Must be a Date object or ISO string.' };
+        return {
+          done: false,
+          error: "Invalid timestamp. Must be a Date object or ISO string.",
+        };
       }
     } else {
       nowUtc = DateTime.utc();
     }
 
     if (!nowUtc.isValid) {
-      return { done: false, error: 'Provided timestamp is invalid.' };
+      return { done: false, error: "Provided timestamp is invalid." };
     }
 
     const companyDetails = await collections.details.findOne({});
-    if (!companyDetails || !companyDetails.punchInTime || !companyDetails.timeZone) {
-      return { done: false, error: 'Company settings incomplete (timezone or punch-in time missing)' };
+    if (
+      !companyDetails ||
+      !companyDetails.punchInTime ||
+      !companyDetails.timeZone
+    ) {
+      return {
+        done: false,
+        error:
+          "Company settings incomplete (timezone or punch-in time missing)",
+      };
     }
 
     const timeZone = companyDetails.timeZone;
     const localNow = nowUtc.setZone(timeZone);
-    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
+    const todayCompany = localNow.startOf("day").toUTC().toJSDate();
 
     const existingAttendance = await collections.attendance.findOne({
       userId: employeeId,
@@ -302,10 +322,12 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
     });
 
     if (existingAttendance) {
-      return { done: false, error: 'Already punched in today' };
+      return { done: false, error: "Already punched in today" };
     }
 
-    const [shiftHour, shiftMinute] = companyDetails.punchInTime.split(':').map(Number);
+    const [shiftHour, shiftMinute] = companyDetails.punchInTime
+      .split(":")
+      .map(Number);
     const scheduledStart = localNow.set({
       hour: shiftHour,
       minute: shiftMinute,
@@ -316,20 +338,28 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
     const lateBuffer = companyDetails.lateBufferMinutes ?? 5;
     const absentCutoff = companyDetails.absentCutoffMinutes ?? 60;
 
-    const diffMinutes = localNow.diff(scheduledStart, 'minutes').toObject().minutes;
+    const diffMinutes = localNow
+      .diff(scheduledStart, "minutes")
+      .toObject().minutes;
 
-    let attendanceStatus = '';
+    let attendanceStatus = "";
 
     if (diffMinutes < -15) {
-      return { done: false, error: 'Cannot punch in before 15 mins of punch in time' };
+      return {
+        done: false,
+        error: "Cannot punch in before 15 mins of punch in time",
+      };
     }
 
     if (diffMinutes <= lateBuffer) {
-      attendanceStatus = 'onTime';
+      attendanceStatus = "onTime";
     } else if (diffMinutes <= absentCutoff) {
-      attendanceStatus = 'late';
+      attendanceStatus = "late";
     } else {
-      return { done: false, error: 'Punch-in window has closed. You are marked absent.' };
+      return {
+        done: false,
+        error: "Punch-in window has closed. You are marked absent.",
+      };
     }
 
     const insertedData = {
@@ -363,43 +393,58 @@ export const punchIn = async (companyId, employeeId, timestamp) => {
 export const punchOut = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({userId: employeeId });
-    if (!employee) return { done: false, error: 'Employee not found' };
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
+    if (!employee) return { done: false, error: "Employee not found" };
 
     const companyDetails = await collections.details.findOne({});
-    if (!companyDetails?.timeZone) return { done: false, error: 'Company settings incomplete' };
+    if (!companyDetails?.timeZone)
+      return { done: false, error: "Company settings incomplete" };
 
     const nowUtc = DateTime.utc();
     const localNow = nowUtc.setZone(companyDetails.timeZone);
-    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
+    const todayCompany = localNow.startOf("day").toUTC().toJSDate();
 
     const attendanceRecord = await collections.attendance.findOne({
       userId: employeeId,
       date: {
         $gte: todayCompany,
-        $lt: new Date(todayCompany.getTime() + 24 * 60 * 60 * 1000)
-      }
+        $lt: new Date(todayCompany.getTime() + 24 * 60 * 60 * 1000),
+      },
     });
 
-    if (!attendanceRecord) return { done: false, error: 'Punch-in not found' };
-    if (attendanceRecord.punchOut) return { done: false, error: 'Already punched out' };
+    if (!attendanceRecord) return { done: false, error: "Punch-in not found" };
+    if (attendanceRecord.punchOut)
+      return { done: false, error: "Already punched out" };
 
     let expectedPunchOut;
     if (companyDetails.punchOutTime) {
-      const [outHour, outMinute] = companyDetails.punchOutTime.split(':').map(Number);
-      expectedPunchOut = localNow.startOf('day').set({ hour: outHour, minute: outMinute });
+      const [outHour, outMinute] = companyDetails.punchOutTime
+        .split(":")
+        .map(Number);
+      expectedPunchOut = localNow
+        .startOf("day")
+        .set({ hour: outHour, minute: outMinute });
 
       if (localNow < expectedPunchOut) {
-        return { done: false, error: 'Cannot punch out before scheduled time' };
+        return { done: false, error: "Cannot punch out before scheduled time" };
       }
 
       if (localNow > expectedPunchOut) {
-        if (attendanceRecord.overtimeRequestStatus === 'approved' && attendanceRecord.expectedOvertimeHours > 0) {
-          const overtimeEnd = expectedPunchOut.plus({ hours: attendanceRecord.expectedOvertimeHours });
+        if (
+          attendanceRecord.overtimeRequestStatus === "approved" &&
+          attendanceRecord.expectedOvertimeHours > 0
+        ) {
+          const overtimeEnd = expectedPunchOut.plus({
+            hours: attendanceRecord.expectedOvertimeHours,
+          });
           if (localNow < overtimeEnd) {
             return {
               done: false,
-              error: `Overtime approved but cannot punch out before ${overtimeEnd.toFormat('HH:mm')}`
+              error: `Overtime approved but cannot punch out before ${overtimeEnd.toFormat(
+                "HH:mm"
+              )}`,
             };
           }
         }
@@ -408,7 +453,10 @@ export const punchOut = async (companyId, employeeId) => {
 
     const punchIn = DateTime.fromJSDate(attendanceRecord.punchIn);
     const breakDuration = attendanceRecord.totalBreakMins || 0;
-    const totalProductiveDuration = Math.max(nowUtc.diff(punchIn, 'minutes').minutes - breakDuration, 0);
+    const totalProductiveDuration = Math.max(
+      nowUtc.diff(punchIn, "minutes").minutes - breakDuration,
+      0
+    );
     const productiveHours = (totalProductiveDuration / 60).toFixed(2);
 
     const updateObj = {
@@ -426,9 +474,8 @@ export const punchOut = async (companyId, employeeId) => {
       data: {
         ...attendanceRecord,
         ...updateObj,
-      }
+      },
     };
-
   } catch (error) {
     return { done: false, error: error.message };
   }
@@ -437,7 +484,9 @@ export const punchOut = async (companyId, employeeId) => {
 export const startBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
+    const employee = await collections.employees.findOne({
+      _id: new ObjectId(employeeId),
+    });
     if (!employee) {
       return { done: false, error: "Employee not found in this company" };
     }
@@ -446,7 +495,7 @@ export const startBreak = async (companyId, employeeId) => {
     const timeZone = companyDetails.timeZone;
     const nowUtc = DateTime.utc();
     const localNow = nowUtc.setZone(timeZone);
-    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
+    const todayCompany = localNow.startOf("day").toUTC().toJSDate();
 
     const attendance = await collections.attendance.findOne({
       employeeId: new ObjectId(employeeId),
@@ -454,10 +503,13 @@ export const startBreak = async (companyId, employeeId) => {
     });
 
     if (!attendance) {
-      return { done: false, error: "No attendance record found. Please punch in first." };
+      return {
+        done: false,
+        error: "No attendance record found. Please punch in first.",
+      };
     }
 
-    const hasOpenBreak = attendance.breakDetails?.some(b => !b.end);
+    const hasOpenBreak = attendance.breakDetails?.some((b) => !b.end);
     if (hasOpenBreak) {
       return { done: false, error: "An active break is already in progress." };
     }
@@ -473,7 +525,7 @@ export const startBreak = async (companyId, employeeId) => {
     );
     return {
       done: true,
-      message: "Break Started successfully!"
+      message: "Break Started successfully!",
     };
   } catch (error) {
     return {
@@ -486,47 +538,60 @@ export const startBreak = async (companyId, employeeId) => {
 export const resumeBreak = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ _id: new ObjectId(employeeId) });
+    const employee = await collections.employees.findOne({
+      _id: new ObjectId(employeeId),
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company' };
+      return { done: false, error: "Employee not found in this company" };
     }
 
     const companyDetails = await collections.details.findOne({});
     const timeZone = companyDetails.timeZone;
     const nowUtc = DateTime.utc();
     const localNow = nowUtc.setZone(timeZone);
-    const todayCompany = localNow.startOf('day').toUTC().toJSDate();
+    const todayCompany = localNow.startOf("day").toUTC().toJSDate();
 
     const attendance = await collections.attendance.findOne({
       employeeId: new ObjectId(employeeId),
-      date: todayCompany
+      date: todayCompany,
     });
 
     if (!attendance) {
-      return { done: false, error: 'No attendance record found. Please punch in first.' };
+      return {
+        done: false,
+        error: "No attendance record found. Please punch in first.",
+      };
     }
 
-    const hasOpenBreak = attendance.breakDetails?.some(b => !b.end);
+    const hasOpenBreak = attendance.breakDetails?.some((b) => !b.end);
     if (!hasOpenBreak) {
-      return { done: false, error: 'No active break found to resume.' };
+      return { done: false, error: "No active break found to resume." };
     }
 
     await collections.attendance.updateOne(
       {
         _id: attendance._id,
-        "breakDetails.end": null
+        "breakDetails.end": null,
       },
       {
         $set: {
-          "breakDetails.$.end": localNow.toJSDate()
-        }
+          "breakDetails.$.end": localNow.toJSDate(),
+        },
       }
     );
 
-    const updatedAttendance = await collections.attendance.findOne({ _id: attendance._id });
+    const updatedAttendance = await collections.attendance.findOne({
+      _id: attendance._id,
+    });
     const totalBreakMins = updatedAttendance.breakDetails.reduce((sum, br) => {
       if (br.start && br.end) {
-        return sum + Math.round((new Date(br.end).getTime() - new Date(br.start).getTime()) / (1000 * 60));
+        return (
+          sum +
+          Math.round(
+            (new Date(br.end).getTime() - new Date(br.start).getTime()) /
+              (1000 * 60)
+          )
+        );
       }
       return sum;
     }, 0);
@@ -538,12 +603,12 @@ export const resumeBreak = async (companyId, employeeId) => {
 
     return {
       done: true,
-      data: { totalBreakMins }
+      data: { totalBreakMins },
     };
   } catch (error) {
     return {
       done: false,
-      error: error.message || 'Unknown error'
+      error: error.message || "Unknown error",
     };
   }
 };
@@ -553,52 +618,62 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
     const collections = getTenantCollections(companyId);
 
     // Get company timezone first
-    const companyDetails = await collections.details.findOne({}, {
-      projection: {
-        timeZone: 1,
-        totalWorkHoursPerDay: 1,
-        totalWorkHoursPerWeek: 1,
-        totalWorkHoursPerMonth: 1,
-        totalOvertimePerMonth: 1
+    const companyDetails = await collections.details.findOne(
+      {},
+      {
+        projection: {
+          timeZone: 1,
+          totalWorkHoursPerDay: 1,
+          totalWorkHoursPerWeek: 1,
+          totalWorkHoursPerMonth: 1,
+          totalOvertimePerMonth: 1,
+        },
       }
-    });
+    );
 
     if (!companyDetails) {
       return {
         done: false,
-        error: "Company details not found"
+        error: "Company details not found",
       };
     }
 
-    const timeZone = companyDetails.timeZone || 'UTC';
+    const timeZone = companyDetails.timeZone || "UTC";
     const now = DateTime.now().setZone(timeZone);
 
     // Set up time periods in company timezone
     const selectedYear = !isNaN(year) && +year >= 1970 ? +year : now.year;
-    const startOfYear = DateTime.fromObject({ year: selectedYear, month: 1, day: 1 }, { zone: timeZone });
+    const startOfYear = DateTime.fromObject(
+      { year: selectedYear, month: 1, day: 1 },
+      { zone: timeZone }
+    );
     const endOfYear = startOfYear.plus({ years: 1 });
 
-    const startOfToday = now.startOf('day');
+    const startOfToday = now.startOf("day");
     const endOfToday = startOfToday.plus({ days: 1 });
 
-    const startOfWeek = now.startOf('week');
+    const startOfWeek = now.startOf("week");
     const endOfWeek = startOfWeek.plus({ weeks: 1 });
 
-    const startOfMonth = now.startOf('month');
+    const startOfMonth = now.startOf("month");
     const endOfMonth = startOfMonth.plus({ months: 1 });
 
     const HOURS_PER_DAY = companyDetails.totalWorkHoursPerDay ?? 8;
-    const HOURS_PER_WEEK = companyDetails.totalWorkHoursPerWeek ?? HOURS_PER_DAY * 5;
-    const HOURS_PER_MONTH = companyDetails.totalWorkHoursPerMonth ?? HOURS_PER_WEEK * 4;
+    const HOURS_PER_WEEK =
+      companyDetails.totalWorkHoursPerWeek ?? HOURS_PER_DAY * 5;
+    const HOURS_PER_MONTH =
+      companyDetails.totalWorkHoursPerMonth ?? HOURS_PER_WEEK * 4;
     const MAX_OVERTIME_MONTH = companyDetails.totalOvertimePerMonth ?? 5;
 
-    const attendanceRecords = await collections.attendance.find({
-      userId: employeeId,
-      date: {
-        $gte: startOfYear.toJSDate(),
-        $lt: endOfYear.toJSDate()
-      }
-    }).toArray();
+    const attendanceRecords = await collections.attendance
+      .find({
+        userId: employeeId,
+        date: {
+          $gte: startOfYear.toJSDate(),
+          $lt: endOfYear.toJSDate(),
+        },
+      })
+      .toArray();
 
     let todayWorked = 0;
     let todayBreak = 0;
@@ -637,29 +712,33 @@ export const getWorkingHoursStats = async (companyId, employeeId, year) => {
         expectedHours: HOURS_PER_DAY,
         workedHours: +(todayWorked / 60).toFixed(2),
         breakHours: +(todayBreak / 60).toFixed(2),
-        overtimeHours: +(Math.max(0, (todayWorked / 60) - HOURS_PER_DAY)).toFixed(2)
+        overtimeHours: +Math.max(0, todayWorked / 60 - HOURS_PER_DAY).toFixed(
+          2
+        ),
       },
       thisWeek: {
         expectedHours: weekDays * HOURS_PER_DAY,
-        workedHours: +(weekWorked / 60).toFixed(2)
+        workedHours: +(weekWorked / 60).toFixed(2),
       },
       thisMonth: {
         expectedHours: monthDays * HOURS_PER_DAY,
         workedHours: +(monthWorked / 60).toFixed(2),
-        overtimeHours: +(Math.max(0, (monthWorked / 60) - (monthDays * HOURS_PER_DAY))).toFixed(2),
-        expectedOvertimeHours: MAX_OVERTIME_MONTH
-      }
+        overtimeHours: +Math.max(
+          0,
+          monthWorked / 60 - monthDays * HOURS_PER_DAY
+        ).toFixed(2),
+        expectedOvertimeHours: MAX_OVERTIME_MONTH,
+      },
     };
 
     return {
       done: true,
-      data: stats
+      data: stats,
     };
-
   } catch (error) {
     return {
       done: false,
-      error: error.message
+      error: error.message,
     };
   }
 };
@@ -670,8 +749,8 @@ export const getProjects = async (companyId, employeeId, filter) => {
 
     const matchStage = {
       $match: {
-        teamMembers: employeeId
-      }
+        teamMembers: employeeId,
+      },
     };
 
     if (filter === "ongoing") {
@@ -690,9 +769,9 @@ export const getProjects = async (companyId, employeeId, filter) => {
             {
               $match: {
                 $expr: {
-                  $in: ["$userId", "$$teamLeaderIds"]
-                }
-              }
+                  $in: ["$userId", "$$teamLeaderIds"],
+                },
+              },
             },
             {
               $project: {
@@ -700,12 +779,12 @@ export const getProjects = async (companyId, employeeId, filter) => {
                 firstName: 1,
                 lastName: 1,
                 userId: 1,
-                _id: 0
-              }
-            }
+                _id: 0,
+              },
+            },
           ],
-          as: "leadDetails"
-        }
+          as: "leadDetails",
+        },
       },
 
       // Lookup avatars of team members
@@ -717,26 +796,26 @@ export const getProjects = async (companyId, employeeId, filter) => {
             {
               $match: {
                 $expr: {
-                  $in: ["$userId", "$$memberIds"]
-                }
-              }
+                  $in: ["$userId", "$$memberIds"],
+                },
+              },
             },
             {
               $group: {
                 _id: null,
-                avatarUrls: { $push: "$avatarUrl" }
-              }
-            }
+                avatarUrls: { $push: "$avatarUrl" },
+              },
+            },
           ],
-          as: "avatarData"
-        }
+          as: "avatarData",
+        },
       },
 
       // Add teamMemberAvatars field with array of avatars
       {
         $addFields: {
-          membersAvatars: { $arrayElemAt: ["$avatarData.avatarUrls", 0] }
-        }
+          membersAvatars: { $arrayElemAt: ["$avatarData.avatarUrls", 0] },
+        },
       },
 
       // Lookup tasks related to the project
@@ -747,12 +826,12 @@ export const getProjects = async (companyId, employeeId, filter) => {
           pipeline: [
             {
               $match: {
-                $expr: { $eq: ["$projectId", "$$projectIdStr"] }
-              }
-            }
+                $expr: { $eq: ["$projectId", "$$projectIdStr"] },
+              },
+            },
           ],
-          as: "taskStats"
-        }
+          as: "taskStats",
+        },
       },
 
       // Add calculated totalTasks and completedTasks fields
@@ -764,11 +843,11 @@ export const getProjects = async (companyId, employeeId, filter) => {
               $filter: {
                 input: "$taskStats",
                 as: "task",
-                cond: { $eq: ["$$task.status", "completed"] }
-              }
-            }
-          }
-        }
+                cond: { $eq: ["$$task.status", "completed"] },
+              },
+            },
+          },
+        },
       },
 
       // Project final fields cleanly
@@ -779,21 +858,21 @@ export const getProjects = async (companyId, employeeId, filter) => {
           deadline: 1,
           totalTasks: 1,
           completedTasks: 1,
-          leadDetails: { $arrayElemAt: ["$leadDetails", 0] }, 
+          leadDetails: { $arrayElemAt: ["$leadDetails", 0] },
           membersAvatars: 1, // corrected field name
-          taskStats: 1
-        }
-      }
+          taskStats: 1,
+        },
+      },
     ];
 
     const projects = await collections.projects.aggregate(pipeline).toArray();
 
     return {
       done: true,
-      data: projects
+      data: projects,
     };
   } catch (error) {
-    console.error('Error in getProjects:', error);
+    console.error("Error in getProjects:", error);
     return { done: false, error: error.message };
   }
 };
@@ -802,7 +881,9 @@ export const getTasks = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
     // check if employee exists
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
       return { done: false, error: "Employee not found in this company." };
     }
@@ -829,18 +910,18 @@ export const getTasks = async (companyId, employeeId, filter) => {
                 $expr: {
                   $and: [
                     { $in: [{ $toString: "$_id" }, "$$emp_ids"] }, // match employees in empIds
-                    { $ne: [{ $toString: "$_id" }, employeeId] }   // exclude logged in employee
-                  ]
-                }
-              }
+                    { $ne: [{ $toString: "$_id" }, employeeId] }, // exclude logged in employee
+                  ],
+                },
+              },
             },
-            { $project: { _id: 1, avatar: 1, name: 1 } }
+            { $project: { _id: 1, avatar: 1, name: 1 } },
           ],
-          as: "otherEmpAvatars"
-        }
+          as: "otherEmpAvatars",
+        },
       },
 
-      { $sort: { createdAt: -1 } } // latest tasks first (optional)
+      { $sort: { createdAt: -1 } }, // latest tasks first (optional)
     ];
 
     const tasks = await collections.tasks.aggregate(pipeline).toArray();
@@ -855,30 +936,35 @@ export const getTasks = async (companyId, employeeId, filter) => {
 export const addTask = async ({ companyId, employeeId, taskData }) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
 
     if (!taskData.projectId) {
-      return { done: false, error: 'Project ID is required.' };
+      return { done: false, error: "Project ID is required." };
     }
 
     const project = await collections.projects.findOne({
       _id: new ObjectId(taskData.projectId),
-      empMembers: { $in: [employeeId] }
+      empMembers: { $in: [employeeId] },
     });
 
     if (!project) {
-      return { done: false, error: 'Project not found or employee not in project team.' };
+      return {
+        done: false,
+        error: "Project not found or employee not in project team.",
+      };
     }
 
     const newTask = {
       title: taskData.title,
-      description: taskData.description || '',
+      description: taskData.description || "",
       empIds: [employeeId],
       projectId: new ObjectId(taskData.projectId),
-      status: taskData.status || 'pending',
+      status: taskData.status || "pending",
       dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
       checked: taskData.checked ?? false,
       starred: taskData.starred ?? false,
@@ -887,9 +973,13 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
     };
     const result = await collections.tasks.insertOne(newTask);
     if (result.insertedId) {
-      return { done: true, message: "Task created successfully.", data: { ...newTask } };
+      return {
+        done: true,
+        message: "Task created successfully.",
+        data: { ...newTask },
+      };
     } else {
-      return { done: false, error: 'Failed to create task.' };
+      return { done: false, error: "Failed to create task." };
     }
   } catch (error) {
     return { done: false, error: error.message };
@@ -897,14 +987,16 @@ export const addTask = async ({ companyId, employeeId, taskData }) => {
 };
 
 export const updateTask = async ({ companyId, employeeId, taskData }) => {
-  try {    
+  try {
     const collections = getTenantCollections(companyId);
     const { taskId, updateData } = taskData;
     const taskObjectId = new ObjectId(taskId);
 
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
 
     const task = await collections.tasks.findOne({
@@ -912,7 +1004,10 @@ export const updateTask = async ({ companyId, employeeId, taskData }) => {
       empIds: { $in: [employeeId] },
     });
     if (!task) {
-      return { done: false, error: 'Task not found or not assigned to this employee.' };
+      return {
+        done: false,
+        error: "Task not found or not assigned to this employee.",
+      };
     }
 
     updateData.updatedAt = new Date();
@@ -923,13 +1018,13 @@ export const updateTask = async ({ companyId, employeeId, taskData }) => {
       { $set: updateData },
       { returnDocument: "after" }
     );
-  
+
     if (result.modifiedCount > 0) {
-      return { done: true,  message: "The task was updated successfully" };
+      return { done: true, message: "The task was updated successfully" };
     } else {
-      return { done: false, error: 'No changes made to the task.' };
+      return { done: false, error: "No changes made to the task." };
     }
-  } catch (error) {    
+  } catch (error) {
     return { done: false, error: error.message };
   }
 };
@@ -937,11 +1032,13 @@ export const updateTask = async ({ companyId, employeeId, taskData }) => {
 export const getPerformance = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
       return {
         done: false,
-        error: 'Employee not found in this company.'
+        error: "Employee not found in this company.",
       };
     }
 
@@ -949,7 +1046,7 @@ export const getPerformance = async (companyId, employeeId, year) => {
     const salaryHistory = await collections.salaryHistory
       .find({
         userId: employeeId,
-        effectiveDate: { $lte: endOfYear }
+        effectiveDate: { $lte: endOfYear },
       })
       .sort({ effectiveDate: 1 })
       .toArray();
@@ -957,12 +1054,12 @@ export const getPerformance = async (companyId, employeeId, year) => {
     const formatted = fillSalaryMonths(salaryHistory, year);
     return {
       done: true,
-      data: formatted
+      data: formatted,
     };
   } catch (error) {
     return {
       done: false,
-      error: error.message || 'Unexpected error'
+      error: error.message || "Unexpected error",
     };
   }
 };
@@ -970,28 +1067,32 @@ export const getPerformance = async (companyId, employeeId, year) => {
 export const getSkills = async (companyId, employeeId, year) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
 
     const startOfYear = new Date(`${year}-01-01T00:00:00.000Z`);
     const endOfYear = new Date(`${year}-12-31T23:59:59.999Z`);
 
-    const skills = await collections.skills.find({
-      userId: employeeId,
-      updatedAt: {
-        $gte: startOfYear,
-        $lte: endOfYear
-      }
-    }).toArray();
+    const skills = await collections.skills
+      .find({
+        userId: employeeId,
+        updatedAt: {
+          $gte: startOfYear,
+          $lte: endOfYear,
+        },
+      })
+      .toArray();
 
     return {
       done: true,
-      data: skills
+      data: skills,
     };
   } catch (error) {
-    console.error('Error fetching skills:', error);
+    console.error("Error fetching skills:", error);
     return { done: false, error: error.message };
   }
 };
@@ -999,9 +1100,11 @@ export const getSkills = async (companyId, employeeId, year) => {
 export const getTeamMembers = async (companyId, employeeId) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
     const pipeline = [
       { $match: { leadId: employee.leadId } },
@@ -1011,17 +1114,19 @@ export const getTeamMembers = async (companyId, employeeId) => {
           firstName: 1,
           lastName: 1,
           avatar: 1,
-          role: 1
-        }
-      }
+          role: 1,
+        },
+      },
     ];
-    const teamMembers = await collections.employees.aggregate(pipeline).toArray();
+    const teamMembers = await collections.employees
+      .aggregate(pipeline)
+      .toArray();
     return {
       done: true,
-      data: teamMembers
+      data: teamMembers,
     };
   } catch (error) {
-    console.error('Error fetching team members:', error);
+    console.error("Error fetching team members:", error);
     return { done: false, error: error.message };
   }
 };
@@ -1029,23 +1134,37 @@ export const getTeamMembers = async (companyId, employeeId) => {
 export const getTodaysNotifications = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
 
     // Build today's start and end dates in UTC
     const now = new Date();
-    const startDate = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(), 0, 0, 0, 0
-    ));
-    const endDate = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(), 23, 59, 59, 999
-    ));
+    const startDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+        0
+      )
+    );
+    const endDate = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        23,
+        59,
+        59,
+        999
+      )
+    );
 
     // Build the match stage depending on the filter
     let matchStage;
@@ -1053,90 +1172,129 @@ export const getTodaysNotifications = async (companyId, employeeId, filter) => {
       matchStage = {}; // no filter, show all
     } else {
       matchStage = {
-        createdAt: { $gte: startDate, $lte: endDate }
+        createdAt: { $gte: startDate, $lte: endDate },
       };
     }
 
     // Query notifications
-    const notifications = await collections.notifications.aggregate([
-      { $match: matchStage },
-      {
-        $lookup: {
-          from: 'employees',
-          localField: 'createdBy',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      {
-        $unwind: {
-          path: '$creator',
-          preserveNullAndEmptyArrays: true
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          title: 1,
-          createdAt: 1,
-          displayTime: {
-            $dateToString: {
-              format: "%H:%M",
-              date: "$createdAt",
-              timezone: "Asia/Kolkata"
-            }
+    const notifications = await collections.notifications
+      .aggregate([
+        { $match: matchStage },
+        {
+          $lookup: {
+            from: "employees",
+            localField: "createdBy",
+            foreignField: "_id",
+            as: "creator",
           },
-          avatar: "$creator.avatar"
-        }
-      },
-      {
-        $sort: { createdAt: -1 }
-      }
-    ]).toArray();
+        },
+        {
+          $unwind: {
+            path: "$creator",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            title: 1,
+            createdAt: 1,
+            displayTime: {
+              $dateToString: {
+                format: "%H:%M",
+                date: "$createdAt",
+                timezone: "Asia/Kolkata",
+              },
+            },
+            avatar: "$creator.avatar",
+          },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+      ])
+      .toArray();
 
     return {
       done: true,
-      data: notifications
+      data: notifications,
     };
   } catch (error) {
-    console.error('Error fetching todays notifications:', error);
+    console.error("Error fetching todays notifications:", error);
     return { done: false, error: error.message };
   }
 };
 
-
 export const getMeetings = async (companyId, employeeId, filter) => {
   try {
     const collections = getTenantCollections(companyId);
-    const employee = await collections.employees.findOne({ userId: employeeId });
+    const employee = await collections.employees.findOne({
+      userId: employeeId,
+    });
     if (!employee) {
-      return { done: false, error: 'Employee not found in this company.' };
+      return { done: false, error: "Employee not found in this company." };
     }
 
     const now = new Date();
     let startDate, endDate;
 
     if (filter === "today") {
-      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+      startDate = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
+      endDate = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate(),
+          23,
+          59,
+          59,
+          999
+        )
+      );
     } else if (filter === "month") {
-      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+      startDate = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
+      );
+      endDate = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        )
+      );
     } else if (filter === "year") {
       startDate = new Date(Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(now.getUTCFullYear(), 11, 31, 23, 59, 59, 999));
+      endDate = new Date(
+        Date.UTC(now.getUTCFullYear(), 11, 31, 23, 59, 59, 999)
+      );
     } else {
       return { done: false, error: "Invalid filter" };
     }
 
-    const meetings = await collections.meetings.find({
-      leadId: employee.leadId,
-      startTime: { $gte: startDate, $lte: endDate }
-    }).toArray();
+    const meetings = await collections.meetings
+      .find({
+        leadId: employee.leadId,
+        startTime: { $gte: startDate, $lte: endDate },
+      })
+      .toArray();
 
     return {
       done: true,
-      data: meetings
+      data: meetings,
     };
   } catch (error) {
     return { done: false, error: error.message };
@@ -1150,55 +1308,60 @@ export const getTodaysBirthday = async (companyId, employeeId) => {
     const todayDate = now.getDate();
     const todayMonth = now.getMonth();
 
-    const { done, data: teamMembers } = await getTeamMembers(companyId, employeeId);
+    const { done, data: teamMembers } = await getTeamMembers(
+      companyId,
+      employeeId
+    );
 
     if (!done || !Array.isArray(teamMembers) || teamMembers.length === 0) {
       return { done: true, data: [] };
     }
 
-    const teamMemberIds = teamMembers.map(member => new ObjectId(member._id));
+    const teamMemberIds = teamMembers.map((member) => new ObjectId(member._id));
 
-    const birthdayEmployees = await collections.employees.aggregate([
-      {
-        $match: {
-          _id: { $in: teamMemberIds },
-          dob: { $type: 'date' }
-        }
-      },
-      {
-        $addFields: {
-          dobDay: { $dayOfMonth: '$dob' },
-          dobMonth: { $month: '$dob' }
-        }
-      },
-      {
-        $match: {
-          dobDay: todayDate,
-          dobMonth: todayMonth + 1
-        }
-      },
-      {
-        $project: {
-          name: 1,
-          avatarUrl: 1,
-          role: 1
-        }
-      },
-      {
-        $sort: {
-          name: 1
-        }
-      }
-    ]).toArray();
+    const birthdayEmployees = await collections.employees
+      .aggregate([
+        {
+          $match: {
+            _id: { $in: teamMemberIds },
+            dob: { $type: "date" },
+          },
+        },
+        {
+          $addFields: {
+            dobDay: { $dayOfMonth: "$dob" },
+            dobMonth: { $month: "$dob" },
+          },
+        },
+        {
+          $match: {
+            dobDay: todayDate,
+            dobMonth: todayMonth + 1,
+          },
+        },
+        {
+          $project: {
+            name: 1,
+            avatarUrl: 1,
+            role: 1,
+          },
+        },
+        {
+          $sort: {
+            name: 1,
+          },
+        },
+      ])
+      .toArray();
 
     return {
       done: true,
-      data: birthdayEmployees
+      data: birthdayEmployees,
     };
   } catch (error) {
     return {
       done: false,
-      error: error.message
+      error: error.message,
     };
   }
 };
@@ -1209,10 +1372,11 @@ export const getLastDayTimmings = async (companyId, employeeId) => {
     const empId = new ObjectId(employeeId);
 
     const timezoneDoc = await collections.details.findOne({});
-    const tz = (timezoneDoc && timezoneDoc.timeZone) || 'UTC';
+    const tz = (timezoneDoc && timezoneDoc.timeZone) || "UTC";
 
     const employee = await collections.employees.findOne({ _id: empId });
-    if (!employee) return { done: false, error: 'Employee not found in this company.' };
+    if (!employee)
+      return { done: false, error: "Employee not found in this company." };
 
     const attendance = await collections.attendance
       .find({ employeeId: empId })
@@ -1221,7 +1385,7 @@ export const getLastDayTimmings = async (companyId, employeeId) => {
       .next();
 
     if (!attendance || !attendance.punchIn)
-      return { done: false, error: 'No valid attendance record found.' };
+      return { done: false, error: "No valid attendance record found." };
 
     const punchInDT = DateTime.fromJSDate(attendance.punchIn).setZone(tz);
     const punchOutDT = attendance.punchOut
@@ -1229,37 +1393,43 @@ export const getLastDayTimmings = async (companyId, employeeId) => {
       : null;
 
     const breakDetails = (attendance.breakDetails || [])
-      .filter(b => b.start && b.end)
-      .map(b => ({
-        start: DateTime.fromJSDate(b.start).setZone(tz).toFormat('HH:mm'),
-        end: DateTime.fromJSDate(b.end).setZone(tz).toFormat('HH:mm'),
+      .filter((b) => b.start && b.end)
+      .map((b) => ({
+        start: DateTime.fromJSDate(b.start).setZone(tz).toFormat("HH:mm"),
+        end: DateTime.fromJSDate(b.end).setZone(tz).toFormat("HH:mm"),
       }));
 
-    if (punchOutDT && attendance.overtimeRequestStatus === 'approved' && attendance.overtimeHours > 0) {
-      const shiftEnd = punchOutDT.minus({ hours: attendance.overtimeHours }).toFormat('HH:mm');
+    if (
+      punchOutDT &&
+      attendance.overtimeRequestStatus === "approved" &&
+      attendance.overtimeHours > 0
+    ) {
+      const shiftEnd = punchOutDT
+        .minus({ hours: attendance.overtimeHours })
+        .toFormat("HH:mm");
       const overtimeStart = shiftEnd;
 
       return {
         done: true,
         data: {
-          punchInTime: punchInDT.toFormat('HH:mm'),
+          punchInTime: punchInDT.toFormat("HH:mm"),
           breakDetails,
           shiftEnd,
           overtimeStart,
-          punchOut: punchOutDT.toFormat('HH:mm'),
-        }
+          punchOut: punchOutDT.toFormat("HH:mm"),
+        },
       };
     } else {
       return {
         done: true,
         data: {
-          punchInTime: punchInDT.toFormat('HH:mm'),
+          punchInTime: punchInDT.toFormat("HH:mm"),
           breakDetails,
-          punchOut: punchOutDT ? punchOutDT.toFormat('HH:mm') : '',
-        }
+          punchOut: punchOutDT ? punchOutDT.toFormat("HH:mm") : "",
+        },
       };
     }
   } catch (error) {
-    return { done: false, error: error.message || 'Internal server error' };
+    return { done: false, error: error.message || "Internal server error" };
   }
 };
