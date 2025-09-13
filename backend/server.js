@@ -30,8 +30,18 @@ app.use(
   "/temp",
   express.static(path.join(__dirname, "temp"), {
     setHeaders: (res, path) => {
-      res.set("Content-Type", "application/pdf");
-      res.set("Content-Disposition", "attachment");
+      // Set appropriate headers based on file type
+      if (path.endsWith('.pdf')) {
+        res.set("Content-Type", "application/pdf");
+        res.set("Content-Disposition", "attachment");
+      } else if (path.endsWith('.xlsx')) {
+        res.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.set("Content-Disposition", "attachment");
+      }
+      // Security headers
+      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.set("Pragma", "no-cache");
+      res.set("Expires", "0");
     },
   })
 );

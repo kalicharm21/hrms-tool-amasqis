@@ -1,4 +1,11 @@
 import { getTenantCollections } from "../../config/db.js";
+import { ObjectId } from "mongodb";
+import PDFDocument from "pdfkit";
+import ExcelJS from "exceljs";
+import fs from "fs";
+import path from "path";
+import { format } from "date-fns";
+import crypto from "crypto";
 
 function getDateRange(filter) {
   const now = new Date();
@@ -910,6 +917,768 @@ const getDashboardData = async (
   }
 };
 
+// Get leads list data for the leads list page
+const getLeadsListData = async (companyId, filters = {}) => {
+  try {
+    console.log("[LeadsList] Fetching leads list data for companyId:", companyId);
+    console.log("[LeadsList] Filters:", filters);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Build query based on filters
+    let query = {};
+    
+    // Date range filter
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      query.createdAt = {
+        $gte: new Date(filters.dateRange.start),
+        $lte: new Date(filters.dateRange.end)
+      };
+    }
+    
+    // Stage/Tags filter
+    if (filters.stage && filters.stage !== 'all') {
+      query.stage = filters.stage;
+    }
+    
+    // Search filter
+    if (filters.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { company: { $regex: filters.search, $options: 'i' } },
+        { email: { $regex: filters.search, $options: 'i' } },
+        { phone: { $regex: filters.search, $options: 'i' } }
+      ];
+    }
+    
+    // Sort options
+    let sortOptions = { createdAt: -1 }; // Default: newest first
+    if (filters.sortBy) {
+      switch (filters.sortBy) {
+        case 'name':
+          sortOptions = { name: 1 };
+          break;
+        case 'company':
+          sortOptions = { company: 1 };
+          break;
+        case 'createdDate':
+          sortOptions = { createdAt: -1 };
+          break;
+        case 'stage':
+          sortOptions = { stage: 1 };
+          break;
+        default:
+          sortOptions = { createdAt: -1 };
+      }
+    }
+    
+    // Pagination
+    const page = filters.page || 1;
+    const limit = filters.limit || 50;
+    const skip = (page - 1) * limit;
+    
+    console.log("[LeadsList] Query:", query);
+    console.log("[LeadsList] Sort options:", sortOptions);
+    console.log("[LeadsList] Pagination:", { page, limit, skip });
+    
+    // Get total count for pagination
+    const totalCount = await leadsCollection.countDocuments(query);
+    
+    // Get leads with pagination
+    const leads = await leadsCollection
+      .find(query)
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+    
+    console.log("[LeadsList] Found leads:", leads.length);
+    console.log("[LeadsList] Total count:", totalCount);
+    
+    // Transform data to match frontend expectations
+    const transformedLeads = leads.map(lead => ({
+      _id: lead._id,
+      LeadName: lead.name || 'Unknown Lead',
+      CompanyName: lead.company || 'Unknown Company',
+      Phone: lead.phone || 'N/A',
+      Email: lead.email || 'N/A',
+      Tags: lead.stage || 'Not Contacted',
+      CreatedDate: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'N/A',
+      LeadOwner: lead.owner || 'Unknown',
+      Image: `company-${String(Math.floor(Math.random() * 20) + 1).padStart(2, '0')}.svg`, // Random company image
+      value: lead.value || 0,
+      source: lead.source || 'Unknown',
+      country: lead.country || 'Unknown',
+      address: lead.address || 'N/A'
+    }));
+    
+    return {
+      leads: transformedLeads,
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit)
+    };
+    
+  } catch (error) {
+    console.error("[LeadsList] Error fetching leads list data:", error);
+    throw error;
+  }
+};
+
+// Get leads grid data (kanban view) organized by stages
+const getLeadsGridData = async (companyId, filters = {}) => {
+  try {
+    console.log("[LeadsGrid] Fetching leads grid data for companyId:", companyId);
+    console.log("[LeadsGrid] Filters:", filters);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Build query based on filters
+    let query = {};
+    
+    // Date range filter
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      query.createdAt = {
+        $gte: new Date(filters.dateRange.start),
+        $lte: new Date(filters.dateRange.end)
+      };
+    }
+    
+    // Search filter
+    if (filters.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { company: { $regex: filters.search, $options: 'i' } },
+        { email: { $regex: filters.search, $options: 'i' } }
+      ];
+    }
+    
+    console.log("[LeadsGrid] Query:", query);
+    
+    // Determine sort order based on filters
+    let sortOrder = { createdAt: -1 }; // Default: recently added
+    
+    if (filters.sortBy) {
+      switch (filters.sortBy) {
+        case 'recentlyAdded':
+          sortOrder = { createdAt: -1 };
+          break;
+        case 'ascending':
+          sortOrder = { name: 1 };
+          break;
+        case 'descending':
+          sortOrder = { name: -1 };
+          break;
+        case 'lastMonth':
+          // Filter to last month and sort by creation date
+          const lastMonth = new Date();
+          lastMonth.setMonth(lastMonth.getMonth() - 1);
+          query.createdAt = {
+            $gte: lastMonth,
+            $lte: new Date()
+          };
+          sortOrder = { createdAt: -1 };
+          break;
+        case 'last7Days':
+          // Filter to last 7 days and sort by creation date
+          const last7Days = new Date();
+          last7Days.setDate(last7Days.getDate() - 7);
+          query.createdAt = {
+            $gte: last7Days,
+            $lte: new Date()
+          };
+          sortOrder = { createdAt: -1 };
+          break;
+        default:
+          sortOrder = { createdAt: -1 };
+      }
+    }
+    
+    console.log("[LeadsGrid] Sort order:", sortOrder);
+    
+    // Get all leads
+    const leads = await leadsCollection.find(query).sort(sortOrder).toArray();
+    
+    console.log("[LeadsGrid] Found leads:", leads.length);
+    
+    // Group leads by stage
+    const stages = {
+      'Contacted': [],
+      'Not Contacted': [],
+      'Closed': [],
+      'Lost': []
+    };
+    
+    // Calculate totals for each stage
+    const stageTotals = {
+      'Contacted': { count: 0, value: 0 },
+      'Not Contacted': { count: 0, value: 0 },
+      'Closed': { count: 0, value: 0 },
+      'Lost': { count: 0, value: 0 }
+    };
+    
+    leads.forEach(lead => {
+      const stage = lead.stage || 'Not Contacted';
+      console.log(`[LeadsGrid] Lead ${lead.name || 'Unknown'} has stage: "${stage}"`);
+      
+      if (stages[stage]) {
+        // Transform lead data for grid display
+        const transformedLead = {
+          _id: lead._id,
+          name: lead.name || 'Unknown Lead',
+          company: lead.company || 'Unknown Company',
+          email: lead.email || 'N/A',
+          phone: lead.phone || 'N/A',
+          value: lead.value || 0,
+          address: lead.address || 'N/A',
+          source: lead.source || 'Unknown',
+          country: lead.country || 'Unknown',
+          createdAt: lead.createdAt,
+          owner: lead.owner || 'Unknown'
+        };
+        
+        stages[stage].push(transformedLead);
+        stageTotals[stage].count++;
+        stageTotals[stage].value += lead.value || 0;
+        console.log(`[LeadsGrid] Added lead to stage "${stage}". Count: ${stageTotals[stage].count}`);
+      } else {
+        console.log(`[LeadsGrid] WARNING: Lead has unknown stage "${stage}". Available stages:`, Object.keys(stages));
+        // Add to 'Not Contacted' as fallback
+        const transformedLead = {
+          _id: lead._id,
+          name: lead.name || 'Unknown Lead',
+          company: lead.company || 'Unknown Company',
+          email: lead.email || 'N/A',
+          phone: lead.phone || 'N/A',
+          value: lead.value || 0,
+          address: lead.address || 'N/A',
+          source: lead.source || 'Unknown',
+          country: lead.country || 'Unknown',
+          createdAt: lead.createdAt,
+          owner: lead.owner || 'Unknown'
+        };
+        
+        stages['Not Contacted'].push(transformedLead);
+        stageTotals['Not Contacted'].count++;
+        stageTotals['Not Contacted'].value += lead.value || 0;
+        console.log(`[LeadsGrid] Added lead to fallback stage "Not Contacted". Count: ${stageTotals['Not Contacted'].count}`);
+      }
+    });
+    
+    console.log("[LeadsGrid] Final stages result:", {
+      'Contacted': stages['Contacted'].length,
+      'Not Contacted': stages['Not Contacted'].length,
+      'Closed': stages['Closed'].length,
+      'Lost': stages['Lost'].length
+    });
+    
+    console.log("[LeadsGrid] Final stage totals:", stageTotals);
+    
+    return {
+      stages,
+      stageTotals
+    };
+    
+  } catch (error) {
+    console.error("[LeadsGrid] Error fetching leads grid data:", error);
+    throw error;
+  }
+};
+
+// Get single lead details
+const getLeadDetails = async (companyId, leadId) => {
+  try {
+    console.log("[LeadDetails] Fetching lead details for companyId:", companyId, "leadId:", leadId);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    const activitiesCollection = collections.activities;
+    const employeesCollection = collections.employees;
+    
+    // Get lead details
+    const lead = await leadsCollection.findOne({ _id: new ObjectId(leadId) });
+    
+    if (!lead) {
+      throw new Error('Lead not found');
+    }
+    
+    console.log("[LeadDetails] Found lead:", lead.name);
+    
+    // Get related activities
+    const activities = await activitiesCollection
+      .find({ leadId: new ObjectId(leadId) })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .toArray();
+    
+    // Get owner details if available
+    let ownerDetails = null;
+    if (lead.owner) {
+      ownerDetails = await employeesCollection.findOne({ _id: lead.owner });
+    }
+    
+    // Transform lead data
+    const transformedLead = {
+      _id: lead._id,
+      name: lead.name || 'Unknown Lead',
+      company: lead.company || 'Unknown Company',
+      email: lead.email || 'N/A',
+      phone: lead.phone || 'N/A',
+      value: lead.value || 0,
+      stage: lead.stage || 'Not Contacted',
+      source: lead.source || 'Unknown',
+      country: lead.country || 'Unknown',
+      address: lead.address || 'N/A',
+      createdAt: lead.createdAt,
+      updatedAt: lead.updatedAt,
+      owner: lead.owner || 'Unknown',
+      ownerDetails: ownerDetails,
+      lostReason: lead.lostReason || null,
+      tags: lead.tags || [],
+      priority: lead.priority || 'Medium',
+      followUpDate: lead.followUpDate || null,
+      dueDate: lead.dueDate || null,
+      activities: activities
+    };
+    
+    return transformedLead;
+    
+  } catch (error) {
+    console.error("[LeadDetails] Error fetching lead details:", error);
+    throw error;
+  }
+};
+
+// Create a new lead
+const createLead = async (companyId, leadData) => {
+  try {
+    console.log("[CreateLead] Creating new lead for companyId:", companyId);
+    console.log("[CreateLead] Lead data:", leadData);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Validate required fields
+    if (!leadData.name || !leadData.company) {
+      throw new Error('Lead name and company are required');
+    }
+    
+    // Prepare lead document
+    const newLead = {
+      name: leadData.name || '',
+      company: leadData.company || '',
+      email: leadData.email || '',
+      phone: leadData.phone || '',
+      value: leadData.value || 0,
+      stage: leadData.stage || 'Not Contacted',
+      source: leadData.source || 'Unknown',
+      country: leadData.country || 'Unknown',
+      address: leadData.address || '',
+      owner: leadData.owner || 'Unknown',
+      priority: leadData.priority || 'Medium',
+      tags: leadData.tags || [],
+      lostReason: leadData.lostReason || null,
+      followUpDate: leadData.followUpDate || null,
+      dueDate: leadData.dueDate || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Insert the new lead
+    const result = await leadsCollection.insertOne(newLead);
+    
+    console.log("[CreateLead] Lead created successfully with ID:", result.insertedId);
+    
+    return {
+      done: true,
+      message: 'Lead created successfully',
+      data: {
+        _id: result.insertedId,
+        ...newLead
+      }
+    };
+    
+  } catch (error) {
+    console.error("[CreateLead] Error creating lead:", error);
+    throw error;
+  }
+};
+
+// Update an existing lead
+const updateLead = async (companyId, leadId, updateData) => {
+  try {
+    console.log("[UpdateLead] Updating lead for companyId:", companyId, "leadId:", leadId);
+    console.log("[UpdateLead] Update data:", updateData);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Validate lead ID
+    if (!leadId) {
+      throw new Error('Lead ID is required');
+    }
+    
+    // Prepare update document
+    const updateDoc = {
+      ...updateData,
+      updatedAt: new Date()
+    };
+    
+    // Remove undefined values
+    Object.keys(updateDoc).forEach(key => {
+      if (updateDoc[key] === undefined) {
+        delete updateDoc[key];
+      }
+    });
+    
+    // Update the lead
+    const result = await leadsCollection.updateOne(
+      { _id: new ObjectId(leadId) },
+      { $set: updateDoc }
+    );
+    
+    if (result.matchedCount === 0) {
+      throw new Error('Lead not found');
+    }
+    
+    console.log("[UpdateLead] Lead updated successfully");
+    
+    // Get the updated lead
+    const updatedLead = await leadsCollection.findOne({ _id: new ObjectId(leadId) });
+    
+    return {
+      done: true,
+      message: 'Lead updated successfully',
+      data: updatedLead
+    };
+    
+  } catch (error) {
+    console.error("[UpdateLead] Error updating lead:", error);
+    throw error;
+  }
+};
+
+// Delete a lead
+const deleteLead = async (companyId, leadId) => {
+  try {
+    console.log("[DeleteLead] Deleting lead for companyId:", companyId, "leadId:", leadId);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Validate lead ID
+    if (!leadId) {
+      throw new Error('Lead ID is required');
+    }
+    
+    // Delete the lead
+    const result = await leadsCollection.deleteOne({ _id: new ObjectId(leadId) });
+    
+    if (result.deletedCount === 0) {
+      throw new Error('Lead not found');
+    }
+    
+    console.log("[DeleteLead] Lead deleted successfully");
+    
+    return {
+      done: true,
+      message: 'Lead deleted successfully'
+    };
+    
+  } catch (error) {
+    console.error("[DeleteLead] Error deleting lead:", error);
+    throw error;
+  }
+};
+
+// Export leads as PDF with security measures
+export const exportLeadsPDF = async (companyId, userId, filters = {}) => {
+  try {
+    console.log("[LeadExport] Starting PDF export for companyId:", companyId, "userId:", userId);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Build secure query with company isolation
+    let query = {
+      companyId: new ObjectId(companyId),
+      isDeleted: { $ne: true }
+    };
+    
+    // Apply filters
+    if (filters.stage && filters.stage !== 'all') {
+      query.stage = filters.stage;
+    }
+    
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      query.createdAt = {
+        $gte: new Date(filters.dateRange.start),
+        $lte: new Date(filters.dateRange.end)
+      };
+    }
+    
+    if (filters.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { company: { $regex: filters.search, $options: 'i' } },
+        { email: { $regex: filters.search, $options: 'i' } }
+      ];
+    }
+    
+    // Fetch leads data
+    const leads = await leadsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    console.log("[LeadExport] Found leads for PDF export:", leads.length);
+    
+    // Generate secure filename
+    const sanitizedCompanyId = companyId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const timestamp = Date.now();
+    const randomSuffix = crypto.randomBytes(4).toString('hex');
+    const fileName = `leads_${sanitizedCompanyId}_${sanitizedUserId}_${timestamp}_${randomSuffix}.pdf`;
+    
+    // Create secure file path
+    const tempDir = path.join(process.cwd(), 'temp', 'exports');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { mode: 0o700, recursive: true });
+    }
+    
+    const filePath = path.join(tempDir, fileName);
+    
+    // Generate PDF
+    const doc = new PDFDocument();
+    doc.pipe(fs.createWriteStream(filePath));
+    
+    // Header
+    doc.fontSize(20).text("Leads Report", 50, 50);
+    doc.fontSize(12).text(`Generated on: ${format(new Date(), "PPP")}`, 50, 80);
+    doc.text(`Total Leads: ${leads.length}`, 50, 100);
+    doc.text(`Company: ${sanitizedCompanyId}`, 50, 120);
+    
+    let yPosition = 150;
+    
+    // Table header
+    doc.fontSize(10).text("Name", 50, yPosition);
+    doc.text("Company", 150, yPosition);
+    doc.text("Email", 250, yPosition);
+    doc.text("Phone", 350, yPosition);
+    doc.text("Stage", 450, yPosition);
+    doc.text("Value", 520, yPosition);
+    doc.text("Created", 580, yPosition);
+    
+    yPosition += 20;
+    
+    // Draw line under header
+    doc.moveTo(50, yPosition).lineTo(650, yPosition).stroke();
+    yPosition += 10;
+    
+    // Lead data
+    leads.forEach((lead, index) => {
+      if (yPosition > 750) {
+        doc.addPage();
+        yPosition = 50;
+      }
+      
+      doc.text(lead.name || "N/A", 50, yPosition);
+      doc.text(lead.company || "N/A", 150, yPosition);
+      doc.text(lead.email || "N/A", 250, yPosition);
+      doc.text(lead.phone || "N/A", 350, yPosition);
+      doc.text(lead.stage || "N/A", 450, yPosition);
+      doc.text(`$${(lead.value || 0).toLocaleString()}`, 520, yPosition);
+      doc.text(
+        lead.createdAt ? format(new Date(lead.createdAt), "MMM dd, yyyy") : "N/A",
+        580,
+        yPosition
+      );
+      
+      yPosition += 20;
+    });
+    
+    doc.end();
+    
+    // Generate download URL
+    const frontendUrl = process.env.FRONTEND_URL + `/temp/exports/${fileName}`;
+    
+    // Schedule cleanup after 1 hour
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log("[LeadExport] Cleaned up PDF file:", fileName);
+        }
+      } catch (error) {
+        console.error("[LeadExport] Error cleaning up PDF file:", error);
+      }
+    }, 60 * 60 * 1000);
+    
+    console.log("[LeadExport] PDF generation completed successfully");
+    
+    return {
+      done: true,
+      data: {
+        pdfPath: filePath,
+        pdfUrl: frontendUrl,
+        fileName: fileName,
+        recordCount: leads.length
+      }
+    };
+  } catch (error) {
+    console.error("[LeadExport] Error generating PDF:", error);
+    return { done: false, error: error.message };
+  }
+};
+
+// Export leads as Excel with security measures
+export const exportLeadsExcel = async (companyId, userId, filters = {}) => {
+  try {
+    console.log("[LeadExport] Starting Excel export for companyId:", companyId, "userId:", userId);
+    
+    const collections = getTenantCollections(companyId);
+    const leadsCollection = collections.leads;
+    
+    // Build secure query with company isolation
+    let query = {
+      companyId: new ObjectId(companyId),
+      isDeleted: { $ne: true }
+    };
+    
+    // Apply filters
+    if (filters.stage && filters.stage !== 'all') {
+      query.stage = filters.stage;
+    }
+    
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      query.createdAt = {
+        $gte: new Date(filters.dateRange.start),
+        $lte: new Date(filters.dateRange.end)
+      };
+    }
+    
+    if (filters.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { company: { $regex: filters.search, $options: 'i' } },
+        { email: { $regex: filters.search, $options: 'i' } }
+      ];
+    }
+    
+    // Fetch leads data
+    const leads = await leadsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    console.log("[LeadExport] Found leads for Excel export:", leads.length);
+    
+    // Generate secure filename
+    const sanitizedCompanyId = companyId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const sanitizedUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const timestamp = Date.now();
+    const randomSuffix = crypto.randomBytes(4).toString('hex');
+    const fileName = `leads_${sanitizedCompanyId}_${sanitizedUserId}_${timestamp}_${randomSuffix}.xlsx`;
+    
+    // Create secure file path
+    const tempDir = path.join(process.cwd(), 'temp', 'exports');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { mode: 0o700, recursive: true });
+    }
+    
+    const filePath = path.join(tempDir, fileName);
+    
+    // Generate Excel
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Leads");
+    
+    // Define columns
+    worksheet.columns = [
+      { header: "Name", key: "name", width: 20 },
+      { header: "Company", key: "company", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Phone", key: "phone", width: 15 },
+      { header: "Stage", key: "stage", width: 15 },
+      { header: "Value", key: "value", width: 15 },
+      { header: "Source", key: "source", width: 15 },
+      { header: "Country", key: "country", width: 15 },
+      { header: "Address", key: "address", width: 40 },
+      { header: "Owner", key: "owner", width: 20 },
+      { header: "Created At", key: "createdAt", width: 20 }
+    ];
+    
+    // Add data
+    leads.forEach((lead) => {
+      worksheet.addRow({
+        name: lead.name || "",
+        company: lead.company || "",
+        email: lead.email || "",
+        phone: lead.phone || "",
+        stage: lead.stage || "",
+        value: lead.value || 0,
+        source: lead.source || "",
+        country: lead.country || "",
+        address: lead.address || "",
+        owner: lead.owner || "",
+        createdAt: lead.createdAt
+          ? format(new Date(lead.createdAt), "MMM dd, yyyy")
+          : ""
+      });
+    });
+    
+    // Style the header
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE0E0E0" }
+    };
+    
+    await workbook.xlsx.writeFile(filePath);
+    
+    // Generate download URL
+    const frontendUrl = process.env.FRONTEND_URL + `/temp/exports/${fileName}`;
+    
+    // Schedule cleanup after 1 hour
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log("[LeadExport] Cleaned up Excel file:", fileName);
+        }
+      } catch (error) {
+        console.error("[LeadExport] Error cleaning up Excel file:", error);
+      }
+    }, 60 * 60 * 1000);
+    
+    console.log("[LeadExport] Excel generation completed successfully");
+    
+    return {
+      done: true,
+      data: {
+        excelPath: filePath,
+        excelUrl: frontendUrl,
+        fileName: fileName,
+        recordCount: leads.length
+      }
+    };
+  } catch (error) {
+    console.error("[LeadExport] Error generating Excel:", error);
+    return { done: false, error: error.message };
+  }
+};
+
 export default {
   getDashboardData,
+  getLeadsListData,
+  getLeadsGridData,
+  getLeadDetails,
+  createLead,
+  updateLead,
+  deleteLead,
+  exportLeadsPDF,
+  exportLeadsExcel,
 };

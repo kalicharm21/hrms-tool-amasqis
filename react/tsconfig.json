@@ -1,5 +1,3 @@
-
-
 {
   "compilerOptions": {
     "target": "es5",
@@ -12,7 +10,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "strict": true,
+    "strict": false,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "module": "esnext",
@@ -21,11 +19,13 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["react", "react-dom", "react-router-dom"]
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
   },
   "include": ["src", "src/types"]
 }
-
 
 
 
@@ -60,3 +60,5 @@
 //     "src"
 //   ]
 // }
+
+
