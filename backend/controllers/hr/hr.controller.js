@@ -5,8 +5,11 @@ import * as hrPolicy from "../../services/hr/hrm.policy.js";
 import * as hrmDesignation from "../../services/hr/hrm.designation.js";
 import * as hrmDepartment from "../../services/hr/hrm.department.js";
 import * as hrmEmployee from "../../services/hr/hrm.employee.js";
+import terminationController from "./termination.controller.js";
 
 const hrDashboardController = (socket, io) => {
+  console.log("Setting up termination controller...");
+  terminationController(socket,io);
   const isDevelopment =
     process.env.NODE_ENV === "development" ||
     process.env.NODE_ENV === "production";
