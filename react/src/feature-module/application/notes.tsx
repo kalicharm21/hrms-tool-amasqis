@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
@@ -8,9 +8,107 @@ import { all_routes } from "../router/all_routes";
 import CommonSelect from "../../core/common/commonSelect";
 import CollapseHeader from "../../core/common/collapse-header/collapse-header";
 import ImageWithBasePath from "../../core/common/imageWithBasePath";
+import { DatePicker } from "antd";
+import CommonTagsInput from "../../core/common/Taginput";
+import CommonTextEditor from "../../core/common/textEditor";
+import { useSocket } from "../../SocketContext";
+import { Socket } from "socket.io-client";
+import dayjs from 'dayjs';
+import Select from "react-select";
 
+interface Note {
+  title: string;
+  tag: string[];
+  priority: string;
+  dueDate: string;
+  status: string;
+  description: string;
+}
+
+const optionsSelect = [
+  { value: "starrred", label: "Star" },
+  { value: "notStarred", label: "Not-Star" },
+];
+const optionsPriority = [
+  { value: "High", label: "High" },
+  { value: "Medium", label: "Medium" },
+  { value: "Low", label: "Low" },
+];
+
+type TagOption = {
+  value: string;
+  label: string;
+};
+
+const predefinedTags: TagOption[] = [
+  { value: "urgent", label: "Urgent" },
+  { value: "followup", label: "Follow Up" },
+  { value: "pending", label: "Pending" },
+  { value: "completed", label: "Completed" },
+];
 const Notes = () => {
   const routes = all_routes;
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [tags, setTags] = useState<TagOption[]>([]);
+  const [formData, setFormData] = useState<Note>({
+    title: "",
+    tag: [],
+    priority: "",
+    dueDate: "",
+    status: "",
+    description: "",
+  });
+
+  const socket = useSocket() as Socket | null;
+
+  useEffect(() => {
+    if (!socket) return;
+
+    let isMounted = true;
+
+    setLoading(true);
+
+    const timeoutId = setTimeout(() => {
+      if (loading && isMounted) {
+        console.warn("Employees loading timeout - showing fallback");
+        setError("Employees loading timed out. Please refresh the page.");
+        setLoading(false);
+      }
+    }, 30000);
+
+    socket.emit("employees/notes/get")
+
+    const handleNoteResponse = () => {
+
+    }
+
+      const handleAddNoteResponse = (response: any) => {
+      if (!isMounted) return;
+
+      if (response.done) {
+        console.log(response);
+        setError(null);
+        setLoading(false);
+        if (socket) {
+          socket.emit("employees/notes/get");
+        }
+      } else {
+        setError(response.error || "Failed to add policy");
+        setLoading(false);
+      }
+    };
+    socket.on("employees/notes/get-response", handleNoteResponse);
+    socket.on("employees/notes/add-response", handleAddNoteResponse);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      socket.off("employees/notes/get-response", handleNoteResponse);
+      socket.off("employees/notes/add-response", handleAddNoteResponse);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
 
   const optionsChoose = [
     { value: "Bulk Actions", label: "Bulk Actions" },
@@ -57,6 +155,78 @@ const Notes = () => {
       },
     ],
   };
+  // helper functions
+
+  // Handle input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+
+  interface OptionType {
+    value: string;
+    label: string;
+  }
+  // Handle select changes
+  const handleSelectChange = (name: keyof Note, selectedOption: OptionType | null) => {
+    setFormData({
+      ...formData,
+      [name]: selectedOption?.value || ""
+    });
+  };
+
+  // Handle tag changes
+  const handleTagChange = (selectedOptions: readonly TagOption[] | null) => {
+    const newTags = selectedOptions ? [...selectedOptions] : [];
+    setTags(newTags);
+    setFormData((prev) => ({
+      ...prev,
+      tag: newTags.map(tag => tag.value),
+    }));
+  };
+
+  // Handle date changes
+  const handleDateChange = (date: dayjs.Dayjs | null, dateString: string) => {
+    setFormData({
+      ...formData,
+      dueDate: dateString
+    });
+  };
+
+  // Handle editor content changes
+  const handleEditorChange = (content: string) => {
+    setFormData({
+      ...formData,
+      description: content
+    });
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    // Here you would typically send the data to an API
+    console.log("Form submitted with data:", formData);
+
+    if (socket) {
+      socket.emit("employees/notes/add", formData);
+    }
+
+    // Reset form after submission
+    setFormData({
+      title: "",
+      // assignee: "",
+      tag: [],
+      priority: "High",
+      dueDate: "",
+      status: "starred",
+      description: "",
+    });
+    setTags([]);
+  }
+
   return (
     <>
       <>
@@ -2477,6 +2647,132 @@ const Notes = () => {
           </div>
         </div>
         {/* /Page wrapper */}
+        {/* Add Note */}
+        <div className="modal fade" id="add_note">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h4 className="modal-title">Add Notes</h4>
+                <button
+                  type="button"
+                  className="btn-close custom-btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"
+                >
+                  <i className="ti ti-x" />
+                </button>
+              </div>
+              <form onSubmit={handleSubmit}>
+                <div className="modal-body">
+                  <div className="row">
+                    <div className="col-12">
+                      <div className="mb-3">
+                        <label className="form-label">Note Title</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          name="title"
+                          value={formData.title}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="col-12">
+                      {/* <div className="mb-3">
+                        <label className="form-label">Assignee</label>
+                        <CommonSelect
+                          className="select"
+                          options={optionsChoose}
+                          value={optionsChoose.find(option => option.value === formData.assignee)}
+                          onChange={(selectedOption) => handleSelectChange('assignee', selectedOption)}
+                        />
+                      </div> */}
+                    </div>
+                    <div className="col-6">
+                      <div className="mb-3">
+                        <label className="form-label">Tag</label>
+                        <Select
+                          isMulti
+                          options={predefinedTags}
+                          value={tags}
+                          onChange={handleTagChange}
+                          placeholder="Select tags"
+                          className="custom-select-class"
+                        />
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="mb-3">
+                        <label className="form-label">Priority</label>
+                        <CommonSelect
+                          className="select"
+                          options={optionsPriority}
+                          defaultValue={optionsPriority.find(option => option.value === formData.priority)}
+                          onChange={(selectedOption) => handleSelectChange("priority", selectedOption)}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="input-blocks todo-calendar">
+                        <label className="form-label">Due Date</label>
+                        <div className="input-groupicon calender-input">
+                          <DatePicker
+                            className="form-control datetimepicker"
+                            placeholder="Select Date"
+                            value={formData.dueDate ? dayjs(formData.dueDate) : null}
+                            // In your DatePicker component:
+                            onChange={(date, dateString) => {
+                              setFormData({
+                                ...formData,
+                                dueDate: Array.isArray(dateString) ? dateString[0] : dateString
+                              });
+                            }}
+                            format="YYYY-MM-DD"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="mb-3">
+                        <label className="form-label">Status</label>
+                        <CommonSelect
+                          className="select"
+                          options={optionsSelect}
+                          defaultValue={optionsSelect.find(option => option.value === formData.status)}
+                          onChange={(selectedOption) => handleSelectChange("status", selectedOption)}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-lg-12">
+                      <div className="mb-0 summer-description-box notes-summernote">
+                        <label className="form-label">Descriptions</label>
+                        <CommonTextEditor
+                          defaultValue={formData.description}
+                          onChange={handleEditorChange}
+                        />
+                        <small>Maximum 60 Characters</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-light me-2"
+                    data-bs-dismiss="modal"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Submit
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {/* /Add Note */}
       </>
 
       <NotesModal />
