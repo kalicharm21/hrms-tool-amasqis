@@ -83,6 +83,9 @@ export const getTenantCollections = (tenantDbName) => {
     designations: db.collection("designations"),
     assets: db.collection("assets"),
     termination: db.collection("termination"),
+
+    // notes - application
+    notes: db.collection("notes"),
   };
 };
 
