@@ -2,7 +2,6 @@ import { getTenantCollections } from "../../config/db.js";
 import { startOfToday, subDays, startOfMonth, subMonths } from "date-fns";
 import { ObjectId } from "mongodb";
 
-
 const toYMDStr = (input) => {
   const d = new Date(input);
   const y = d.getUTCFullYear();
@@ -12,11 +11,11 @@ const toYMDStr = (input) => {
 };
 
 const addDaysStr = (ymdStr, days) => {
-      const [y, m, d] = ymdStr.split("-").map(Number);
-      const dt = new Date(Date.UTC(y, m - 1, d));
-      dt.setUTCDate(dt.getUTCDate() + days);
-      return toYMDStr(dt);
-    };
+  const [y, m, d] = ymdStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return toYMDStr(dt);
+};
 
 // 1. Stats - total, recent
 const getTerminationStats = async (companyId) => {
@@ -39,15 +38,18 @@ const getTerminationStats = async (companyId) => {
       },
       {
         $project: {
-          totalTerminations: { $ifNull: [{ $arrayElemAt: ["$totalTerminations.count", 0] }, 0] },
-          last30days: { $ifNull: [{ $arrayElemAt: ["$last30days.count", 0] }, 0] },
+          totalTerminations: {
+            $ifNull: [{ $arrayElemAt: ["$totalTerminations.count", 0] }, 0],
+          },
+          last30days: {
+            $ifNull: [{ $arrayElemAt: ["$last30days.count", 0] }, 0],
+          },
         },
       },
     ];
 
-    
-
-    const [result = { totalTerminations: 0, last30days: 0 }] = await collection.termination.aggregate(pipeline).toArray();
+    const [result = { totalTerminations: 0, last30days: 0 }] =
+      await collection.termination.aggregate(pipeline).toArray();
     console.log(result);
 
     return {
@@ -65,7 +67,10 @@ const getTerminationStats = async (companyId) => {
 };
 
 // 2. Get terminations by date filter
-const getTerminations = async (companyId,{ type, startDate, endDate } = {}) => {
+const getTerminations = async (
+  companyId,
+  { type, startDate, endDate } = {}
+) => {
   try {
     const collection = getTenantCollections(companyId);
     const dateFilter = {};
@@ -98,15 +103,23 @@ const getTerminations = async (companyId,{ type, startDate, endDate } = {}) => {
       }
       case "thismonth": {
         const now = new Date();
-        const start = toYMDStr(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
-        const end = toYMDStr(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)));
+        const start = toYMDStr(
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+        );
+        const end = toYMDStr(
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+        );
         dateFilter.noticeDate = { $gte: start, $lt: end };
         break;
       }
       case "lastmonth": {
         const now = new Date();
-        const start = toYMDStr(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
-        const end = toYMDStr(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
+        const start = toYMDStr(
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+        );
+        const end = toYMDStr(
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+        );
         dateFilter.noticeDate = { $gte: start, $lt: end };
         break;
       }
@@ -123,17 +136,18 @@ const getTerminations = async (companyId,{ type, startDate, endDate } = {}) => {
           employeeName: 1,
           reason: 1,
           department: 1,
-          terminationDate: 1,   // yyyy-mm-dd string
+          terminationDate: 1, // yyyy-mm-dd string
           terminationType: 1,
-          noticeDate: 1,        // yyyy-mm-dd string
+          noticeDate: 1, // yyyy-mm-dd string
           terminationId: 1,
           created_at: 1,
         },
       },
     ];
 
-
     const results = await collection.termination.aggregate(pipeline).toArray();
+
+    console.log("retreval Resule : ", results);
 
     return {
       done: true,
@@ -148,7 +162,7 @@ const getTerminations = async (companyId,{ type, startDate, endDate } = {}) => {
 };
 
 // 3. Get a specific termination record
-const getSpecificTermination = async (companyId,terminationId) => {
+const getSpecificTermination = async (companyId, terminationId) => {
   try {
     const collection = getTenantCollections(companyId);
     const record = await collection.termination.findOne(
@@ -175,15 +189,21 @@ const getSpecificTermination = async (companyId,terminationId) => {
 };
 
 // 4. Add a termination (single-arg signature: form)
-const addTermination = async (companyId,form) => {
+const addTermination = async (companyId, form, useriD) => {
   try {
     const collection = getTenantCollections(companyId);
     // basic validation
-    const required = ["employeeName", "reason", "department", "terminationDate", "terminationType", "noticeDate"];
+    const required = [
+      "employeeName",
+      "reason",
+      "department",
+      "terminationDate",
+      "terminationType",
+      "noticeDate",
+    ];
     for (const k of required) {
       if (!form[k]) throw new Error(`Missing field: ${k}`);
     }
-
 
     const newTermination = {
       employeeName: form.employeeName,
@@ -193,7 +213,7 @@ const addTermination = async (companyId,form) => {
       terminationType: form.terminationType,
       noticeDate: toYMDStr(form.noticeDate), // store as Date
       terminationId: new ObjectId().toHexString(),
-      created_by: form.created_by || null,
+      created_by: useriD,
       created_at: new Date(),
     };
     console.log(newTermination);
@@ -202,26 +222,35 @@ const addTermination = async (companyId,form) => {
     return { done: true, message: "Termination added successfully" };
   } catch (error) {
     console.error("Error adding termination:", error);
-    return { done: false, message: error.message || "Error adding termination" };
+    return {
+      done: false,
+      message: error.message || "Error adding termination",
+    };
   }
 };
 
 // 5. Update a termination
-const updateTermination = async (companyId,form) => {
+const updateTermination = async (companyId, form) => {
   try {
     const collection = getTenantCollections(companyId);
     if (!form.terminationId) throw new Error("Missing terminationId");
 
-    const existing = await collection.termination.findOne({ terminationId: form.terminationId });
+    const existing = await collection.termination.findOne({
+      terminationId: form.terminationId,
+    });
     if (!existing) throw new Error("Termination not found");
 
     const updateData = {
       employeeName: form.employeeName ?? existing.employeeName,
       reason: form.reason ?? existing.reason,
       department: form.department ?? existing.department,
-      terminationDate: form.terminationDate ? toYMDStr(form.terminationDate) : existing.terminationDate,
+      terminationDate: form.terminationDate
+        ? toYMDStr(form.terminationDate)
+        : existing.terminationDate,
       terminationType: form.terminationType ?? existing.terminationType,
-      noticeDate: form.noticeDate ? toYMDStr(form.noticeDate) : existing.noticeDate,
+      noticeDate: form.noticeDate
+        ? toYMDStr(form.noticeDate)
+        : existing.noticeDate,
       // keep identifiers and created metadata
       terminationId: existing.terminationId,
       created_by: existing.created_by,
@@ -234,9 +263,17 @@ const updateTermination = async (companyId,form) => {
     );
     if (result.matchedCount === 0) throw new Error("Termination not found");
     if (result.modifiedCount === 0) {
-      return { done: true, message: "No changes made", data: { ...updateData } };
+      return {
+        done: true,
+        message: "No changes made",
+        data: { ...updateData },
+      };
     }
-    return { done: true, message: "Termination updated successfully", data: { ...updateData } };
+    return {
+      done: true,
+      message: "Termination updated successfully",
+      data: { ...updateData },
+    };
   } catch (error) {
     console.error("Error updating termination:", error);
     return { done: false, message: error.message, data: null };
@@ -244,7 +281,7 @@ const updateTermination = async (companyId,form) => {
 };
 
 // 6. Delete multiple terminations
-const deleteTermination = async (companyId,terminationIds) => {
+const deleteTermination = async (companyId, terminationIds) => {
   try {
     const collection = getTenantCollections(companyId);
     const result = await collection.termination.deleteMany({
@@ -269,4 +306,3 @@ export {
   updateTermination,
   deleteTermination,
 };
-

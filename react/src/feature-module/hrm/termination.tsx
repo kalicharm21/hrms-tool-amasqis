@@ -11,7 +11,7 @@ import { Socket } from "socket.io-client";
 import { format, parse } from "date-fns";
 import { EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Modal } from "antd";
-import  dayjs from "dayjs";
+import dayjs from "dayjs";
 
 type TerminationRow = {
   employeeName: string;
@@ -32,116 +32,128 @@ const Termination = () => {
   const socket = useSocket() as Socket | null;
 
   const [rows, setRows] = useState<TerminationRow[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalTerminations: "0", recentTerminations: "0" });
+  const [stats, setStats] = useState<Stats>({
+    totalTerminations: "0",
+    recentTerminations: "0",
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [filterType, setFilterType] = useState<string>("last7days");
-  const [customRange, setCustomRange] = useState<{ startDate?: string; endDate?: string }>({});
+  const [filterType, setFilterType] = useState<string>("thisyear");
+  const [customRange, setCustomRange] = useState<{
+    startDate?: string;
+    endDate?: string;
+  }>({});
   const [editing, setEditing] = useState<any>(null);
-  
 
-    // Controlled edit form data
-    const [editForm, setEditForm] = useState({
-      employeeName: "",
-      department: "",
-      terminationType: "Lack of skills",
-      noticeDate: "",        // "DD-MM-YYYY" shown in modal
-      reason: "",
-      terminationDate: "",   // "DD-MM-YYYY" shown in modal
-      terminationId: "",
+  // Controlled edit form data
+  const [editForm, setEditForm] = useState({
+    employeeName: "",
+    department: "",
+    terminationType: "Lack of skills",
+    noticeDate: "", // "DD-MM-YYYY" shown in modal
+    reason: "",
+    terminationDate: "", // "DD-MM-YYYY" shown in modal
+    terminationId: "",
+  });
+
+  const ddmmyyyyToYMD = (s?: string) => {
+    if (!s) return "";
+    const d = parse(s, "dd-MM-yyyy", new Date());
+    return isNaN(d.getTime()) ? "" : format(d, "yyyy-MM-dd");
+  };
+
+  const openEditModal = (row: any) => {
+    setEditForm({
+      employeeName: row.employeeName || "",
+      department: row.department || "",
+      terminationType: row.terminationType || "Lack of skills",
+      noticeDate: row.noticeDate
+        ? format(parse(row.noticeDate, "yyyy-MM-dd", new Date()), "dd-MM-yyyy")
+        : "",
+      reason: row.reason || "",
+      terminationDate: row.terminationDate
+        ? format(
+            parse(row.terminationDate, "yyyy-MM-dd", new Date()),
+            "dd-MM-yyyy"
+          )
+        : "",
+      terminationId: row.terminationId,
     });
-
-    const ddmmyyyyToYMD = (s?: string) => {
-      if (!s) return "";
-      const d = parse(s, "dd-MM-yyyy", new Date());
-      return isNaN(d.getTime()) ? "" : format(d, "yyyy-MM-dd");
-    };
-
-     const openEditModal = (row: any) => {
-      setEditForm({
-        employeeName: row.employeeName || "",
-        department: row.department || "",
-        terminationType: row.terminationType || "Lack of skills",
-        noticeDate: row.noticeDate
-          ? format(parse(row.noticeDate, "yyyy-MM-dd", new Date()), "dd-MM-yyyy")
-          : "",
-        reason: row.reason || "",
-        terminationDate: row.terminationDate
-          ? format(parse(row.terminationDate, "yyyy-MM-dd", new Date()), "dd-MM-yyyy")
-          : "",
-        terminationId: row.terminationId,
-      });
-    };
+  };
 
   const getModalContainer = () => {
     const modalElement = document.getElementById("modal-datepicker");
     return modalElement ? modalElement : document.body;
   };
 
-    const parseYMD = (s?: string) => (s ? parse(s, "yyyy-MM-dd", new Date()) : null); // string -> Date
-    const toYMD = (d: any) => {
-      if (!d) return "";
-      const dt = "toDate" in d ? d.toDate() : d; // support dayjs or Date
-      return format(dt, "yyyy-MM-dd");
-    };
-    
-  // state near top of component
-    const [addForm, setAddForm] = useState({
-      employeeName: "",
-      department: "",
-      reason: "",
-      terminationType: "Lack of skills", // default of your 3 types
-      noticeDate: "",                    // YYYY-MM-DD from DatePicker
-      terminationDate:"",
-    });
+  const parseYMD = (s?: string) =>
+    s ? parse(s, "yyyy-MM-dd", new Date()) : null; // string -> Date
+  const toYMD = (d: any) => {
+    if (!d) return "";
+    const dt = "toDate" in d ? d.toDate() : d; // support dayjs or Date
+    return format(dt, "yyyy-MM-dd");
+  };
 
-    const confirmDelete = (onConfirm: () => void) => {
-      Modal.confirm({
-        title: null,
-        icon: null,
-        closable: true,
-        centered: true,
-        okText: "Yes, Delete",
-        cancelText: "Cancel",
-        okButtonProps: { style: { background: "#ff4d4f", borderColor: "#ff4d4f" } },
-        cancelButtonProps: { style: { background: "#f5f5f5" } },
-        content: (
-          <div style={{ textAlign: "center" }}>
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                margin: "0 auto 12px",
-                borderRadius: 12,
-                background: "#ffecec",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <a aria-label="Delete">
-                <DeleteOutlined style={{ fontSize: 18, color: "#ff4d4f" }} />
-              </a>
-            </div>
-            <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 8 }}>
-              Confirm Delete
-            </div>
-            <div style={{ color: "#6b7280" }}>
-              You want to delete all the marked items, this can’t be undone once you delete.
-            </div>
+  // state near top of component
+  const [addForm, setAddForm] = useState({
+    employeeName: "",
+    department: "",
+    reason: "",
+    terminationType: "Lack of skills", // default of your 3 types
+    noticeDate: "", // YYYY-MM-DD from DatePicker
+    terminationDate: "",
+  });
+
+  const confirmDelete = (onConfirm: () => void) => {
+    Modal.confirm({
+      title: null,
+      icon: null,
+      closable: true,
+      centered: true,
+      okText: "Yes, Delete",
+      cancelText: "Cancel",
+      okButtonProps: {
+        style: { background: "#ff4d4f", borderColor: "#ff4d4f" },
+      },
+      cancelButtonProps: { style: { background: "#f5f5f5" } },
+      content: (
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              margin: "0 auto 12px",
+              borderRadius: 12,
+              background: "#ffecec",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <a aria-label="Delete">
+              <DeleteOutlined style={{ fontSize: 18, color: "#ff4d4f" }} />
+            </a>
           </div>
-        ),
-        onOk: async () => {
-          await onConfirm();
-        },
-      });
-    };
-    
-    const fmtYMD = (s?: string) => {
-      if (!s) return "";
-      const d = parse(s, "yyyy-MM-dd", new Date());
-      return isNaN(d.getTime()) ? s : format(d, "dd MMM yyyy");
-    };
+          <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 8 }}>
+            Confirm Delete
+          </div>
+          <div style={{ color: "#6b7280" }}>
+            You want to delete all the marked items, this can’t be undone once
+            you delete.
+          </div>
+        </div>
+      ),
+      onOk: async () => {
+        await onConfirm();
+      },
+    });
+  };
+
+  const fmtYMD = (s?: string) => {
+    if (!s) return "";
+    const d = parse(s, "yyyy-MM-dd", new Date());
+    return isNaN(d.getTime()) ? s : format(d, "dd MMM yyyy");
+  };
 
   // event handlers
   const onListResponse = useCallback((res: any) => {
@@ -182,7 +194,6 @@ const Termination = () => {
     }
   }, []);
 
-  
   // register socket listeners and join room
   useEffect(() => {
     if (!socket) return;
@@ -197,12 +208,28 @@ const Termination = () => {
 
     return () => {
       socket.off("hr/termination/terminationlist-response", onListResponse);
-      socket.off("hr/termination/termination-details-response", onStatsResponse);
+      socket.off(
+        "hr/termination/termination-details-response",
+        onStatsResponse
+      );
       socket.off("hr/termination/add-termination-response", onAddResponse);
-      socket.off("hr/termination/update-termination-response", onUpdateResponse);
-      socket.off("hr/termination/delete-termination-response", onDeleteResponse);
+      socket.off(
+        "hr/termination/update-termination-response",
+        onUpdateResponse
+      );
+      socket.off(
+        "hr/termination/delete-termination-response",
+        onDeleteResponse
+      );
     };
-  }, [socket, onListResponse, onStatsResponse, onAddResponse, onUpdateResponse, onDeleteResponse]);
+  }, [
+    socket,
+    onListResponse,
+    onStatsResponse,
+    onAddResponse,
+    onUpdateResponse,
+    onDeleteResponse,
+  ]);
 
   // fetchers
   const fetchList = useCallback(
@@ -220,38 +247,46 @@ const Termination = () => {
   );
 
   const toIsoFromDDMMYYYY = (s: string) => {
-  // s like "13-09-2025"
+    // s like "13-09-2025"
     const [dd, mm, yyyy] = s.split("-").map(Number);
     if (!dd || !mm || !yyyy) return null;
-  // Construct UTC date to avoid TZ shifts
+    // Construct UTC date to avoid TZ shifts
     const d = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0));
     return isNaN(d.getTime()) ? null : d.toISOString();
-    };
-    
-  const handleAddSave = () => {
-      if (!socket) return;
+  };
 
-      // basic validation
-      if (!addForm.employeeName || !addForm.terminationType || !addForm.noticeDate || !addForm.reason) {
-        // toast.warn("Please fill required fields");
-        return;
+  const handleAddSave = () => {
+    if (!socket) return;
+
+    // basic validation
+    if (
+      !addForm.employeeName ||
+      !addForm.terminationType ||
+      !addForm.noticeDate ||
+      !addForm.reason
+    ) {
+      // toast.warn("Please fill required fields");
+      return;
     }
-    
+
     const noticeIso = toIsoFromDDMMYYYY(addForm.noticeDate);
     if (!noticeIso) {
-    // toast.error("Invalid notice date");
-        return;
+      // toast.error("Invalid notice date");
+      return;
     }
-    const terIso= toIsoFromDDMMYYYY(addForm.terminationDate);
+    const terIso = toIsoFromDDMMYYYY(addForm.terminationDate);
     if (!terIso) return;
 
     const payload = {
-     employeeName: addForm.employeeName,
-     terminationType: addForm.terminationType as "Retirement" | "Insubordination" | "Lack of skills",
-     noticeDate: noticeIso,
-     reason: addForm.reason,
-     department: addForm.department,
-     terminationDate: terIso,
+      employeeName: addForm.employeeName,
+      terminationType: addForm.terminationType as
+        | "Retirement"
+        | "Insubordination"
+        | "Lack of skills",
+      noticeDate: noticeIso,
+      reason: addForm.reason,
+      department: addForm.department,
+      terminationDate: terIso,
     };
 
     socket.emit("hr/termination/add-termination", payload);
@@ -261,37 +296,47 @@ const Termination = () => {
       department: "",
       reason: "",
       terminationType: "Lack of skills", // default of your 3 types
-      noticeDate: "",                    // YYYY-MM-DD from DatePicker
-      terminationDate:"",
+      noticeDate: "", // YYYY-MM-DD from DatePicker
+      terminationDate: "",
     });
-    socket.emit("hr/termination/terminationlist", { type: "last7days" });
-    };
+    socket.emit("hr/termination/terminationlist", { type: "thisyear" });
+  };
 
   const handleEditSave = () => {
-      if (!socket) return;
+    if (!socket) return;
 
-      // basic validation
-      if (!editForm.employeeName || !editForm.terminationType || !editForm.noticeDate || !editForm.reason || !editForm.department || !editForm.terminationDate) {
-        // toast.warn("Please fill required fields");
-        return;
+    // basic validation
+    if (
+      !editForm.employeeName ||
+      !editForm.terminationType ||
+      !editForm.noticeDate ||
+      !editForm.reason ||
+      !editForm.department ||
+      !editForm.terminationDate
+    ) {
+      // toast.warn("Please fill required fields");
+      return;
     }
-    
+
     const noticeIso = toIsoFromDDMMYYYY(editForm.noticeDate);
     if (!noticeIso) {
-    // toast.error("Invalid notice date");
-        return;
+      // toast.error("Invalid notice date");
+      return;
     }
-    const terIso= toIsoFromDDMMYYYY(editForm.terminationDate);
+    const terIso = toIsoFromDDMMYYYY(editForm.terminationDate);
     if (!terIso) return;
 
     const payload = {
-     employeeName: editForm.employeeName,
-     terminationType: editForm.terminationType as "Retirement" | "Insubordination" | "Lack of skills",
-     noticeDate: noticeIso,
-     reason: editForm.reason,
-     department: editForm.department,
-     terminationDate: terIso,
-     terminationId: editForm.terminationId,
+      employeeName: editForm.employeeName,
+      terminationType: editForm.terminationType as
+        | "Retirement"
+        | "Insubordination"
+        | "Lack of skills",
+      noticeDate: noticeIso,
+      reason: editForm.reason,
+      department: editForm.department,
+      terminationDate: terIso,
+      terminationId: editForm.terminationId,
     };
 
     socket.emit("hr/termination/update-termination", payload);
@@ -301,14 +346,12 @@ const Termination = () => {
       department: "",
       reason: "",
       terminationType: "Lack of skills", // default of your 3 types
-      noticeDate: "",                    // YYYY-MM-DD from DatePicker
-      terminationDate:"",
-      terminationId:"",
+      noticeDate: "", // YYYY-MM-DD from DatePicker
+      terminationDate: "",
+      terminationId: "",
     });
     socket.emit("hr/termination/terminationlist", { type: "last7days" });
-    };
-
-    
+  };
 
   const fetchStats = useCallback(() => {
     if (!socket) return;
@@ -322,10 +365,9 @@ const Termination = () => {
     fetchStats();
   }, [socket, fetchList, fetchStats, filterType, customRange]);
 
-
   // ui events
   type Option = { value: string; label: string };
-    const handleFilterChange = (opt: Option | null) => {
+  const handleFilterChange = (opt: Option | null) => {
     const value = opt?.value ?? "last7days";
     setFilterType(value);
     if (value !== "custom") {
@@ -344,22 +386,27 @@ const Termination = () => {
 
   const handleBulkDelete = () => {
     if (!socket || selectedKeys.length === 0) return;
-    if (window.confirm(`Delete ${selectedKeys.length} record(s)? This cannot be undone.`)) {
+    if (
+      window.confirm(
+        `Delete ${selectedKeys.length} record(s)? This cannot be undone.`
+      )
+    ) {
       socket.emit("hr/termination/delete-termination", selectedKeys);
     }
   };
 
-const handleSelectionChange = (keys: React.Key[]) => {
-  setSelectedKeys(keys as string[]);
-};
+  const handleSelectionChange = (keys: React.Key[]) => {
+    setSelectedKeys(keys as string[]);
+  };
 
   // table columns (preserved look, wired to backend fields)
   const columns: any[] = [
     {
       title: "Terminated Employee",
       dataIndex: "employeeName",
-      
-      sorter: (a: TerminationRow, b: TerminationRow) => a.employeeName.localeCompare(b.employeeName),
+
+      sorter: (a: TerminationRow, b: TerminationRow) =>
+        a.employeeName.localeCompare(b.employeeName),
     },
     {
       title: "Department",
@@ -374,7 +421,8 @@ const handleSelectionChange = (keys: React.Key[]) => {
         { text: "Lack of skills", value: "Lack of skills" },
       ],
       onFilter: (val: any, rec: any) => rec.terminationType === val,
-      sorter: (a: TerminationRow, b: TerminationRow) => a.terminationType.localeCompare(b.terminationType),
+      sorter: (a: TerminationRow, b: TerminationRow) =>
+        a.terminationType.localeCompare(b.terminationType),
     },
     {
       title: "Notice Date",
@@ -392,34 +440,38 @@ const handleSelectionChange = (keys: React.Key[]) => {
       dataIndex: "terminationDate",
       render: (val: string) => fmtYMD(val),
       sorter: (a: TerminationRow, b: TerminationRow) =>
-        new Date(a.terminationDate).getTime() - new Date(b.terminationDate).getTime(),
+        new Date(a.terminationDate).getTime() -
+        new Date(b.terminationDate).getTime(),
     },
     {
-      title:"               ",
+      title: "               ",
       dataIndex: "terminationId", // must match your row field
-    render: (id: string, record: TerminationRow) => (
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <a href="#"
-  data-bs-toggle="modal"
-  data-bs-target="#edit_termination"
-  onClick={(e) => {
-    // still prefill the form before Bootstrap opens it
-    openEditModal(record);
-  }}>
+      render: (id: string, record: TerminationRow) => (
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <a
+            href="#"
+            data-bs-toggle="modal"
+            data-bs-target="#edit_termination"
+            onClick={(e) => {
+              // still prefill the form before Bootstrap opens it
+              openEditModal(record);
+            }}
+          >
             <i className="ti ti-edit" />
           </a>
-        <a
-          aria-label="Delete"
-          onClick={(e) => {
-            e.preventDefault();
-            confirmDelete(() =>
-              socket?.emit("hr/termination/delete-termination", [id]));
-          }}
-        >
-          <i className="ti ti-trash" />
-        </a>
-      </div>
-    ),
+          <a
+            aria-label="Delete"
+            onClick={(e) => {
+              e.preventDefault();
+              confirmDelete(() =>
+                socket?.emit("hr/termination/delete-termination", [id])
+              );
+            }}
+          >
+            <i className="ti ti-trash" />
+          </a>
+        </div>
+      ),
     },
   ];
 
@@ -438,11 +490,11 @@ const handleSelectionChange = (keys: React.Key[]) => {
               <nav>
                 <ol className="breadcrumb mb-0">
                   <li className="breadcrumb-item">
-                    <Link to={all_routes.adminDashboard}><i className="ti ti-smart-home" /></Link>
+                    <Link to={all_routes.adminDashboard}>
+                      <i className="ti ti-smart-home" />
+                    </Link>
                   </li>
-                  <li className="breadcrumb-item">
-                    HR
-                  </li>
+                  <li className="breadcrumb-item">HR</li>
                   <li className="breadcrumb-item active" aria-current="page">
                     Termination
                   </li>
@@ -450,40 +502,42 @@ const handleSelectionChange = (keys: React.Key[]) => {
               </nav>
             </div>
             <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-                        <label className="mb-2"></label>
-                        <div>
-                          <Link to="#" className="btn btn-primary d-flex align-items-center" data-bs-toggle="modal"
+              <label className="mb-2"></label>
+              <div>
+                <Link
+                  to="#"
+                  className="btn btn-primary d-flex align-items-center"
+                  data-bs-toggle="modal"
                   data-inert={true}
-                  data-bs-target="#new_termination">
-                            <i className="ti ti-circle-plus me-2" />
-                            Add Termination
-                          </Link>
-                        </div>
-            <div className="head-icons ms-2">
-              <CollapseHeader />
-
-                      </div>
+                  data-bs-target="#new_termination"
+                >
+                  <i className="ti ti-circle-plus me-2" />
+                  Add Termination
+                </Link>
+              </div>
+              <div className="head-icons ms-2">
+                <CollapseHeader />
+              </div>
             </div>
           </div>
-            
-        
-          
+
           {/* Table + Filters */}
           <div className="row">
             <div className="col-sm-12">
               <div className="card">
-              <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
+                <div className="card-header d-flex align-items-center justify-content-between flex-wrap row-gap-3">
                   <h5 className="d-flex align-items-center">
                     Termination List
                   </h5>
                   <div className="d-flex align-items-center flex-wrap row-gap-3">
-                    
                     <div className="dropdown">
                       <Link
                         to="#"
                         className="d-inline-flex align-items-center fs-12"
                       >
-                        <label className="fs-12 d-inline-flex me-1">Sort By : </label>
+                        <label className="fs-12 d-inline-flex me-1">
+                          Sort By :{" "}
+                        </label>
                         <CommonSelect
                           className="select"
                           options={[
@@ -498,26 +552,22 @@ const handleSelectionChange = (keys: React.Key[]) => {
                           defaultValue={filterType}
                           onChange={handleFilterChange}
                         />
-                    </Link>
+                      </Link>
                     </div>
                   </div>
                 </div>
                 <div className="card-body p-0">
-                    <Table
-                      dataSource={rows}
-                      columns={columns}
-                      Selection={true}
-                    />
+                  <Table dataSource={rows} columns={columns} Selection={true} />
                   <div className="table-responsive">
-                    
-
                     <div className="row mb-3">
-
                       {selectedKeys.length > 0 && (
                         <div className="col-md-2">
                           <label className="form-label">&nbsp;</label>
                           <div>
-                            <button className="btn btn-danger" onClick={handleBulkDelete}>
+                            <button
+                              className="btn btn-danger"
+                              onClick={handleBulkDelete}
+                            >
                               <i className="fa fa-trash me-2" />
                               Delete ({selectedKeys.length})
                             </button>
@@ -525,8 +575,6 @@ const handleSelectionChange = (keys: React.Key[]) => {
                         </div>
                       )}
                     </div>
-
-
                   </div>
                 </div>
               </div>
@@ -537,7 +585,10 @@ const handleSelectionChange = (keys: React.Key[]) => {
           <div className="footer d-sm-flex align-items-center justify-content-between">
             <p>2014 - 2025 © Amasqis.</p>
             <p>
-              Designed &amp; Developed By <Link to="#" target="_blank">Amasqis</Link>
+              Designed &amp; Developed By{" "}
+              <Link to="#" target="_blank">
+                Amasqis
+              </Link>
             </p>
           </div>
         </div>
@@ -566,18 +617,30 @@ const handleSelectionChange = (keys: React.Key[]) => {
                         </label>
                         <textarea
                           className="form-control"
-                          rows={1} defaultValue={addForm.employeeName} onChange ={(e) => setAddForm({ ...addForm, employeeName: e.target.value})}
+                          rows={1}
+                          defaultValue={addForm.employeeName}
+                          onChange={(e) =>
+                            setAddForm({
+                              ...addForm,
+                              employeeName: e.target.value,
+                            })
+                          }
                         />
                       </div>
                     </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">
-                          Department
-                        </label>
+                        <label className="form-label">Department</label>
                         <textarea
                           className="form-control"
-                          rows={1} defaultValue={addForm.department} onChange ={(e) => setAddForm({ ...addForm, department: e.target.value})}
+                          rows={1}
+                          defaultValue={addForm.department}
+                          onChange={(e) =>
+                            setAddForm({
+                              ...addForm,
+                              department: e.target.value,
+                            })
+                          }
                         />
                       </div>
                     </div>
@@ -588,10 +651,22 @@ const handleSelectionChange = (keys: React.Key[]) => {
                           className="select"
                           options={[
                             { value: "Retirement", label: "Retirement" },
-                            { value: "Insubordination", label: "Insubordination" },
-                            { value: "Lack of skills", label: "Lack of skills" },
-                            ]}
-                          defaultValue={addForm.terminationType} onChange={(opt: { value: string } | null) => setAddForm({ ...addForm, terminationType: opt?.value ?? "Lack of skills" })}
+                            {
+                              value: "Insubordination",
+                              label: "Insubordination",
+                            },
+                            {
+                              value: "Lack of skills",
+                              label: "Lack of skills",
+                            },
+                          ]}
+                          defaultValue={addForm.terminationType}
+                          onChange={(opt: { value: string } | null) =>
+                            setAddForm({
+                              ...addForm,
+                              terminationType: opt?.value ?? "Lack of skills",
+                            })
+                          }
                         />
                       </div>
                     </div>
@@ -606,7 +681,13 @@ const handleSelectionChange = (keys: React.Key[]) => {
                               type: "mask",
                             }}
                             getPopupContainer={getModalContainer}
-                            placeholder="DD-MM-YYYY" onChange={(_, dateString) => setAddForm({ ...addForm, noticeDate: dateString as string })}
+                            placeholder="DD-MM-YYYY"
+                            onChange={(_, dateString) =>
+                              setAddForm({
+                                ...addForm,
+                                noticeDate: dateString as string,
+                              })
+                            }
                           />
                           <span className="input-icon-addon">
                             <i className="ti ti-calendar text-gray-7" />
@@ -620,7 +701,10 @@ const handleSelectionChange = (keys: React.Key[]) => {
                         <textarea
                           className="form-control"
                           rows={3}
-                          defaultValue={addForm.reason} onChange={(e) => setAddForm({ ...addForm, reason: e.target.value })}
+                          defaultValue={addForm.reason}
+                          onChange={(e) =>
+                            setAddForm({ ...addForm, reason: e.target.value })
+                          }
                         />
                       </div>
                     </div>
@@ -635,7 +719,13 @@ const handleSelectionChange = (keys: React.Key[]) => {
                               type: "mask",
                             }}
                             getPopupContainer={getModalContainer}
-                            placeholder="DD-MM-YYYY" onChange={(_, dateString) => setAddForm({ ...addForm, terminationDate: dateString as string })}
+                            placeholder="DD-MM-YYYY"
+                            onChange={(_, dateString) =>
+                              setAddForm({
+                                ...addForm,
+                                terminationDate: dateString as string,
+                              })
+                            }
                           />
                           <span className="input-icon-addon">
                             <i className="ti ti-calendar text-gray-7" />
@@ -694,7 +784,12 @@ const handleSelectionChange = (keys: React.Key[]) => {
                           type="text"
                           className="form-control"
                           defaultValue={editForm.employeeName}
-                          onChange={(e) => setEditForm({ ...editForm, employeeName: e.target.value })}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              employeeName: e.target.value,
+                            })
+                          }
                         />
                       </div>
                     </div>
@@ -705,7 +800,12 @@ const handleSelectionChange = (keys: React.Key[]) => {
                           className="form-control"
                           rows={1}
                           defaultValue={editForm.department}
-                          onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              department: e.target.value,
+                            })
+                          }
                         />
                       </div>
                     </div>
@@ -715,12 +815,23 @@ const handleSelectionChange = (keys: React.Key[]) => {
                         <CommonSelect
                           className="select"
                           defaultValue={editForm.terminationType}
-                          onChange={(opt: { value: string } | null) => setEditForm({ ...editForm, terminationType: opt?.value ?? "Lack of skills" })}
+                          onChange={(opt: { value: string } | null) =>
+                            setEditForm({
+                              ...editForm,
+                              terminationType: opt?.value ?? "Lack of skills",
+                            })
+                          }
                           options={[
                             { value: "Retirement", label: "Retirement" },
-                            { value: "Insubordination", label: "Insubordination" },
-                            { value: "Lack of skills", label: "Lack of skills" },
-                            ]}
+                            {
+                              value: "Insubordination",
+                              label: "Insubordination",
+                            },
+                            {
+                              value: "Lack of skills",
+                              label: "Lack of skills",
+                            },
+                          ]}
                         />
                       </div>
                     </div>
@@ -729,13 +840,22 @@ const handleSelectionChange = (keys: React.Key[]) => {
                         <label className="form-label">Notice Date</label>
                         <div className="input-icon-end position-relative">
                           <DatePicker
-                              className="form-control datetimepicker"
-                              format={{ format: "DD-MM-YYYY", type: "mask" }}
-                              getPopupContainer={getModalContainer}
-                              placeholder="DD-MM-YYYY"
-                              defaultValue={editForm.noticeDate ? dayjs(editForm.noticeDate, "DD-MM-YYYY") : null}
-                              onChange={(_, dateString) => setEditForm({ ...editForm, noticeDate: dateString as string })}
-                            />
+                            className="form-control datetimepicker"
+                            format={{ format: "DD-MM-YYYY", type: "mask" }}
+                            getPopupContainer={getModalContainer}
+                            placeholder="DD-MM-YYYY"
+                            defaultValue={
+                              editForm.noticeDate
+                                ? dayjs(editForm.noticeDate, "DD-MM-YYYY")
+                                : null
+                            }
+                            onChange={(_, dateString) =>
+                              setEditForm({
+                                ...editForm,
+                                noticeDate: dateString as string,
+                              })
+                            }
+                          />
                           <span className="input-icon-addon">
                             <i className="ti ti-calendar text-gray-7" />
                           </span>
@@ -749,7 +869,9 @@ const handleSelectionChange = (keys: React.Key[]) => {
                           className="form-control"
                           rows={3}
                           defaultValue={editForm.reason}
-                          onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, reason: e.target.value })
+                          }
                         />
                       </div>
                     </div>
@@ -758,13 +880,22 @@ const handleSelectionChange = (keys: React.Key[]) => {
                         <label className="form-label">Resignation Date</label>
                         <div className="input-icon-end position-relative">
                           <DatePicker
-                              className="form-control datetimepicker"
-                              format={{ format: "DD-MM-YYYY", type: "mask" }}
-                              getPopupContainer={getModalContainer}
-                              placeholder="DD-MM-YYYY"
-                              defaultValue={editForm.terminationDate ? dayjs(editForm.terminationDate, "DD-MM-YYYY") : null}
-                              onChange={(_, dateString) => setEditForm({ ...editForm, terminationDate: dateString as string })}
-                            />
+                            className="form-control datetimepicker"
+                            format={{ format: "DD-MM-YYYY", type: "mask" }}
+                            getPopupContainer={getModalContainer}
+                            placeholder="DD-MM-YYYY"
+                            defaultValue={
+                              editForm.terminationDate
+                                ? dayjs(editForm.terminationDate, "DD-MM-YYYY")
+                                : null
+                            }
+                            onChange={(_, dateString) =>
+                              setEditForm({
+                                ...editForm,
+                                terminationDate: dateString as string,
+                              })
+                            }
+                          />
                           <span className="input-icon-addon">
                             <i className="ti ti-calendar text-gray-7" />
                           </span>
@@ -796,11 +927,8 @@ const handleSelectionChange = (keys: React.Key[]) => {
         </div>
         {/* /Edi Termination */}
       </div>
-      
-      
     </>
   );
 };
 
 export default Termination;
-
