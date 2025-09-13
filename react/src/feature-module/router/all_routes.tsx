@@ -322,7 +322,7 @@ export const all_routes = {
   contactDetails: "/contact-details",
   companiesGrid: "/companies-grid",
   companiesList: "/companies-list",
-  companiesDetails: "/companies-details",
+  companiesDetails: "/companies-details/:companyId",
   dealsGrid: "/deals-grid",
   dealsList: "/deals-list",
   dealsDetails: "/deals-details",
