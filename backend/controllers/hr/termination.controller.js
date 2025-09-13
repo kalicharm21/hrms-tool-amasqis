@@ -38,9 +38,9 @@ const terminationController = (socket, io) => {
         companyId,
         terminationId
       );
-      socket.emit("hr/termination/get-termination-response", res);
+      socket.emit("hr/termination/terminationlist-response", res);
     } catch (error) {
-      socket.emit("hr/termination/get-termination-response", toErr(error));
+      socket.emit("hr/termination/terminationlist-response", toErr(error));
     }
   });
 
@@ -59,7 +59,7 @@ const terminationController = (socket, io) => {
           companyId,
           {}
         );
-        socket.emit("hr/termination/terminationlist-response", res);
+        socket.emit("hr/termination/termination-details-response", res);
         io.to("hr_room").emit(
           "hr/termination/terminationlist-response",
           updatedList
@@ -83,6 +83,7 @@ const terminationController = (socket, io) => {
           companyId,
           {}
         );
+        console.log("updatessssss", updatedList);
         socket.emit("hr/termination/terminationlist-response", updatedList);
         io.to("hr_room").emit(
           "hr/termination/terminationlist-response",
