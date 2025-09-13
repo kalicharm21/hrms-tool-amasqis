@@ -1,5 +1,5 @@
 import { DatePicker } from 'antd';
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import CommonSelect from '../common/commonSelect';
 import { beforeuse, city, company, contacts, deals, guests, owner, owners, state, status } from '../common/selectoption/selectoption';
@@ -7,7 +7,200 @@ import { label } from 'yet-another-react-lightbox/*';
 import CommonTagsInput from '../common/Taginput';
 import ImageWithBasePath from '../common/imageWithBasePath';
 
+import { useAuth } from "@clerk/clerk-react";
 const EditCompany = () => {
+  const API_BASE_URL =
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.REACT_APP_BACKEND_URL) ||
+    (typeof window !== "undefined" && (window as any).REACT_APP_BACKEND_URL) ||
+    "http://localhost:5000";
+  const { getToken } = useAuth();
+  const [form, setForm] = useState<any>({});
+  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<any>({});
+
+  // Load company data when modal opens
+  useEffect(() => {
+    const loadCompanyData = async () => {
+      const companyId = (window as any).CURRENT_COMPANY_ID;
+      const companyData = (window as any).CURRENT_COMPANY_DATA;
+      
+      if (companyData) {
+        // Use pre-loaded data
+        setForm({
+          name: companyData.name || "",
+          email: companyData.email || "",
+          phone: companyData.phone || "",
+          phone2: companyData.phone2 || "",
+          fax: companyData.fax || "",
+          address: companyData.address?.street || "",
+          city: companyData.address?.city || companyData.city || "",
+          state: companyData.address?.state || companyData.state || "",
+          zipcode: companyData.address?.zipCode || companyData.zipcode || "",
+          country: companyData.address?.country || companyData.country || "",
+          website: companyData.website || "",
+          industry: companyData.industry || "",
+          source: companyData.source || "",
+          currency: companyData.currency || "",
+          language: companyData.language || "",
+          about: companyData.about || "",
+          rating: companyData.rating || "",
+          status: companyData.status || "Active",
+          ownerName: companyData.ownerName || "",
+          facebook: companyData.socialLinks?.facebook || "",
+          twitter: companyData.socialLinks?.twitter || "",
+          linkedin: companyData.socialLinks?.linkedin || "",
+          skype: companyData.socialLinks?.skype || "",
+          whatsapp: companyData.socialLinks?.whatsapp || "",
+          instagram: companyData.socialLinks?.instagram || "",
+        });
+      } else if (companyId) {
+        // Fetch data from API
+        setLoading(true);
+        try {
+          const token = await getToken();
+          const response = await fetch(`${API_BASE_URL}/api/companies/${companyId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = await response.json();
+          if (data.done) {
+            const company = data.data;
+            setForm({
+              name: company.name || "",
+              email: company.email || "",
+              phone: company.phone || "",
+              phone2: company.phone2 || "",
+              fax: company.fax || "",
+              address: company.address?.street || "",
+              city: company.address?.city || company.city || "",
+              state: company.address?.state || company.state || "",
+              zipcode: company.address?.zipCode || company.zipcode || "",
+              country: company.address?.country || company.country || "",
+              website: company.website || "",
+              industry: company.industry || "",
+              source: company.source || "",
+              currency: company.currency || "",
+              language: company.language || "",
+              about: company.about || "",
+              rating: company.rating || "",
+              status: company.status || "Active",
+              ownerName: company.ownerName || "",
+              facebook: company.socialLinks?.facebook || "",
+              twitter: company.socialLinks?.twitter || "",
+              linkedin: company.socialLinks?.linkedin || "",
+              skype: company.socialLinks?.skype || "",
+              whatsapp: company.socialLinks?.whatsapp || "",
+              instagram: company.socialLinks?.instagram || "",
+            });
+          }
+        } catch (error) {
+          console.error('Error loading company:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Listen for modal show event
+    const modal = document.getElementById('edit_company');
+    if (modal) {
+      modal.addEventListener('shown.bs.modal', loadCompanyData);
+      return () => {
+        modal.removeEventListener('shown.bs.modal', loadCompanyData);
+      };
+    }
+  }, [getToken, API_BASE_URL]);
+
+  const onChange = (e: any) => {
+    const { name, value } = e.target;
+    setForm((p: any) => ({ ...p, [name]: value }));
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors((prev: any) => ({ ...prev, [name]: "" }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors: any = {};
+
+    if (!form.name?.trim()) {
+      newErrors.name = "Company name is required";
+    }
+    if (!form.email?.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+    if (!form.phone?.trim()) {
+      newErrors.phone = "Phone number is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const onSave = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const id = (window as any).CURRENT_COMPANY_ID;
+      if (!id) return;
+      
+      const token = await getToken();
+      const payload = {
+        ...form,
+        address: {
+          street: form.address || "",
+          city: form.city || "",
+          state: form.state || "",
+          zipCode: form.zipcode || "",
+          country: form.country || "",
+          fullAddress: `${form.address || ""}, ${form.city || ""}, ${form.state || ""} ${form.zipcode || ""}, ${form.country || ""}`
+        },
+        socialLinks: {
+          facebook: form.facebook || "",
+          twitter: form.twitter || "",
+          linkedin: form.linkedin || "",
+          skype: form.skype || "",
+          whatsapp: form.whatsapp || "",
+          instagram: form.instagram || "",
+        },
+        rating: Number(form.rating) || 0,
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/companies/${id}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await res.json();
+      if (data.done) {
+        window.dispatchEvent(new CustomEvent('companies:changed'));
+        
+        // Close modal
+        const modal = document.getElementById('edit_company');
+        if (modal) {
+          const modalInstance = (window as any).bootstrap?.Modal?.getInstance(modal);
+          if (modalInstance) {
+            modalInstance.hide();
+          }
+        }
+        
+        alert('Company updated successfully!');
+      } else {
+        alert(`Failed to update company: ${data.error}`);
+      }
+    } catch (err) {
+      console.error('edit company error', err);
+      alert('Error updating company. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   const getModalContainer = () => {
     const modalElement = document.getElementById('modal-datepicker');
@@ -215,13 +408,13 @@ const EditCompany = () => {
                           <label className="form-label">
                             Company Name <span className="text-danger">*</span>
                           </label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="name" value={form.name||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Email</label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="email" value={form.email||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -229,25 +422,25 @@ const EditCompany = () => {
                           <label className="form-label">
                             Phone Number <span className="text-danger">*</span>
                           </label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="phone" value={form.phone||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Phone Number 2</label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="phone2" value={form.phone2||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Fax</label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="fax" value={form.fax||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Website</label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="website" value={form.website||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -256,7 +449,7 @@ const EditCompany = () => {
                             Ratings <span className="text-danger"> *</span>
                           </label>
                           <div className="input-icon-end position-relative">
-                            <input type="text" className="form-control" />
+                            <input type="text" className="form-control" name="rating" value={form.rating||''} onChange={onChange} />
                             <span className="input-icon-addon">
                               <i className="ti ti-star text-gray-6" />
                             </span>
@@ -320,6 +513,7 @@ const EditCompany = () => {
                             className='select'
                             options={industryChoose}
                             defaultValue={industryChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,industry:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -332,6 +526,7 @@ const EditCompany = () => {
                             className='select'
                             options={sourcesChoose}
                             defaultValue={sourcesChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,source:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -344,6 +539,7 @@ const EditCompany = () => {
                             className='select'
                             options={currencyChoose}
                             defaultValue={currencyChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,currency:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -356,6 +552,7 @@ const EditCompany = () => {
                             className='select'
                             options={languageChoose}
                             defaultValue={languageChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,language:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -364,7 +561,7 @@ const EditCompany = () => {
                           <label className="form-label">
                             About <span className="text-danger">*</span>
                           </label>
-                          <textarea className="form-control" defaultValue={""} />
+                          <textarea className="form-control" name="about" value={form.about||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-12">
@@ -419,7 +616,7 @@ const EditCompany = () => {
                           <label className="form-label">
                             Address <span className="text-danger">*</span>
                           </label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="address" value={form.address||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
@@ -431,6 +628,7 @@ const EditCompany = () => {
                             className='select'
                             options={countryChoose}
                             defaultValue={countryChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,country:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -443,6 +641,7 @@ const EditCompany = () => {
                             className='select'
                             options={stateChoose}
                             defaultValue={stateChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,state:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -455,6 +654,7 @@ const EditCompany = () => {
                             className='select'
                             options={cityChoose}
                             defaultValue={cityChoose[1]}
+                            onChange={(o)=>setForm((p:any)=>({...p,city:o?.value||''}))}
                           />
                         </div>
                       </div>
@@ -463,7 +663,7 @@ const EditCompany = () => {
                           <label className="form-label">
                             Zipcode <span className="text-danger">*</span>
                           </label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="zipcode" value={form.zipcode||''} onChange={onChange} />
                         </div>
                       </div>
                     </div>
@@ -493,37 +693,37 @@ const EditCompany = () => {
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Facebook</label>
-                          <input type="text" className="form-control" />
+                          <input type="text" className="form-control" name="facebook" value={form.facebook||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Twitter</label>
-                          <input type="email" className="form-control" />
+                          <input type="text" className="form-control" name="twitter" value={form.twitter||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">LinkedIn</label>
-                          <input type="email" className="form-control" />
+                          <input type="text" className="form-control" name="linkedin" value={form.linkedin||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Skype</label>
-                          <input type="email" className="form-control" />
+                          <input type="text" className="form-control" name="skype" value={form.skype||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Whatsapp</label>
-                          <input type="email" className="form-control" />
+                          <input type="text" className="form-control" name="whatsapp" value={form.whatsapp||''} onChange={onChange} />
                         </div>
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
                           <label className="form-label">Instagram</label>
-                          <input type="email" className="form-control" />
+                          <input type="text" className="form-control" name="instagram" value={form.instagram||''} onChange={onChange} />
                         </div>
                       </div>
                     </div>
@@ -536,7 +736,7 @@ const EditCompany = () => {
                     >
                       Cancel
                     </button>
-                    <button type="button" data-bs-dismiss="modal" className="btn btn-primary">
+                    <button type="button" data-bs-dismiss="modal" className="btn btn-primary" onClick={onSave}>
                       Save{" "}
                     </button>
                   </div>
