@@ -319,7 +319,7 @@ export const all_routes = {
   taskboard: "/task-board",
   contactGrid: "/contact-grid",
   contactList: "/contact-list",
-  contactDetails: "/contact-details",
+  contactDetails: "/contact-details/:contactId",
   companiesGrid: "/companies-grid",
   companiesList: "/companies-list",
   companiesDetails: "/companies-details/:companyId",
