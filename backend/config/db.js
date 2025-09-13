@@ -80,6 +80,7 @@ export const getTenantCollections = (tenantDbName) => {
     policy: db.collection("policy"),
     designations: db.collection("designations"),
     assets: db.collection("assets"),
+    termination: db.collection("termination"),
   };
 };
 
