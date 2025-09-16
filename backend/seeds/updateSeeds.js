@@ -1,44 +1,43 @@
-// updateLeadForEmployee.js
 import { MongoClient, ObjectId } from "mongodb";
 
-// Update your credentials here
 const uri = 'mongodb+srv://admin:AdMin-2025@cluster0.iooxltd.mongodb.net/';
-const dbName = '68443081dcdfe43152aebf80';
-const collectionName = 'details';
+const dbName = "68443081dcdfe43152aebf80";
 
-async function updateEmployeeLeadId() {
+const clerkUserId = "user_315fURfZKBgRIlLxiBbfl3Ndqs7"; // your Clerk user ID
+
+async function fixEmployeeIdsInLeaves() {
   const client = new MongoClient(uri);
   try {
     await client.connect();
-    console.log("✅ Connected to MongoDB");
+    console.log("Connected to MongoDB");
 
     const db = client.db(dbName);
-    const employees = db.collection(collectionName);
+    const employees = db.collection("employees");
+    const leaves = db.collection("leaves");
 
-    const employeeId = new ObjectId("687ba4c808ed553abaeb951f");
-    const newFields = {
-      punchInTime: "16:15",
-      punchOutTime: "16:25"
+    // Find employee ObjectId
+    const employeeDoc = await employees.findOne({ clerkUserId });
+
+    if (!employeeDoc) {
+      console.error("Employee document not found for Clerk user ID:", clerkUserId);
+      return;
     }
+    console.log("Found employee with _id:", employeeDoc._id.toHexString());
 
-    const result = await employees.updateOne(
-      { _id: employeeId },
-      { $set: newFields }
+    // Update leaves with string employeeId equal to Clerk ID
+    const updateResult = await leaves.updateMany(
+      { employeeId: clerkUserId },
+      { $set: { employeeId: employeeDoc._id } }
     );
 
-    if (result.matchedCount === 0) {
-      console.log("⚠️ No employee found with the given ID.");
-    } else if (result.modifiedCount === 1) {
-      console.log("✅ Updated employee with new leadId.");
-    } else {
-      console.log("ℹ️ No changes made (leadId might already be set).");
-    }
+    console.log("Modified documents count:", updateResult.modifiedCount);
+
   } catch (err) {
-    console.error("❌ Error updating leadId:", err.message);
+    console.error("Error:", err);
   } finally {
     await client.close();
-    console.log("🔒 MongoDB connection closed");
+    console.log("Disconnected");
   }
 }
 
-updateEmployeeLeadId();
+fixEmployeeIdsInLeaves();

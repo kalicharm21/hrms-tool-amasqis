@@ -5,6 +5,63 @@ const uri = 'mongodb+srv://admin:AdMin-2025@cluster0.iooxltd.mongodb.net/';
 const dbName = '68443081dcdfe43152aebf80';
 const collectionName = 'attendance';
 
+
+async function seedEmployees(db, companyId) {
+  const employees = [
+    { _id: new ObjectId("6879df8337412a2eb7454d46"), firstName: "Anthony", lastName: "Lewis", status: "Active", companyId },
+    { _id: new ObjectId("6879073b92e5fab6da551e09"), firstName: "Brian", lastName: "Villalobos", status: "Active", companyId },
+    // more employees
+  ];
+
+  const col = db.collection("employees");
+  await col.deleteMany({ companyId });
+  await col.insertMany(employees);
+  console.log(`✅ Seeded employees`);
+}
+
+async function seedAttendance(db, companyId) {
+  const attendance = [
+    {
+      employeeId: new ObjectId("6879df8337412a2eb7454d46"),
+      date: new Date("2025-07-14T00:00:00Z"),
+      status: "present",
+      companyId
+    },
+    {
+      employeeId: new ObjectId("6879073b92e5fab6da551e09"),
+      date: new Date("2025-07-14T00:00:00Z"),
+      status: "absent",
+      companyId
+    }
+  ];
+
+  const col = db.collection("attendance");
+  await col.deleteMany({ companyId });
+  await col.insertMany(attendance);
+  console.log(`✅ Seeded attendance`);
+}
+async function seedData() {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbName);
+    const companyId = new ObjectId('68443081dcdfe43152aebf80');
+
+    // deletePendingLeaves(); call if needed
+
+    await seedEmployees(db, companyId);
+    await seedAttendance(db, companyId);
+    // await seedLeaves(db, companyId); // create similarly in new file or here
+
+    console.log("✅ Seeding complete");
+  } finally {
+    await client.close();
+  }
+}
+
+seedData();
+
+
 async function seedProject() {
   const client = new MongoClient(uri);
 

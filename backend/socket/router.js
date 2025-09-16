@@ -2,17 +2,20 @@ import superAdminController from "../controllers/superadmin/superadmin.controlle
 import adminController from "../controllers/admin/admin.controller.js";
 import invoiceSocketController from "../controllers/invoice/invoice.socket.controller.js";
 import leadController from "../controllers/lead/lead.controller.js";
-import pipelineController from "../controllers/pipeline/pipeline.controllers.js";
+// import pipelineController from "../controllers/pipeline/pipeline.controllers.js";
 import clientController from "../controllers/client/client.controllers.js";
 import activityController from "../controllers/activities/activities.controllers.js";
 import pipelineController from "../controllers/pipeline/pipeline.controllers.js";
 import { ChatController } from "../controllers/chat/chat.controller.js";
 import { ChatUsersController } from "../controllers/chat/users.controller.js";
+import hrDashboardController from "../controllers/hr/hr.controller.js"; 
 
 import userSocketController from "../controllers/user/user.socket.controller.js";
 import socialFeedSocketController from "../controllers/socialfeed/socialFeed.socket.controller.js";
 import employeeController from "../controllers/employee/employee.controller.js";
 import notesController from "../controllers/employee/notes.controller.js";
+import adminLeavesController from "../controllers/admin/leaves.controller.js";
+import employeeLeavesController from "../controllers/employee/leaves.controller.js";
 
 const router = (socket, io, role) => {
   console.log(`Setting up socket router for role: ${role}`);
@@ -56,6 +59,8 @@ const router = (socket, io, role) => {
       userSocketController(socket, io);
       console.log("Attaching social feed controller for admin...");
       socialFeedSocketController(socket, io);
+      console.log("Attaching the Leaves controller for admin...");
+      adminLeavesController(socket, io);
       // Pipelines JS
       pipelineController(socket, io);
       console.log("Attaching admin notes controller...");
@@ -88,6 +93,9 @@ const router = (socket, io, role) => {
     case "employee":
       console.log("Attaching Employee controller...");
       employeeController(socket, io);
+      console.log("Attaching Employee Leaves controller...");
+      employeeLeavesController(socket, io);
+      console.log("Attaching employee Leaves controller 2...");
 
       break;
     default:
